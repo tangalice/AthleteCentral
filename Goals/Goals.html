@@ -1,0 +1,212 @@
+﻿<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Goal Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f7f7f7;
+    }
+    h1 {
+      text-align: center;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 20px;
+      gap: 8px;
+    }
+    input, select, button {
+      font-size: 1rem;
+      padding: 8px;
+    }
+    button {
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+
+    /* Filter bar styling */
+    .filter-bar {
+      display: flex;
+      justify-content: space-around;
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .filter-option label {
+      margin-left: 4px;
+    }
+
+    /* Goal items */
+    .goal-item {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      background: white;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .goal-item input[type="checkbox"] {
+      margin-right: 10px;
+      margin-top: 5px;
+    }
+    .goal-text.completed h3,
+    .goal-text.completed p {
+      text-decoration: line-through;
+      color: gray;
+    }
+    .delete-btn {
+      position: absolute;
+      top: 5px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: #999;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .delete-btn:hover {
+      color: red;
+    }
+    .category-label {
+      font-size: 0.9rem;
+      color: #555;
+      margin-top: 4px;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  <h1> Goal Tracker</h1>
+
+  <!-- Add Goal Form -->
+  <form id="goal-form">
+    <input type="text" id="goal-title" placeholder="Goal title" required>
+    <select id="goal-category" required>
+      <option value="" disabled selected>Select category</option>
+      <option value="Academic">Academic</option>
+      <option value="Practice">Practice</option>
+      <option value="Competition">Competition</option>
+    </select>
+    <button type="submit">Add Goal</button>
+  </form>
+
+    <!-- Filter Bar -->
+<div class="filter-bar">
+  <div class="filter-option">
+    <input type="checkbox" id="filter-academic" checked>
+    <label for="filter-academic">Academic</label>
+  </div>
+  <div class="filter-option">
+    <input type="checkbox" id="filter-practice" checked>
+    <label for="filter-practice">Practice</label>
+  </div>
+  <div class="filter-option">
+    <input type="checkbox" id="filter-competition" checked>
+    <label for="filter-competition">Competition</label>
+  </div>
+</div>
+
+  <div id="goal-list"></div>
+
+
+  <script>
+    const goalForm = document.getElementById('goal-form');
+    const goalTitle = document.getElementById('goal-title');
+    const goalCategory = document.getElementById('goal-category');
+    const goalList = document.getElementById('goal-list');
+
+    // Filter checkboxes
+    const filterAcademic = document.getElementById('filter-academic');
+    const filterPractice = document.getElementById('filter-practice');
+    const filterCompetition = document.getElementById('filter-competition');
+
+    // Store goals in an array so we can re-render when filters change
+    const goals = [];
+
+    goalForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const newGoal = {
+        title: goalTitle.value,
+        category: goalCategory.value,
+        completed: false,
+      };
+      goals.push(newGoal);
+      goalForm.reset();
+      renderGoals();
+    });
+
+    // Re-render the goal list based on filters
+    function renderGoals() {
+      goalList.innerHTML = '';
+
+      const activeFilters = {
+        Academic: filterAcademic.checked,
+        Practice: filterPractice.checked,
+        Competition: filterCompetition.checked,
+      };
+
+      goals.forEach((goal, index) => {
+        if (!activeFilters[goal.category]) return; // Skip if filter is off
+
+        const goalItem = document.createElement('div');
+        goalItem.classList.add('goal-item');
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = goal.completed;
+
+        const textContainer = document.createElement('div');
+        textContainer.classList.add('goal-text');
+        if (goal.completed) textContainer.classList.add('completed');
+
+        const titleElement = document.createElement('h3');
+        titleElement.textContent = goal.title;
+
+        const categoryElement = document.createElement('p');
+        categoryElement.classList.add('category-label');
+        categoryElement.textContent = `Category: ${goal.category}`;
+
+        checkbox.addEventListener('change', () => {
+          goal.completed = checkbox.checked;
+          textContainer.classList.toggle('completed', checkbox.checked);
+        });
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.classList.add('delete-btn');
+        deleteBtn.innerHTML = '✖';
+        deleteBtn.addEventListener('click', () => {
+          goals.splice(index, 1);
+          renderGoals();
+        });
+
+        textContainer.appendChild(titleElement);
+        textContainer.appendChild(categoryElement);
+        goalItem.appendChild(checkbox);
+        goalItem.appendChild(textContainer);
+        goalItem.appendChild(deleteBtn);
+        goalList.appendChild(goalItem);
+      });
+    }
+
+    // Filter checkbox listeners
+    filterAcademic.addEventListener('change', renderGoals);
+    filterPractice.addEventListener('change', renderGoals);
+    filterCompetition.addEventListener('change', renderGoals);
+  </script>
+
+</body>
+</html>
