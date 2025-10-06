@@ -4,7 +4,7 @@ import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCre
 import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Profile() {
-  const [activeTab, setActiveTab] = useState("edit"); // "edit", "delete", or "sessions"
+  const [activeTab, setActiveTab] = useState("profile"); // "profile", "edit", "delete", or "sessions"
   const [name, setName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -16,6 +16,19 @@ export default function Profile() {
     { id: "device1", name: "Chrome on Windows" },
     { id: "device2", name: "iPhone Safari" },
   ]);
+
+  // Profile details state
+  const [profileDetails, setProfileDetails] = useState({
+    bio: "",
+    grade: "",
+    sport: "",
+    sportDetails: "",
+    school: "",
+    team: "",
+    position: "",
+    experience: "",
+    goals: ""
+  });
 
   const ensureRecentLogin = async () => {
     const user = auth.currentUser;
@@ -130,6 +143,35 @@ export default function Profile() {
     setSessions([]);
   };
 
+  // Profile details functions
+  const handleProfileDetailsChange = (field, value) => {
+    setProfileDetails(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSaveProfileDetails = async () => {
+    setBusy(true);
+    setMsg("");
+    
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not signed in");
+
+      await updateDoc(doc(db, "users", user.uid), {
+        ...profileDetails,
+        updatedAt: serverTimestamp()
+      });
+
+      setMsg("Profile details saved successfully!");
+    } catch (err) {
+      setMsg(`Error saving profile: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div style={{ maxWidth: "600px", margin: "0 auto", padding: "20px" }}>
       <h2>Profile Management</h2>
@@ -140,6 +182,20 @@ export default function Profile() {
         marginBottom: "20px",
         borderBottom: "1px solid #ddd"
       }}>
+        <button
+          onClick={() => setActiveTab("profile")}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: activeTab === "profile" ? "#2196F3" : "transparent",
+            color: activeTab === "profile" ? "white" : "#2196F3",
+            border: "1px solid #2196F3",
+            borderBottom: "none",
+            cursor: "pointer",
+            borderRadius: "5px 5px 0 0"
+          }}
+        >
+          Profile Details
+        </button>
         <button
           onClick={() => setActiveTab("edit")}
           style={{
@@ -183,6 +239,232 @@ export default function Profile() {
           Sessions
         </button>
       </div>
+
+      {/* Profile Details Tab */}
+      {activeTab === "profile" && (
+        <div>
+          <h3 style={{ color: "#2196F3" }}>Personal Information</h3>
+          
+          {/* Personal Information Section */}
+          <div style={{ marginBottom: "30px" }}>
+            <h4 style={{ color: "#333", marginBottom: "15px" }}>About You</h4>
+            
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Bio/About Me:
+              </label>
+              <textarea
+                placeholder="Tell us about yourself..."
+                value={profileDetails.bio}
+                onChange={(e) => handleProfileDetailsChange("bio", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd",
+                  minHeight: "80px",
+                  resize: "vertical"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Grade/Year:
+              </label>
+              <select
+                value={profileDetails.grade}
+                onChange={(e) => handleProfileDetailsChange("grade", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd"
+                }}
+              >
+                <option value="">Select Grade</option>
+                <option value="9th">9th Grade</option>
+                <option value="10th">10th Grade</option>
+                <option value="11th">11th Grade</option>
+                <option value="12th">12th Grade</option>
+                <option value="Freshman">College Freshman</option>
+                <option value="Sophomore">College Sophomore</option>
+                <option value="Junior">College Junior</option>
+                <option value="Senior">College Senior</option>
+                <option value="Graduate">Graduate Student</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                School:
+              </label>
+              <input
+                type="text"
+                placeholder="Enter your school name"
+                value={profileDetails.school}
+                onChange={(e) => handleProfileDetailsChange("school", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd"
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Sports Information Section */}
+          <div style={{ marginBottom: "30px" }}>
+            <h4 style={{ color: "#333", marginBottom: "15px" }}>Sports Information</h4>
+            
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Primary Sport:
+              </label>
+              <select
+                value={profileDetails.sport}
+                onChange={(e) => handleProfileDetailsChange("sport", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd"
+                }}
+              >
+                <option value="">Select Sport</option>
+                <option value="Basketball">Basketball</option>
+                <option value="Football">Football</option>
+                <option value="Soccer">Soccer</option>
+                <option value="Baseball">Baseball</option>
+                <option value="Softball">Softball</option>
+                <option value="Tennis">Tennis</option>
+                <option value="Track & Field">Track & Field</option>
+                <option value="Swimming">Swimming</option>
+                <option value="Volleyball">Volleyball</option>
+                <option value="Wrestling">Wrestling</option>
+                <option value="Golf">Golf</option>
+                <option value="Cross Country">Cross Country</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Position/Role:
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., Point Guard, Quarterback, Striker"
+                value={profileDetails.position}
+                onChange={(e) => handleProfileDetailsChange("position", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Team Name:
+              </label>
+              <input
+                type="text"
+                placeholder="Enter your team name"
+                value={profileDetails.team}
+                onChange={(e) => handleProfileDetailsChange("team", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Experience Level:
+              </label>
+              <select
+                value={profileDetails.experience}
+                onChange={(e) => handleProfileDetailsChange("experience", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd"
+                }}
+              >
+                <option value="">Select Experience</option>
+                <option value="Beginner">Beginner (0-1 years)</option>
+                <option value="Intermediate">Intermediate (2-4 years)</option>
+                <option value="Advanced">Advanced (5+ years)</option>
+                <option value="Elite">Elite/Professional</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Sport Details:
+              </label>
+              <textarea
+                placeholder="Tell us more about your sport involvement, achievements, training schedule, etc."
+                value={profileDetails.sportDetails}
+                onChange={(e) => handleProfileDetailsChange("sportDetails", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd",
+                  minHeight: "100px",
+                  resize: "vertical"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Goals & Objectives:
+              </label>
+              <textarea
+                placeholder="What are your athletic goals? What do you want to achieve?"
+                value={profileDetails.goals}
+                onChange={(e) => handleProfileDetailsChange("goals", e.target.value)}
+                style={{ 
+                  width: "100%", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  border: "1px solid #ddd",
+                  minHeight: "80px",
+                  resize: "vertical"
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <button
+            onClick={handleSaveProfileDetails}
+            disabled={busy}
+            style={{
+              padding: "12px 24px",
+              backgroundColor: "#2196F3",
+              color: "white",
+              border: "none",
+              borderRadius: "5px",
+              cursor: busy ? "not-allowed" : "pointer",
+              fontSize: "16px",
+              fontWeight: "bold"
+            }}
+          >
+            {busy ? "Saving..." : "Save Profile Details"}
+          </button>
+        </div>
+      )}
 
       {/* Edit Account Tab */}
       {activeTab === "edit" && (
