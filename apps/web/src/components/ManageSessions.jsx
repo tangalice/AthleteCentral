@@ -22,7 +22,7 @@ export default function ManageSessions() {
       <ul>
         {sessions.map((s) => (
           <li key={s.id}>
-            {s.name} <button onClick={() => handleLogout(s.id)}>Logout</button>
+            <span style={{ color: "black" }}>{s.name}</span> <button onClick={() => handleLogout(s.id)}>Logout</button>
           </li>
         ))}
       </ul>

@@ -11,8 +11,8 @@ import Login from "./components/Login";
 import DeleteAccount from "./components/DeleteAccount";
 import EditAccount from "./components/EditAccount";
 import ResetPassword from "./components/ResetPassword";
-import ManageSessions from "./components/ManageSessions";
 import VerifyEmail from "./components/VerifyEmail";
+import Profile from "./components/Profile";
 
 // Protected Route Component
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -124,9 +124,7 @@ function App() {
               {user.emailVerified ? (
                 <>
                   <Link to="/dashboard">Dashboard</Link>
-                  <Link to="/edit">Edit Account</Link>
-                  <Link to="/sessions">Sessions</Link>
-                  <Link to="/delete">Delete Account</Link>
+                  <Link to="/profile">Profile</Link>
                 </>
               ) : (
                 <Link to="/verify-email">Verify Email</Link>
@@ -186,6 +184,12 @@ function App() {
             </ProtectedRoute>
           } />
           
+          <Route path="/profile" element={
+            <ProtectedRoute user={user}>
+              <Profile />
+            </ProtectedRoute>
+          } />
+          
           <Route path="/edit" element={
             <ProtectedRoute user={user}>
               <EditAccount />
@@ -198,11 +202,6 @@ function App() {
             </ProtectedRoute>
           } />
           
-          <Route path="/sessions" element={
-            <ProtectedRoute user={user}>
-              <ManageSessions />
-            </ProtectedRoute>
-          } />
 
           {/* Default route */}
           <Route path="/" element={

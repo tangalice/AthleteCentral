@@ -1,0 +1,349 @@
+import { useState } from "react";
+import { auth, db } from "../firebase";
+import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from "firebase/auth";
+import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+
+export default function Profile() {
+  const [activeTab, setActiveTab] = useState("edit"); // "edit", "delete", or "sessions"
+  const [name, setName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  
+  // Sessions state
+  const [sessions, setSessions] = useState([
+    { id: "device1", name: "Chrome on Windows" },
+    { id: "device2", name: "iPhone Safari" },
+  ]);
+
+  const ensureRecentLogin = async () => {
+    const user = auth.currentUser;
+    if (!user) throw new Error("Not signed in");
+    if (!currentPassword) {
+      throw new Error("Recent login required. Please enter your current password.");
+    }
+    const cred = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, cred);
+  };
+
+  const handleUpdate = async () => {
+    setMsg("");
+    setBusy(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not signed in");
+
+      if (name) {
+        try {
+          await updateProfile(user, { displayName: name });
+        } catch (err) {
+          if (err.code === "auth/requires-recent-login") {
+            await ensureRecentLogin();
+            await updateProfile(user, { displayName: name });
+          } else {
+            throw err;
+          }
+        }
+        try {
+          await updateDoc(doc(db, "users", user.uid), {
+            displayName: name,
+            updatedAt: serverTimestamp(),
+          });
+        } catch {}
+      }
+
+      if (newPassword) {
+        if (newPassword.length < 8) throw new Error("Password must be at least 8 characters.");
+        try {
+          await updatePassword(user, newPassword);
+        } catch (err) {
+          if (err.code === "auth/requires-recent-login") {
+            await ensureRecentLogin();
+            await updatePassword(user, newPassword);
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      setMsg("Account updated successfully!");
+    } catch (err) {
+      setMsg(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    if (!window.confirm("This will permanently delete your account. Continue?")) return;
+
+    setBusy(true);
+    setMsg("");
+    try {
+      // Some sensitive ops require recent login
+      try {
+        // Try delete directly first
+        await deleteUser(user);
+      } catch (err) {
+        if (err.code === "auth/requires-recent-login") {
+          if (!currentPassword) {
+            setMsg("Recent login required. Please enter your current password, then try again.");
+            setBusy(false);
+            return;
+          }
+          const cred = EmailAuthProvider.credential(user.email, currentPassword);
+          await reauthenticateWithCredential(user, cred);
+          await deleteUser(user);
+        } else {
+          throw err;
+        }
+      }
+
+      // Try remove Firestore profile (best-effort, user may be gone already)
+      try {
+        await deleteDoc(doc(db, "users", user.uid));
+      } catch {}
+
+      alert("Account deleted. Signing you out.");
+      // Auth SDK will signOut implicitly after deleteUser on some platforms,
+      // but call signOut for good measure:
+      auth.signOut();
+    } catch (err) {
+      setMsg(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Session management functions
+  const handleLogoutSession = (id) => {
+    alert(`Logged out from ${id}`);
+    setSessions(sessions.filter(s => s.id !== id));
+  };
+
+  const handleLogoutAllSessions = () => {
+    alert("Logged out from all devices");
+    setSessions([]);
+  };
+
+  return (
+    <div style={{ maxWidth: "600px", margin: "0 auto", padding: "20px" }}>
+      <h2>Profile Management</h2>
+      
+      {/* Tab Navigation */}
+      <div style={{ 
+        display: "flex", 
+        marginBottom: "20px",
+        borderBottom: "1px solid #ddd"
+      }}>
+        <button
+          onClick={() => setActiveTab("edit")}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: activeTab === "edit" ? "#646cff" : "transparent",
+            color: activeTab === "edit" ? "white" : "#646cff",
+            border: "1px solid #646cff",
+            borderBottom: "none",
+            cursor: "pointer",
+            borderRadius: "5px 5px 0 0"
+          }}
+        >
+          Edit Account
+        </button>
+        <button
+          onClick={() => setActiveTab("delete")}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: activeTab === "delete" ? "#d32f2f" : "transparent",
+            color: activeTab === "delete" ? "white" : "#d32f2f",
+            border: "1px solid #d32f2f",
+            borderBottom: "none",
+            cursor: "pointer",
+            borderRadius: "5px 5px 0 0"
+          }}
+        >
+          Delete Account
+        </button>
+        <button
+          onClick={() => setActiveTab("sessions")}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: activeTab === "sessions" ? "#4caf50" : "transparent",
+            color: activeTab === "sessions" ? "white" : "#4caf50",
+            border: "1px solid #4caf50",
+            borderBottom: "none",
+            cursor: "pointer",
+            borderRadius: "5px 5px 0 0"
+          }}
+        >
+          Sessions
+        </button>
+      </div>
+
+      {/* Edit Account Tab */}
+      {activeTab === "edit" && (
+        <div>
+          <h3>Edit Account Information</h3>
+          <div style={{ marginBottom: "15px" }}>
+            <input
+              placeholder="New display name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ width: "100%", padding: "10px", margin: "8px 0" }}
+            />
+          </div>
+
+          <div style={{ marginBottom: "15px" }}>
+            <input
+              type="password"
+              placeholder="New password (min 8 chars)"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              style={{ width: "100%", padding: "10px", margin: "8px 0" }}
+            />
+          </div>
+
+          <div style={{ marginBottom: "15px" }}>
+            <input
+              type="password"
+              placeholder="Current password (needed if prompted)"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              style={{ width: "100%", padding: "10px", margin: "8px 0" }}
+            />
+          </div>
+
+          <button 
+            onClick={handleUpdate} 
+            disabled={busy} 
+            style={{ 
+              padding: "10px 16px",
+              backgroundColor: "#646cff",
+              color: "white",
+              border: "none",
+              borderRadius: "5px",
+              cursor: busy ? "not-allowed" : "pointer"
+            }}
+          >
+            {busy ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      )}
+
+      {/* Delete Account Tab */}
+      {activeTab === "delete" && (
+        <div>
+          <h3 style={{ color: "#d32f2f" }}>Delete Account</h3>
+          <p style={{ color: "#666", marginBottom: "20px" }}>
+            This action is permanent and cannot be undone. All your data will be lost.
+          </p>
+          
+          <div style={{ marginBottom: "15px" }}>
+            <input
+              type="password"
+              placeholder="Enter current password (needed if prompted)"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              style={{ width: "100%", padding: "10px", margin: "8px 0" }}
+            />
+          </div>
+          
+          <button
+            onClick={handleDelete}
+            disabled={busy}
+            style={{ 
+              background: "#d32f2f", 
+              color: "#fff", 
+              padding: "10px 16px", 
+              borderRadius: "6px", 
+              border: "none",
+              cursor: busy ? "not-allowed" : "pointer"
+            }}
+          >
+            {busy ? "Deleting..." : "Delete My Account"}
+          </button>
+        </div>
+      )}
+
+      {/* Sessions Tab */}
+      {activeTab === "sessions" && (
+        <div>
+          <h3 style={{ color: "#4caf50" }}>Active Sessions</h3>
+          <p style={{ color: "white", marginBottom: "20px" }}>
+            Manage your active sessions across different devices.
+          </p>
+          
+          {sessions.length > 0 ? (
+            <div>
+              <ul style={{ listStyle: "none", padding: 0 }}>
+                {sessions.map((session) => (
+                  <li key={session.id} style={{ 
+                    display: "flex", 
+                    justifyContent: "space-between", 
+                    alignItems: "center",
+                    padding: "10px",
+                    border: "1px solid #ddd",
+                    borderRadius: "5px",
+                    marginBottom: "10px",
+                    backgroundColor: "#f9f9f9"
+                  }}>
+                    <span>{session.name}</span>
+                    <button
+                      onClick={() => handleLogoutSession(session.id)}
+                      style={{
+                        padding: "5px 10px",
+                        backgroundColor: "#ff4444",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "3px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      Logout
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              
+              <button
+                onClick={handleLogoutAllSessions}
+                style={{
+                  padding: "10px 16px",
+                  backgroundColor: "#d32f2f",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "5px",
+                  cursor: "pointer",
+                  marginTop: "10px"
+                }}
+              >
+                Logout All Sessions
+              </button>
+            </div>
+          ) : (
+            <p style={{ color: "#666", fontStyle: "italic" }}>
+              No active sessions found.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Status Message */}
+      {msg && (
+        <div style={{ 
+          marginTop: "20px", 
+          padding: "10px", 
+          backgroundColor: msg.includes("success") ? "#e8f5e9" : "#ffebee",
+          color: msg.includes("success") ? "#2e7d32" : "#c62828",
+          borderRadius: "5px"
+        }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
