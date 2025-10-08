@@ -1,4 +1,5 @@
-﻿<html lang="en">
+﻿<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Goal Tracker</title>
@@ -33,7 +34,6 @@
       background-color: #45a049;
     }
 
-    /* Filter bar styling */
     .filter-bar {
       display: flex;
       justify-content: space-around;
@@ -47,7 +47,6 @@
       margin-left: 4px;
     }
 
-    /* Goal items */
     .goal-item {
       position: relative;
       display: flex;
@@ -90,10 +89,23 @@
 </head>
 <body>
 
-  <h1> Goal Tracker</h1>
+  <h1>Goal Tracker</h1>
+
+  <!-- Auth Section -->
+  <div id="auth-section">
+    <div id="login-form">
+      <input type="email" id="email" placeholder="Email">
+      <input type="password" id="password" placeholder="Password">
+      <button id="login-btn">Login / Register</button>
+    </div>
+    <div id="user-info" style="display: none;">
+      <span id="user-email"></span>
+      <button id="logout-btn">Logout</button>
+    </div>
+  </div>
 
   <!-- Add Goal Form -->
-  <form id="goal-form">
+  <form id="goal-form" style="display:none;">
     <input type="text" id="goal-title" placeholder="Goal title" required>
     <select id="goal-category" required>
       <option value="" disabled selected>Select category</option>
@@ -104,63 +116,149 @@
     <button type="submit">Add Goal</button>
   </form>
 
-    <!-- Filter Bar -->
-<div class="filter-bar">
-  <div class="filter-option">
-    <input type="checkbox" id="filter-academic" checked>
-    <label for="filter-academic">Academic</label>
+  <!-- Filter Bar -->
+  <div class="filter-bar" style="display:none;">
+    <div class="filter-option">
+      <input type="checkbox" id="filter-academic" checked>
+      <label for="filter-academic">Academic</label>
+    </div>
+    <div class="filter-option">
+      <input type="checkbox" id="filter-practice" checked>
+      <label for="filter-practice">Practice</label>
+    </div>
+    <div class="filter-option">
+      <input type="checkbox" id="filter-competition" checked>
+      <label for="filter-competition">Competition</label>
+    </div>
   </div>
-  <div class="filter-option">
-    <input type="checkbox" id="filter-practice" checked>
-    <label for="filter-practice">Practice</label>
-  </div>
-  <div class="filter-option">
-    <input type="checkbox" id="filter-competition" checked>
-    <label for="filter-competition">Competition</label>
-  </div>
-</div>
 
   <div id="goal-list"></div>
 
+  <!-- Firebase v8 (namespaced SDK) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
   <script>
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDkwjToOJkN3moRCxqNLNyXnaGeUklpv0Q",
+      authDomain: "athletehub-1d138.firebaseapp.com",
+      projectId: "athletehub-1d138",
+      storageBucket: "athletehub-1d138.firebasestorage.app",
+      messagingSenderId: "95519361453",
+      appId: "1:95519361453:web:5328def1fc4050da1b7924",
+      measurementId: "G-X2Y5BN4RNR"
+    };
+
+    // Initialize Firebase (v8)
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Elements
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const loginForm = document.getElementById('login-form');
+    const userInfo = document.getElementById('user-info');
+    const userEmailDisplay = document.getElementById('user-email');
     const goalForm = document.getElementById('goal-form');
+    const filterBar = document.querySelector('.filter-bar');
+
     const goalTitle = document.getElementById('goal-title');
     const goalCategory = document.getElementById('goal-category');
     const goalList = document.getElementById('goal-list');
 
-    // Filter checkboxes
     const filterAcademic = document.getElementById('filter-academic');
     const filterPractice = document.getElementById('filter-practice');
     const filterCompetition = document.getElementById('filter-competition');
 
-    // Store goals in an array so we can re-render when filters change
     const goals = [];
 
-    goalForm.addEventListener('submit', (e) => {
+    // Login/Register
+    loginBtn.addEventListener('click', async () => {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        await auth.signInWithEmailAndPassword(email, password);
+      } catch (err) {
+        if (err.code === 'auth/user-not-found') {
+          await auth.createUserWithEmailAndPassword(email, password);
+        } else {
+          alert(err.message);
+        }
+      }
+    });
+
+    // Logout
+    logoutBtn.addEventListener('click', () => {
+      auth.signOut();
+    });
+
+    // Auth State
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        loginForm.style.display = 'none';
+        userInfo.style.display = 'block';
+        goalForm.style.display = 'flex';
+        filterBar.style.display = 'flex';
+        userEmailDisplay.textContent = user.email;
+        loadGoals(user.uid);
+      } else {
+        loginForm.style.display = 'block';
+        userInfo.style.display = 'none';
+        goalForm.style.display = 'none';
+        filterBar.style.display = 'none';
+        goals.length = 0;
+        renderGoals();
+      }
+    });
+
+    // Add Goal
+    goalForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const user = auth.currentUser;
+      if (!user) return;
+
       const newGoal = {
         title: goalTitle.value,
         category: goalCategory.value,
-        completed: false,
+        completed: false
       };
-      goals.push(newGoal);
+
+      await db.collection('goals').doc(user.uid).collection('userGoals').add(newGoal);
       goalForm.reset();
-      renderGoals();
+      loadGoals(user.uid);
     });
 
-    // Re-render the goal list based on filters
+    // Load Goals
+    async function loadGoals(userId) {
+      const snapshot = await db.collection('goals').doc(userId).collection('userGoals').get();
+      goals.length = 0;
+      snapshot.forEach(doc => {
+        goals.push({ id: doc.id, ...doc.data() });
+      });
+      renderGoals();
+    }
+
+    // Delete Goal
+    async function deleteGoal(userId, goalId) {
+      await db.collection('goals').doc(userId).collection('userGoals').doc(goalId).delete();
+      loadGoals(userId);
+    }
+
+    // Render Goals
     function renderGoals() {
       goalList.innerHTML = '';
-
       const activeFilters = {
         Academic: filterAcademic.checked,
         Practice: filterPractice.checked,
-        Competition: filterCompetition.checked,
+        Competition: filterCompetition.checked
       };
 
-      goals.forEach((goal, index) => {
-        if (!activeFilters[goal.category]) return; // Skip if filter is off
+      goals.forEach(goal => {
+        if (!activeFilters[goal.category]) return;
 
         const goalItem = document.createElement('div');
         goalItem.classList.add('goal-item');
@@ -180,7 +278,12 @@
         categoryElement.classList.add('category-label');
         categoryElement.textContent = `Category: ${goal.category}`;
 
-        checkbox.addEventListener('change', () => {
+        checkbox.addEventListener('change', async () => {
+          const user = auth.currentUser;
+          if (user) {
+            await db.collection('goals').doc(user.uid).collection('userGoals').doc(goal.id)
+              .update({ completed: checkbox.checked });
+          }
           goal.completed = checkbox.checked;
           textContainer.classList.toggle('completed', checkbox.checked);
         });
@@ -189,8 +292,8 @@
         deleteBtn.classList.add('delete-btn');
         deleteBtn.innerHTML = '✖';
         deleteBtn.addEventListener('click', () => {
-          goals.splice(index, 1);
-          renderGoals();
+          const user = auth.currentUser;
+          if (user) deleteGoal(user.uid, goal.id);
         });
 
         textContainer.appendChild(titleElement);
@@ -202,7 +305,6 @@
       });
     }
 
-    // Filter checkbox listeners
     filterAcademic.addEventListener('change', renderGoals);
     filterPractice.addEventListener('change', renderGoals);
     filterCompetition.addEventListener('change', renderGoals);
