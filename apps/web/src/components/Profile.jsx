@@ -4,7 +4,7 @@ import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCre
 import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Profile() {
-  const [activeTab, setActiveTab] = useState("profile"); // "profile", "edit", "delete", or "sessions"
+  const [activeTab, setActiveTab] = useState("profile"); // "profile", "edit", "delete", "sessions", or "settings"
   const [name, setName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -28,6 +28,13 @@ export default function Profile() {
     position: "",
     experience: "",
     goals: ""
+  });
+
+  // Settings state
+  const [settings, setSettings] = useState({
+    textNotifications: false,
+    emailNotifications: true,
+    pushNotifications: true
   });
 
   const ensureRecentLogin = async () => {
@@ -244,6 +251,21 @@ export default function Profile() {
           }}
         >
           Sessions
+        </button>
+        
+        <button
+          onClick={() => setActiveTab("settings")}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: activeTab === "settings" ? "#9c27b0" : "transparent",
+            color: activeTab === "settings" ? "white" : "#9c27b0",
+            border: "1px solid #9c27b0",
+            borderBottom: "none",
+            cursor: "pointer",
+            borderRadius: "5px 5px 0 0"
+          }}
+        >
+          Settings
         </button>
       </div>
 
@@ -650,6 +672,129 @@ export default function Profile() {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Settings Tab */}
+      {activeTab === "settings" && (
+        <div style={{ padding: "0 20px" }}>
+          <h3 style={{ color: "#9c27b0" }}>Notification Settings</h3>
+          <p style={{ color: "white", marginBottom: "20px" }}>
+            Manage your notification preferences.
+          </p>
+          
+          <div style={{ maxWidth: "600px" }}>
+            <div style={{ 
+              backgroundColor: "#f5f5f5", 
+              padding: "20px", 
+              borderRadius: "8px",
+              marginBottom: "15px"
+            }}>
+              <h4 style={{ margin: "0 0 15px 0", color: "#333" }}>Text Notifications</h4>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
+                <label style={{ marginRight: "10px", color: "#333" }}>
+                  Enable SMS notifications:
+                </label>
+                <button
+                  onClick={() => setSettings(prev => ({ ...prev, textNotifications: !prev.textNotifications }))}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: settings.textNotifications ? "#4caf50" : "#f44336",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    fontWeight: "bold"
+                  }}
+                >
+                  {settings.textNotifications ? "ON" : "OFF"}
+                </button>
+              </div>
+              <p style={{ fontSize: "14px", color: "#666", margin: "0" }}>
+                Receive text messages for important updates and messages.
+              </p>
+            </div>
+
+            <div style={{ 
+              backgroundColor: "#f5f5f5", 
+              padding: "20px", 
+              borderRadius: "8px",
+              marginBottom: "15px"
+            }}>
+              <h4 style={{ margin: "0 0 15px 0", color: "#333" }}>Email Notifications</h4>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
+                <label style={{ marginRight: "10px", color: "#333" }}>
+                  Enable email notifications:
+                </label>
+                <button
+                  onClick={() => setSettings(prev => ({ ...prev, emailNotifications: !prev.emailNotifications }))}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: settings.emailNotifications ? "#4caf50" : "#f44336",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    fontWeight: "bold"
+                  }}
+                >
+                  {settings.emailNotifications ? "ON" : "OFF"}
+                </button>
+              </div>
+              <p style={{ fontSize: "14px", color: "#666", margin: "0" }}>
+                Receive email notifications for account updates and messages.
+              </p>
+            </div>
+
+            <div style={{ 
+              backgroundColor: "#f5f5f5", 
+              padding: "20px", 
+              borderRadius: "8px",
+              marginBottom: "15px"
+            }}>
+              <h4 style={{ margin: "0 0 15px 0", color: "#333" }}>Push Notifications</h4>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
+                <label style={{ marginRight: "10px", color: "#333" }}>
+                  Enable push notifications:
+                </label>
+                <button
+                  onClick={() => setSettings(prev => ({ ...prev, pushNotifications: !prev.pushNotifications }))}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: settings.pushNotifications ? "#4caf50" : "#f44336",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    fontWeight: "bold"
+                  }}
+                >
+                  {settings.pushNotifications ? "ON" : "OFF"}
+                </button>
+              </div>
+              <p style={{ fontSize: "14px", color: "#666", margin: "0" }}>
+                Receive push notifications when the app is open.
+              </p>
+            </div>
+
+            <div style={{ 
+              backgroundColor: "#e3f2fd", 
+              padding: "15px", 
+              borderRadius: "8px",
+              marginTop: "20px"
+            }}>
+              <h4 style={{ margin: "0 0 10px 0", color: "#1976d2" }}>Current Settings</h4>
+              <p style={{ margin: "5px 0", color: "#333" }}>
+                <strong>Text Notifications:</strong> {settings.textNotifications ? "Enabled" : "Disabled"}
+              </p>
+              <p style={{ margin: "5px 0", color: "#333" }}>
+                <strong>Email Notifications:</strong> {settings.emailNotifications ? "Enabled" : "Disabled"}
+              </p>
+              <p style={{ margin: "5px 0", color: "#333" }}>
+                <strong>Push Notifications:</strong> {settings.pushNotifications ? "Enabled" : "Disabled"}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
