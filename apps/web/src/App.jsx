@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import PracticePerformances from "./Billa_UI_Pages/PracticePerformances";
+
+
 
 // Import all components
 import SignUp from "./components/SignUp";
@@ -157,7 +160,8 @@ function App() {
           } />
           <Route path="/reset" element={<ResetPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
-          
+          <Route path="/practice-performances" element={<PracticePerformances />} />
+
           {/* Protected routes */}
           <Route path="/dashboard" element={
             <ProtectedRoute user={user}>
@@ -209,7 +213,8 @@ function App() {
               <DeleteAccount />
             </ProtectedRoute>
           } />
-          
+
+
 
           {/* Default route */}
           <Route path="/" element={
