@@ -13,6 +13,7 @@ import EditAccount from "./components/EditAccount";
 import ResetPassword from "./components/ResetPassword";
 import VerifyEmail from "./components/VerifyEmail";
 import Profile from "./components/Profile";
+import Messages from "./components/Messages";
 
 // Protected Route Component
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -125,6 +126,7 @@ function App() {
                 <>
                   <Link to="/dashboard">Dashboard</Link>
                   <Link to="/profile">Profile</Link>
+                  <Link to="/messages">Messages</Link>
                 </>
               ) : (
                 <Link to="/verify-email">Verify Email</Link>
@@ -187,6 +189,12 @@ function App() {
           <Route path="/profile" element={
             <ProtectedRoute user={user}>
               <Profile />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/messages" element={
+            <ProtectedRoute user={user}>
+              <Messages />
             </ProtectedRoute>
           } />
           
