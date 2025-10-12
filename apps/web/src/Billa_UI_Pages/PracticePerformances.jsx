@@ -1,15 +1,15 @@
 import { useState } from "react";
 
 export default function PracticePerformances({ user }) {
-  const [selectedEvent, setSelectedEvent] = useState("all");
+  const [selectedIntensity, setSelectedIntensity] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("all");
 
   // Empty array - will be populated from Firestore later
   const performances = [];
 
-  // Filter performances by event and date
+  // Filter performances by intensity and date
   const filteredPerformances = performances.filter(perf => {
-    if (selectedEvent !== "all" && perf.event !== selectedEvent) {
+    if (selectedIntensity !== "all" && perf.intensity !== selectedIntensity) {
       return false;
     }
     
@@ -23,8 +23,6 @@ export default function PracticePerformances({ user }) {
     return true;
   });
 
-  const uniqueEvents = [...new Set(performances.map(p => p.event))];
-
   const formatDate = (date) => {
     return date.toLocaleDateString("en-US", {
       year: "numeric",
@@ -35,8 +33,8 @@ export default function PracticePerformances({ user }) {
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "20px" }}>
-      <h2>Practice Performances</h2>
-      <p style={{ color: "#666", marginBottom: "30px" }}>
+      <h2 style={{ color: "#fff" }}>Practice Performances</h2>
+      <p style={{ color: "#999", marginBottom: "30px" }}>
         View all your practice session results
       </p>
 
@@ -46,32 +44,44 @@ export default function PracticePerformances({ user }) {
         gap: "15px",
         marginBottom: "25px",
         padding: "20px",
-        backgroundColor: "#f5f5f5",
+        backgroundColor: "#2a2a2a",
         borderRadius: "8px"
       }}>
         <div style={{ flex: "1" }}>
-          <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-            Filter by Event:
+          <label style={{ 
+            display: "block", 
+            marginBottom: "5px", 
+            fontWeight: "bold",
+            color: "#fff"
+          }}>
+            Workout Intensity:
           </label>
           <select
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
+            value={selectedIntensity}
+            onChange={(e) => setSelectedIntensity(e.target.value)}
             style={{
               width: "100%",
               padding: "10px",
               borderRadius: "5px",
-              border: "1px solid #ddd"
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#fff"
             }}
           >
-            <option value="all">All Events</option>
-            {uniqueEvents.map(event => (
-              <option key={event} value={event}>{event}</option>
-            ))}
+            <option value="all">All Intensities</option>
+            <option value="easy">Easy</option>
+            <option value="moderate">Moderate</option>
+            <option value="hard">Hard</option>
           </select>
         </div>
 
         <div style={{ flex: "1" }}>
-          <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+          <label style={{ 
+            display: "block", 
+            marginBottom: "5px", 
+            fontWeight: "bold",
+            color: "#fff"
+          }}>
             Filter by Month:
           </label>
           <select
@@ -81,7 +91,9 @@ export default function PracticePerformances({ user }) {
               width: "100%",
               padding: "10px",
               borderRadius: "5px",
-              border: "1px solid #ddd"
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#fff"
             }}
           >
             <option value="all">All Months</option>
@@ -106,11 +118,14 @@ export default function PracticePerformances({ user }) {
         <div style={{
           textAlign: "center",
           padding: "40px",
-          backgroundColor: "#f5f5f5",
-          borderRadius: "8px"
+          backgroundColor: "#2a2a2a",
+          borderRadius: "8px",
+          border: "1px solid #444"
         }}>
-          <p>No practice performances found</p>
-          <p style={{ fontSize: "14px", color: "#999", marginTop: "10px" }}>
+          <p style={{ color: "#fff", fontSize: "16px", marginBottom: "10px" }}>
+            No practice performances found
+          </p>
+          <p style={{ fontSize: "14px", color: "#999", margin: 0 }}>
             Performance data will appear here once your coach enters results
           </p>
         </div>
@@ -121,8 +136,8 @@ export default function PracticePerformances({ user }) {
               key={perf.id}
               style={{
                 padding: "20px",
-                backgroundColor: "white",
-                border: "1px solid #ddd",
+                backgroundColor: "#2a2a2a",
+                border: "1px solid #444",
                 borderRadius: "8px"
               }}
             >
@@ -133,14 +148,17 @@ export default function PracticePerformances({ user }) {
                 marginBottom: "12px"
               }}>
                 <div>
-                  <h3 style={{ margin: "0 0 5px 0" }}>{perf.event}</h3>
-                  <p style={{ margin: 0, color: "#666", fontSize: "14px" }}>
-                    {formatDate(perf.date)}
+                  <h3 style={{ margin: "0 0 5px 0", color: "#fff" }}>{perf.workoutType}</h3>
+                  <p style={{ margin: 0, color: "#999", fontSize: "14px" }}>
+                    {formatDate(perf.date)} • {perf.intensity}
                   </p>
                 </div>
                 <div style={{
                   padding: "8px 16px",
-                  backgroundColor: "#646cff",
+                  backgroundColor: 
+                    perf.intensity === "easy" ? "#4caf50" : 
+                    perf.intensity === "moderate" ? "#ff9800" : 
+                    "#f44336",
                   color: "white",
                   borderRadius: "20px",
                   fontWeight: "bold"
@@ -153,10 +171,10 @@ export default function PracticePerformances({ user }) {
                 <div style={{
                   marginTop: "12px",
                   padding: "12px",
-                  backgroundColor: "#f9f9f9",
+                  backgroundColor: "#1a1a1a",
                   borderRadius: "5px"
                 }}>
-                  <p style={{ margin: 0, fontSize: "14px", fontStyle: "italic" }}>
+                  <p style={{ margin: 0, fontSize: "14px", fontStyle: "italic", color: "#ccc" }}>
                     {perf.notes}
                   </p>
                 </div>
