@@ -173,14 +173,21 @@ export default function Profile() {
   };
 
   return (
-    <div style={{ maxWidth: "600px", margin: "0 auto", padding: "20px" }}>
-      <h2>Profile Management</h2>
+    <div style={{ 
+      width: "100vw", 
+      margin: "0", 
+      padding: "0",
+      boxSizing: "border-box",
+      minHeight: "100vh"
+    }}>
+      <h2 style={{ padding: "20px 20px 0 20px" }}>Profile Management</h2>
       
       {/* Tab Navigation */}
       <div style={{ 
         display: "flex", 
         marginBottom: "20px",
-        borderBottom: "1px solid #ddd"
+        borderBottom: "1px solid #ddd",
+        padding: "0 20px"
       }}>
         <button
           onClick={() => setActiveTab("profile")}
@@ -242,207 +249,236 @@ export default function Profile() {
 
       {/* Profile Details Tab */}
       {activeTab === "profile" && (
-        <div>
-          <h3 style={{ color: "#2196F3" }}>Personal Information</h3>
-          
-          {/* Personal Information Section */}
-          <div style={{ marginBottom: "30px" }}>
-            <h4 style={{ color: "#333", marginBottom: "15px" }}>About You</h4>
-            
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                Bio/About Me:
-              </label>
-              <textarea
-                placeholder="Tell us about yourself..."
-                value={profileDetails.bio}
-                onChange={(e) => handleProfileDetailsChange("bio", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd",
-                  minHeight: "80px",
-                  resize: "vertical"
-                }}
-              />
+        <div style={{ padding: "0 20px" }}>
+          {/* Two Column Layout */}
+          <div style={{ 
+            display: "grid", 
+            gridTemplateColumns: "1fr 1fr",
+            gap: "30px", 
+            marginBottom: "30px",
+            width: "100%",
+            boxSizing: "border-box"
+          }}>
+            {/* Personal Information Section */}
+            <div style={{ 
+              backgroundColor: "#757575",
+              padding: "25px",
+              borderRadius: "8px",
+              border: "3px solid #ddd",
+              boxSizing: "border-box"
+            }}>
+              <h3 style={{ color: "#2196F3", marginBottom: "15px" }}>Personal Information</h3>
+              
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Bio/About Me:
+                </label>
+                <textarea
+                  placeholder="Tell us about yourself..."
+                  value={profileDetails.bio}
+                  onChange={(e) => handleProfileDetailsChange("bio", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    minHeight: "80px",
+                    resize: "vertical",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Grade/Year:
+                </label>
+                <select
+                  value={profileDetails.grade}
+                  onChange={(e) => handleProfileDetailsChange("grade", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  <option value="">Select Grade</option>
+                  <option value="9th">9th Grade</option>
+                  <option value="10th">10th Grade</option>
+                  <option value="11th">11th Grade</option>
+                  <option value="12th">12th Grade</option>
+                  <option value="Freshman">College Freshman</option>
+                  <option value="Sophomore">College Sophomore</option>
+                  <option value="Junior">College Junior</option>
+                  <option value="Senior">College Senior</option>
+                  <option value="Graduate">Graduate Student</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  School:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter your school name"
+                  value={profileDetails.school}
+                  onChange={(e) => handleProfileDetailsChange("school", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
             </div>
 
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                Grade/Year:
-              </label>
-              <select
-                value={profileDetails.grade}
-                onChange={(e) => handleProfileDetailsChange("grade", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd"
-                }}
-              >
-                <option value="">Select Grade</option>
-                <option value="9th">9th Grade</option>
-                <option value="10th">10th Grade</option>
-                <option value="11th">11th Grade</option>
-                <option value="12th">12th Grade</option>
-                <option value="Freshman">College Freshman</option>
-                <option value="Sophomore">College Sophomore</option>
-                <option value="Junior">College Junior</option>
-                <option value="Senior">College Senior</option>
-                <option value="Graduate">Graduate Student</option>
-              </select>
-            </div>
+            {/* Sports Information Section */}
+            <div style={{ 
+              backgroundColor: "#757575",
+              padding: "25px",
+              borderRadius: "8px",
+              border: "3px solid #ddd",
+              boxSizing: "border-box"
+            }}>
+              <h3 style={{ color: "#2196F3", marginBottom: "15px" }}>Sports Information</h3>
+              
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Primary Sport:
+                </label>
+                <select
+                  value={profileDetails.sport}
+                  onChange={(e) => handleProfileDetailsChange("sport", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  <option value="">Select Sport</option>
+                  <option value="Basketball">Basketball</option>
+                  <option value="Football">Football</option>
+                  <option value="Soccer">Soccer</option>
+                  <option value="Baseball">Baseball</option>
+                  <option value="Softball">Softball</option>
+                  <option value="Tennis">Tennis</option>
+                  <option value="Track & Field">Track & Field</option>
+                  <option value="Swimming">Swimming</option>
+                  <option value="Volleyball">Volleyball</option>
+                  <option value="Wrestling">Wrestling</option>
+                  <option value="Golf">Golf</option>
+                  <option value="Cross Country">Cross Country</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
 
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                School:
-              </label>
-              <input
-                type="text"
-                placeholder="Enter your school name"
-                value={profileDetails.school}
-                onChange={(e) => handleProfileDetailsChange("school", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd"
-                }}
-              />
-            </div>
-          </div>
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Position/Role:
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Point Guard, Quarterback, Striker"
+                  value={profileDetails.position}
+                  onChange={(e) => handleProfileDetailsChange("position", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
 
-          {/* Sports Information Section */}
-          <div style={{ marginBottom: "30px" }}>
-            <h4 style={{ color: "#333", marginBottom: "15px" }}>Sports Information</h4>
-            
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                Primary Sport:
-              </label>
-              <select
-                value={profileDetails.sport}
-                onChange={(e) => handleProfileDetailsChange("sport", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd"
-                }}
-              >
-                <option value="">Select Sport</option>
-                <option value="Basketball">Basketball</option>
-                <option value="Football">Football</option>
-                <option value="Soccer">Soccer</option>
-                <option value="Baseball">Baseball</option>
-                <option value="Softball">Softball</option>
-                <option value="Tennis">Tennis</option>
-                <option value="Track & Field">Track & Field</option>
-                <option value="Swimming">Swimming</option>
-                <option value="Volleyball">Volleyball</option>
-                <option value="Wrestling">Wrestling</option>
-                <option value="Golf">Golf</option>
-                <option value="Cross Country">Cross Country</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Team Name:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter your team name"
+                  value={profileDetails.team}
+                  onChange={(e) => handleProfileDetailsChange("team", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
 
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                Position/Role:
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., Point Guard, Quarterback, Striker"
-                value={profileDetails.position}
-                onChange={(e) => handleProfileDetailsChange("position", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd"
-                }}
-              />
-            </div>
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Experience Level:
+                </label>
+                <select
+                  value={profileDetails.experience}
+                  onChange={(e) => handleProfileDetailsChange("experience", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  <option value="">Select Experience</option>
+                  <option value="Beginner">Beginner (0-1 years)</option>
+                  <option value="Intermediate">Intermediate (2-4 years)</option>
+                  <option value="Advanced">Advanced (5+ years)</option>
+                  <option value="Elite">Elite/Professional</option>
+                </select>
+              </div>
 
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                Team Name:
-              </label>
-              <input
-                type="text"
-                placeholder="Enter your team name"
-                value={profileDetails.team}
-                onChange={(e) => handleProfileDetailsChange("team", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd"
-                }}
-              />
-            </div>
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Sport Details:
+                </label>
+                <textarea
+                  placeholder="Tell us more about your sport involvement, achievements, training schedule, etc."
+                  value={profileDetails.sportDetails}
+                  onChange={(e) => handleProfileDetailsChange("sportDetails", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    minHeight: "100px",
+                    resize: "vertical",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
 
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                Experience Level:
-              </label>
-              <select
-                value={profileDetails.experience}
-                onChange={(e) => handleProfileDetailsChange("experience", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd"
-                }}
-              >
-                <option value="">Select Experience</option>
-                <option value="Beginner">Beginner (0-1 years)</option>
-                <option value="Intermediate">Intermediate (2-4 years)</option>
-                <option value="Advanced">Advanced (5+ years)</option>
-                <option value="Elite">Elite/Professional</option>
-              </select>
-            </div>
-
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                Sport Details:
-              </label>
-              <textarea
-                placeholder="Tell us more about your sport involvement, achievements, training schedule, etc."
-                value={profileDetails.sportDetails}
-                onChange={(e) => handleProfileDetailsChange("sportDetails", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd",
-                  minHeight: "100px",
-                  resize: "vertical"
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-                Goals & Objectives:
-              </label>
-              <textarea
-                placeholder="What are your athletic goals? What do you want to achieve?"
-                value={profileDetails.goals}
-                onChange={(e) => handleProfileDetailsChange("goals", e.target.value)}
-                style={{ 
-                  width: "100%", 
-                  padding: "10px", 
-                  borderRadius: "5px", 
-                  border: "1px solid #ddd",
-                  minHeight: "80px",
-                  resize: "vertical"
-                }}
-              />
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Goals & Objectives:
+                </label>
+                <textarea
+                  placeholder="What are your athletic goals? What do you want to achieve?"
+                  value={profileDetails.goals}
+                  onChange={(e) => handleProfileDetailsChange("goals", e.target.value)}
+                  style={{ 
+                    width: "100%", 
+                    padding: "10px", 
+                    borderRadius: "5px", 
+                    border: "1px solid #ddd",
+                    minHeight: "80px",
+                    resize: "vertical",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -458,7 +494,8 @@ export default function Profile() {
               borderRadius: "5px",
               cursor: busy ? "not-allowed" : "pointer",
               fontSize: "16px",
-              fontWeight: "bold"
+              fontWeight: "bold",
+              marginTop: "20px"
             }}
           >
             {busy ? "Saving..." : "Save Profile Details"}
@@ -468,34 +505,34 @@ export default function Profile() {
 
       {/* Edit Account Tab */}
       {activeTab === "edit" && (
-        <div>
+        <div style={{ padding: "0 20px" }}>
           <h3>Edit Account Information</h3>
-          <div style={{ marginBottom: "15px" }}>
+          <div style={{ maxWidth: "600px", marginBottom: "15px" }}>
             <input
               placeholder="New display name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "8px 0" }}
+              style={{ width: "100%", padding: "10px", margin: "8px 0", boxSizing: "border-box" }}
             />
           </div>
 
-          <div style={{ marginBottom: "15px" }}>
+          <div style={{ maxWidth: "600px", marginBottom: "15px" }}>
             <input
               type="password"
               placeholder="New password (min 8 chars)"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "8px 0" }}
+              style={{ width: "100%", padding: "10px", margin: "8px 0", boxSizing: "border-box" }}
             />
           </div>
 
-          <div style={{ marginBottom: "15px" }}>
+          <div style={{ maxWidth: "600px", marginBottom: "15px" }}>
             <input
               type="password"
               placeholder="Current password (needed if prompted)"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "8px 0" }}
+              style={{ width: "100%", padding: "10px", margin: "8px 0", boxSizing: "border-box" }}
             />
           </div>
 
@@ -518,19 +555,19 @@ export default function Profile() {
 
       {/* Delete Account Tab */}
       {activeTab === "delete" && (
-        <div>
+        <div style={{ padding: "0 20px" }}>
           <h3 style={{ color: "#d32f2f" }}>Delete Account</h3>
-          <p style={{ color: "#666", marginBottom: "20px" }}>
+          <p style={{ color: "#c9c9c9", marginBottom: "20px" }}>
             This action is permanent and cannot be undone. All your data will be lost.
           </p>
           
-          <div style={{ marginBottom: "15px" }}>
+          <div style={{ maxWidth: "600px", marginBottom: "15px" }}>
             <input
               type="password"
               placeholder="Enter current password (needed if prompted)"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "8px 0" }}
+              style={{ width: "100%", padding: "10px", margin: "8px 0", boxSizing: "border-box" }}
             />
           </div>
           
@@ -553,14 +590,14 @@ export default function Profile() {
 
       {/* Sessions Tab */}
       {activeTab === "sessions" && (
-        <div>
+        <div style={{ padding: "0 20px" }}>
           <h3 style={{ color: "#4caf50" }}>Active Sessions</h3>
           <p style={{ color: "white", marginBottom: "20px" }}>
             Manage your active sessions across different devices.
           </p>
           
           {sessions.length > 0 ? (
-            <div>
+            <div style={{ maxWidth: "600px" }}>
               <ul style={{ listStyle: "none", padding: 0 }}>
                 {sessions.map((session) => (
                   <li key={session.id} style={{ 
@@ -573,7 +610,7 @@ export default function Profile() {
                     marginBottom: "10px",
                     backgroundColor: "#f9f9f9"
                   }}>
-                    <span>{session.name}</span>
+                    <span style={{ color: "black" }}>{session.name}</span>
                     <button
                       onClick={() => handleLogoutSession(session.id)}
                       style={{
@@ -607,9 +644,11 @@ export default function Profile() {
               </button>
             </div>
           ) : (
-            <p style={{ color: "#666", fontStyle: "italic" }}>
-              No active sessions found.
-            </p>
+            <div style={{ maxWidth: "600px" }}>
+              <p style={{ color: "#666", fontStyle: "italic" }}>
+                No active sessions found.
+              </p>
+            </div>
           )}
         </div>
       )}
@@ -617,7 +656,7 @@ export default function Profile() {
       {/* Status Message */}
       {msg && (
         <div style={{ 
-          marginTop: "20px", 
+          margin: "20px 20px 0 20px", 
           padding: "10px", 
           backgroundColor: msg.includes("success") ? "#e8f5e9" : "#ffebee",
           color: msg.includes("success") ? "#2e7d32" : "#c62828",

@@ -102,7 +102,7 @@ function App() {
 
   return (
     <Router>
-      <div style={{ padding: 20 }}>
+      <div style={{ padding: 20, width: "100%", maxWidth: "none" }}>
         <h1>Athlete Central</h1>
 
         <nav style={{ 
