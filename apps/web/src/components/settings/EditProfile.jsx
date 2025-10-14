@@ -99,198 +99,173 @@ export default function EditProfile() {
 
   if (loading) {
     return (
-      <div style={{ padding: 20 }}>
-        <p>Loading profile...</p>
+      <div className="container" style={{ paddingTop: 20, paddingBottom: 20 }}>
+        <div className="spinner" aria-label="Loading profile"></div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "20px" }}>
-      <Link
-        to="/settings"
-        style={{
-          color: "#646cff",
-          textDecoration: "none",
-          marginBottom: 20,
-          display: "inline-block",
-        }}
-      >
+    <div className="container" style={{ paddingTop: 20, paddingBottom: 20 }}>
+      <Link to="/settings" className="text-primary" style={{ display: "inline-block", marginBottom: 16 }}>
         ← Back to Settings
       </Link>
 
-      <h2 style={{ color: "#333", marginBottom: "30px" }}>Edit Profile</h2>
+      <div className="card" style={{ maxWidth: 720, margin: "0 auto" }}>
+        <h2 className="mb-2">Edit Profile</h2>
+        <p className="text-muted mb-3">Update your personal and sport information below.</p>
 
-      <div style={{ maxWidth: "720px", margin: "0 auto" }}>
         {/* Display Name */}
-        <label htmlFor="name" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Display Name
-        </label>
-        <input
-          id="name"
-          type="text"
-          placeholder="e.g., Jessie"
-          value={profileData.name}
-          onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-        />
+        <div className="form-group">
+          <label htmlFor="name" style={{ fontWeight: 700 }}>Display Name</label>
+          <input
+            id="name"
+            type="text"
+            className="form-control"
+            placeholder="e.g., Jessie"
+            value={profileData.name}
+            onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+          />
+        </div>
 
         {/* Bio */}
-        <label htmlFor="bio" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Bio
-        </label>
-        <textarea
-          id="bio"
-          placeholder="Introduce yourself to coaches and teammates"
-          value={profileData.bio}
-          onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, minHeight: 100, borderRadius: 8, border: "1px solid #ddd", fontSize: 16, resize: "vertical" }}
-        />
+        <div className="form-group">
+          <label htmlFor="bio" style={{ fontWeight: 700 }}>Bio</label>
+          <textarea
+            id="bio"
+            className="form-control"
+            placeholder="Introduce yourself to coaches and teammates"
+            value={profileData.bio}
+            onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
+            style={{ minHeight: 100, resize: "vertical" }}
+          />
+        </div>
 
         {/* School */}
-        <label htmlFor="school" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          School
-        </label>
-        <input
-          id="school"
-          type="text"
-          placeholder="e.g., Purdue"
-          value={profileData.school}
-          onChange={(e) => setProfileData({ ...profileData, school: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-        />
+        <div className="form-group">
+          <label htmlFor="school" style={{ fontWeight: 700 }}>School</label>
+          <input
+            id="school"
+            type="text"
+            className="form-control"
+            placeholder="e.g., Purdue"
+            value={profileData.school}
+            onChange={(e) => setProfileData({ ...profileData, school: e.target.value })}
+          />
+        </div>
 
         {/* Grade */}
-        <label htmlFor="grade" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Grade
-        </label>
-        <select
-          id="grade"
-          value={profileData.grade}
-          onChange={(e) => setProfileData({ ...profileData, grade: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-        >
-          <option value="">Select Grade</option>
-          {GRADES.map((grade) => (
-            <option key={grade.value} value={grade.value}>
-              {grade.label}
-            </option>
-          ))}
-        </select>
+        <div className="form-group">
+          <label htmlFor="grade" style={{ fontWeight: 700 }}>Grade</label>
+          <select
+            id="grade"
+            className="form-control"
+            value={profileData.grade}
+            onChange={(e) => setProfileData({ ...profileData, grade: e.target.value })}
+          >
+            <option value="">Select Grade</option>
+            {GRADES.map((grade) => (
+              <option key={grade.value} value={grade.value}>
+                {grade.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Sport */}
-        <label htmlFor="sport" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Sport
-        </label>
-        <select
-          id="sport"
-          value={profileData.sport}
-          onChange={(e) => setProfileData({ ...profileData, sport: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-        >
-          <option value="">Select Sport</option>
-          {SPORTS.map((sport) => (
-            <option key={sport.value} value={sport.value}>
-              {sport.label}
-            </option>
-          ))}
-        </select>
+        <div className="form-group">
+          <label htmlFor="sport" style={{ fontWeight: 700 }}>Sport</label>
+          <select
+            id="sport"
+            className="form-control"
+            value={profileData.sport}
+            onChange={(e) => setProfileData({ ...profileData, sport: e.target.value })}
+          >
+            <option value="">Select Sport</option>
+            {SPORTS.map((sport) => (
+              <option key={sport.value} value={sport.value}>
+                {sport.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Position/Role */}
-        <label htmlFor="position" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Position/Role
-        </label>
-        <input
-          id="position"
-          type="text"
-          placeholder="e.g., Sprinter, Point Guard"
-          value={profileData.position}
-          onChange={(e) => setProfileData({ ...profileData, position: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-        />
+        <div className="form-group">
+          <label htmlFor="position" style={{ fontWeight: 700 }}>Position/Role</label>
+          <input
+            id="position"
+            type="text"
+            className="form-control"
+            placeholder="e.g., Sprinter, Point Guard"
+            value={profileData.position}
+            onChange={(e) => setProfileData({ ...profileData, position: e.target.value })}
+          />
+        </div>
 
         {/* Team */}
-        <label htmlFor="team" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Team
-        </label>
-        <input
-          id="team"
-          type="text"
-          placeholder="Team/Club name (optional)"
-          value={profileData.team}
-          onChange={(e) => setProfileData({ ...profileData, team: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-        />
+        <div className="form-group">
+          <label htmlFor="team" style={{ fontWeight: 700 }}>Team</label>
+          <input
+            id="team"
+            type="text"
+            className="form-control"
+            placeholder="Team/Club name (optional)"
+            value={profileData.team}
+            onChange={(e) => setProfileData({ ...profileData, team: e.target.value })}
+          />
+        </div>
 
         {/* Experience Level */}
-        <label htmlFor="experience" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Experience Level
-        </label>
-        <select
-          id="experience"
-          value={profileData.experience}
-          onChange={(e) => setProfileData({ ...profileData, experience: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-        >
-          <option value="">Select Experience Level</option>
-          {EXPERIENCE_LEVELS.map((level) => (
-            <option key={level.value} value={level.value}>
-              {level.label}
-            </option>
-          ))}
-        </select>
+        <div className="form-group">
+          <label htmlFor="experience" style={{ fontWeight: 700 }}>Experience Level</label>
+          <select
+            id="experience"
+            className="form-control"
+            value={profileData.experience}
+            onChange={(e) => setProfileData({ ...profileData, experience: e.target.value })}
+          >
+            <option value="">Select Experience Level</option>
+            {EXPERIENCE_LEVELS.map((level) => (
+              <option key={level.value} value={level.value}>
+                {level.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Sport Details */}
-        <label htmlFor="sportDetails" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Sport Details
-        </label>
-        <textarea
-          id="sportDetails"
-          placeholder="Optional notes about events, distances, PBs, certifications, etc."
-          value={profileData.sportDetails}
-          onChange={(e) => setProfileData({ ...profileData, sportDetails: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 15, minHeight: 90, borderRadius: 8, border: "1px solid #ddd", fontSize: 16, resize: "vertical" }}
-        />
+        <div className="form-group">
+          <label htmlFor="sportDetails" style={{ fontWeight: 700 }}>Sport Details</label>
+          <textarea
+            id="sportDetails"
+            className="form-control"
+            placeholder="Optional notes about events, distances, PBs, certifications, etc."
+            value={profileData.sportDetails}
+            onChange={(e) => setProfileData({ ...profileData, sportDetails: e.target.value })}
+            style={{ minHeight: 90, resize: "vertical" }}
+          />
+        </div>
 
         {/* Goals & Objectives */}
-        <label htmlFor="goals" style={{ display: "block", marginBottom: 6, color: "#374151", fontWeight: 600 }}>
-          Goals & Objectives
-        </label>
-        <textarea
-          id="goals"
-          placeholder="What are your upcoming goals?"
-          value={profileData.goals}
-          onChange={(e) => setProfileData({ ...profileData, goals: e.target.value })}
-          style={{ width: "100%", padding: 12, marginBottom: 20, minHeight: 100, borderRadius: 8, border: "1px solid #ddd", fontSize: 16, resize: "vertical" }}
-        />
+        <div className="form-group">
+          <label htmlFor="goals" style={{ fontWeight: 700 }}>Goals & Objectives</label>
+          <textarea
+            id="goals"
+            className="form-control"
+            placeholder="What are your upcoming goals?"
+            value={profileData.goals}
+            onChange={(e) => setProfileData({ ...profileData, goals: e.target.value })}
+            style={{ minHeight: 100, resize: "vertical" }}
+          />
+        </div>
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            width: "100%",
-            padding: "12px 20px",
-            backgroundColor: "#4CAF50",
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            fontSize: 16,
-            cursor: saving ? "not-allowed" : "pointer",
-          }}
-        >
+        <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ width: "100%" }}>
           {saving ? "Saving..." : "Save Changes"}
         </button>
 
         {message && (
-          <div
-            style={{
-              marginTop: 20,
-              padding: 12,
-              backgroundColor: message.startsWith("Error") ? "#ffebee" : "#e8f5e9",
-              color: message.startsWith("Error") ? "#c62828" : "#2e7d32",
-              borderRadius: 8,
-            }}
-          >
+          <div className={`alert ${message.startsWith("Error") ? "alert-error" : "alert-success"}`} role="status">
             {message}
           </div>
         )}

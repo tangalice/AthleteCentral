@@ -2,91 +2,116 @@
 import { useLoaderData } from "react-router-dom";
 
 export default function Dashboard({ userRole, user }) {
-  // Data comes from the route's dashboardLoader in App.jsx
-  const data = useLoaderData(); // { displayName, role, raw } or null
+  const data = useLoaderData(); // unchanged
   const displayName = data?.displayName || user?.email || "";
 
-  return (
-    <div style={{ padding: '40px 20px' }}>
+  // helpers for tiny color accents
+  const brand = "var(--brand-primary)";       // #10b981
+  const brandTint = "var(--brand-primary-50)"; // #ecfdf5
+  const ink900 = "#111827";
 
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        minHeight: '300px',
-        color: '#333'
-      }}>
-        <h2 style={{ fontSize: '24px', marginBottom: '20px', fontWeight: 'normal' }}>
+  const cardBase = {
+    textAlign: "center",
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    padding: 20,
+    background: "#fff",
+    transition: "background .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease",
+  };
+
+  const onHover = (e) => {
+    e.currentTarget.style.background = brandTint;
+    e.currentTarget.style.borderColor = "#a7f3d0"; // emerald-200
+    e.currentTarget.style.transform = "translateY(-1px)";
+    e.currentTarget.style.boxShadow = "0 2px 6px rgba(16,185,129,.12)";
+  };
+  const offHover = (e) => {
+    Object.assign(e.currentTarget.style, cardBase);
+  };
+
+  const profileDone = !!data?.raw?.profileComplete;
+  const statusColor = profileDone ? brand : "#d97706"; // amber-600 for "Incomplete"
+  const statusText = profileDone ? "Complete" : "Incomplete";
+  const statusMark = profileDone ? "✓" : "!";
+
+  return (
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minHeight: 300 }}>
+        {/* Title with subtle brand accent bar */}
+        <h2
+          style={{
+            fontSize: 28,
+            marginBottom: 8,
+            fontWeight: 800,
+            color: ink900,
+          }}
+        >
           Welcome back, {displayName}!
         </h2>
-
-        <p style={{ color: '#666', fontSize: '18px', marginBottom: '30px' }}>
-          {userRole === 'athlete' ? 'Athlete' : userRole === 'coach' ? 'Coach' : 'User'} Dashboard
+        <p className="text-muted" style={{ fontSize: 18, marginBottom: 16 }}>
+          {userRole === "athlete" ? "Athlete" : userRole === "coach" ? "Coach" : "User"} Dashboard
         </p>
+        <div
+          style={{
+            height: 4,
+            width: 120,
+            background: brand,
+            borderRadius: 999,
+            opacity: 0.25,
+            marginBottom: 12,
+          }}
+        />
 
-        {/* Quick Stats Section */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '30px',
-          marginTop: '40px',
-          width: '100%',
-          maxWidth: '800px'
-        }}>
-          <div style={{
-            backgroundColor: '#f8f9fa',
-            padding: '30px',
-            borderRadius: '12px',
-            textAlign: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-          }}>
-            <h3 style={{ color: '#ff4444', marginBottom: '10px' }}>Training Sessions</h3>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '10px 0' }}>0</p>
-            <p style={{ color: '#666' }}>This Week</p>
+        {/* Quick Stats */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+            marginTop: 16,
+            width: "100%",
+            maxWidth: 1000,
+          }}
+        >
+          <div
+            className="card"
+            style={{ ...cardBase }}
+            onMouseEnter={onHover}
+            onMouseLeave={offHover}
+          >
+            <h3 style={{ marginBottom: 8, color: ink900 }}>Training Sessions</h3>
+            <p style={{ fontSize: 36, fontWeight: 800, margin: "6px 0", color: brand }}>0</p>
+            <p className="text-muted">This Week</p>
           </div>
 
-          <div style={{
-            backgroundColor: '#f8f9fa',
-            padding: '30px',
-            borderRadius: '12px',
-            textAlign: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-          }}>
-            <h3 style={{ color: '#ff4444', marginBottom: '10px' }}>Messages</h3>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '10px 0' }}>0</p>
-            <p style={{ color: '#666' }}>Unread</p>
+          <div
+            className="card"
+            style={{ ...cardBase }}
+            onMouseEnter={onHover}
+            onMouseLeave={offHover}
+          >
+            <h3 style={{ marginBottom: 8, color: ink900 }}>Messages</h3>
+            <p style={{ fontSize: 36, fontWeight: 800, margin: "6px 0", color: brand }}>0</p>
+            <p className="text-muted">Unread</p>
           </div>
 
-          <div style={{
-            backgroundColor: '#f8f9fa',
-            padding: '30px',
-            borderRadius: '12px',
-            textAlign: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-          }}>
-            <h3 style={{ color: '#ff4444', marginBottom: '10px' }}>Profile</h3>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '10px 0' }}>
-              {data?.raw?.profileComplete ? '✓' : '!'}
-            </p>
-            <p style={{ color: '#666' }}>
-              {data?.raw?.profileComplete ? 'Complete' : 'Incomplete'}
-            </p>
+          <div
+            className="card"
+            style={{ ...cardBase }}
+            onMouseEnter={onHover}
+            onMouseLeave={offHover}
+          >
+            <h3 style={{ marginBottom: 8, color: ink900 }}>Profile</h3>
+            <p style={{ fontSize: 36, fontWeight: 800, margin: "6px 0", color: statusColor }}>{statusMark}</p>
+            <p className="text-muted">{statusText}</p>
           </div>
         </div>
 
-        {/* Recent Activity Section */}
-        <div style={{ marginTop: '60px', width: '100%', maxWidth: '800px' }}>
-          <h3 style={{ fontSize: '24px', marginBottom: '20px', color: '#333' }}>
-            Recent Activity
-          </h3>
-          <div style={{
-            backgroundColor: '#f8f9fa',
-            padding: '30px',
-            borderRadius: '12px',
-            textAlign: 'center',
-            color: '#999'
-          }}>
-            <p>No recent activity to display</p>
+        {/* Recent Activity */}
+        <div style={{ marginTop: 32, width: "100%", maxWidth: 1000 }}>
+          <h3 style={{ fontSize: 20, marginBottom: 12, color: ink900, fontWeight: 800 }}>Recent Activity</h3>
+          <div className="card" style={{ borderColor: "var(--border)" }}>
+            <p className="text-muted" style={{ textAlign: "center" }}>No recent activity to display</p>
           </div>
         </div>
       </div>

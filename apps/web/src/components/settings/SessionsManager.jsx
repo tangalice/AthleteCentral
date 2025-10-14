@@ -8,112 +8,78 @@ export default function SessionsManager() {
     { id: "device2", name: "iPhone Safari", lastActive: "2 hours ago" },
     { id: "device3", name: "iPad Chrome", lastActive: "Yesterday" },
   ]);
+  const [message, setMessage] = useState("");
 
   const handleLogout = (id) => {
-    setSessions(sessions.filter((s) => s.id !== id));
-    alert(`Session ${id} logged out`);
+    const target = sessions.find((s) => s.id === id);
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    setMessage(target ? `Signed out: ${target.name}` : "Session signed out");
+    setTimeout(() => setMessage(""), 2500);
   };
 
   const handleLogoutAll = () => {
     setSessions([]);
-    alert("All sessions logged out");
+    setMessage("All sessions have been signed out");
+    setTimeout(() => setMessage(""), 2500);
   };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <Link
-        to="/settings"
-        style={{
-          color: "#646cff",
-          textDecoration: "none",
-          marginBottom: "20px",
-          display: "inline-block",
-        }}
-      >
+    <div className="container" style={{ paddingTop: 20, paddingBottom: 20 }}>
+      <Link to="/settings" className="text-primary" style={{ display: "inline-block", marginBottom: 16 }}>
         ← Back to Settings
       </Link>
 
-      <h2 style={{ color: "#333", marginBottom: "30px" }}>Active Sessions</h2>
+      <div className="card" style={{ maxWidth: 680, margin: "0 auto" }}>
+        <h2 className="mb-2">Active Sessions</h2>
+        <p className="text-muted mb-3">
+          Manage where your account is signed in. You can sign out individual devices or all sessions.
+        </p>
 
-      <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+        {message && (
+          <div className="alert alert-success" role="status" style={{ marginBottom: 16 }}>
+            {message}
+          </div>
+        )}
+
         {sessions.length > 0 ? (
           <>
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "15px",
-                  border: "1px solid #ddd",
-                  borderRadius: "8px",
-                  marginBottom: "15px",
-                  backgroundColor: "#f9f9f9",
-                }}
-              >
-                <div>
-                  <p
-                    style={{
-                      margin: "0",
-                      fontWeight: "bold",
-                      color: "#333",
-                    }}
-                  >
-                    {session.name}
-                  </p>
-                  <p
-                    style={{
-                      margin: "5px 0 0 0",
-                      color: "#666",
-                      fontSize: "14px",
-                    }}
-                  >
-                    {session.lastActive}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleLogout(session.id)}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {sessions.map((session) => (
+                <div
+                  key={session.id}
+                  className="card"
                   style={{
-                    padding: "8px 16px",
-                    backgroundColor: "#ff4444",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "5px",
-                    cursor: "pointer",
+                    padding: 16,
+                    margin: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
                   }}
                 >
-                  Logout
-                </button>
-              </div>
-            ))}
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{session.name}</div>
+                    <div className="text-muted" style={{ marginTop: 4, fontSize: 14 }}>
+                      {session.lastActive}
+                    </div>
+                  </div>
+                  <button className="btn btn-outline" onClick={() => handleLogout(session.id)}>
+                    Sign out
+                  </button>
+                </div>
+              ))}
+            </div>
 
             <button
+              className="btn btn-danger"
               onClick={handleLogoutAll}
-              style={{
-                width: "100%",
-                padding: "12px",
-                marginTop: "20px",
-                backgroundColor: "#d32f2f",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                fontSize: "16px",
-                cursor: "pointer",
-              }}
+              style={{ width: "100%", marginTop: 16 }}
             >
-              Logout All Sessions
+              Sign out of all sessions
             </button>
           </>
         ) : (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "40px",
-              color: "#999",
-            }}
-          >
-            No active sessions found
+          <div className="card" style={{ textAlign: "center" }}>
+            <div className="text-muted">No active sessions found</div>
           </div>
         )}
       </div>

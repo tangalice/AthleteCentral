@@ -1,7 +1,6 @@
 // src/components/settings/ChangePassword.jsx
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { auth } from "../../firebase";
 import {
   updatePassword,
   EmailAuthProvider,
@@ -27,13 +26,12 @@ export default function ChangePassword({ user }) {
 
     setLoading(true);
     setMessage("");
-
     try {
-      const credential = EmailAuthProvider.credential(
-        user.email,
-        currentPassword
-      );
+      // Re-authenticate with current password
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
       await reauthenticateWithCredential(user, credential);
+
+      // Update password
       await updatePassword(user, newPassword);
 
       setMessage("Password updated successfully!");
@@ -48,97 +46,70 @@ export default function ChangePassword({ user }) {
   };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <Link
-        to="/settings"
-        style={{
-          color: "#646cff",
-          textDecoration: "none",
-          marginBottom: 20,
-          display: "inline-block",
-        }}
-      >
+    <div className="container" style={{ paddingTop: 20, paddingBottom: 20 }}>
+      <Link to="/settings" className="text-primary" style={{ display: "inline-block", marginBottom: 16 }}>
         ← Back to Settings
       </Link>
 
-      <h2 style={{ color: "#333", marginBottom: "30px" }}>Change Password</h2>
+      <div className="card" style={{ maxWidth: 600, margin: "0 auto" }}>
+        <h2 className="mb-2">Change Password</h2>
+        <p className="text-muted mb-3">
+          Enter your current password and set a new one (minimum 8 characters).
+        </p>
 
-      <div style={{ maxWidth: "600px", margin: "0 auto" }}>
-        <input
-          type="password"
-          placeholder="Current Password"
-          value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
-          style={{
-            width: "100%",
-            padding: 12,
-            marginBottom: 15,
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            fontSize: 16,
-          }}
-        />
-        <input
-          type="password"
-          placeholder="New Password (min 8 characters)"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          style={{
-            width: "100%",
-            padding: 12,
-            marginBottom: 15,
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            fontSize: 16,
-          }}
-        />
-        <input
-          type="password"
-          placeholder="Confirm New Password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          style={{
-            width: "100%",
-            padding: 12,
-            marginBottom: 20,
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            fontSize: 16,
-          }}
-        />
+        <div className="form-group">
+          <label htmlFor="current" style={{ fontWeight: 700 }}>Current Password</label>
+          <input
+            id="current"
+            type="password"
+            className="form-control"
+            placeholder="Current Password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="new" style={{ fontWeight: 700 }}>New Password</label>
+          <input
+            id="new"
+            type="password"
+            className="form-control"
+            placeholder="New Password (min 8 characters)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="confirm" style={{ fontWeight: 700 }}>Confirm New Password</label>
+          <input
+            id="confirm"
+            type="password"
+            className="form-control"
+            placeholder="Confirm New Password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+        </div>
 
         <button
           onClick={handleChangePassword}
           disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px 20px",
-            backgroundColor: "#2196F3",
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            fontSize: 16,
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
+          className="btn btn-primary"
+          style={{ width: "100%" }}
         >
           {loading ? "Updating..." : "Update Password"}
         </button>
 
         {message && (
           <div
-            style={{
-              marginTop: 20,
-              padding: 12,
-              backgroundColor:
-                message.includes("Error") || message.includes("match")
-                  ? "#ffebee"
-                  : "#e8f5e9",
-              color:
-                message.includes("Error") || message.includes("match")
-                  ? "#c62828"
-                  : "#2e7d32",
-              borderRadius: 8,
-            }}
+            className={`alert ${
+              message.startsWith("Error") || message.includes("match")
+                ? "alert-error"
+                : "alert-success"
+            }`}
+            role="status"
           >
             {message}
           </div>

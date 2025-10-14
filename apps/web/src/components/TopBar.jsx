@@ -27,6 +27,7 @@ function BrandMark({ size = 28, textSize = 22 }) {
 }
 
 export default function TopBar({ showNav = false, activeTab = "dashboard", onLogout, user }) {
+  // keep minimal inline for active underline; colors align with index.css variables
   const linkStyle = (isActive) => ({
     textDecoration: "none",
     color: isActive ? "#111827" : "#6b7280",
@@ -35,28 +36,6 @@ export default function TopBar({ showNav = false, activeTab = "dashboard", onLog
     padding: "8px 10px",
     borderBottom: isActive ? "3px solid #111827" : "3px solid transparent",
   });
-
-  const btnBase = {
-    padding: "8px 12px",
-    backgroundColor: "#ffffff",
-    color: "#111827",
-    border: "1px solid #e5e7eb",
-    borderRadius: 10,
-    cursor: "pointer",
-    fontSize: 14,
-    fontWeight: 600,
-    transition: "all .16s ease",
-  };
-
-  const btnHover = {
-    backgroundColor: "#F3F4F6", // gray-100
-    borderColor: "#D1D5DB",     // gray-300
-  };
-
-  const btnFocus = {
-    outline: "none",
-    boxShadow: "0 0 0 3px rgba(16,185,129,.25)", // emerald ring
-  };
 
   return (
     <header
@@ -86,12 +65,8 @@ export default function TopBar({ showNav = false, activeTab = "dashboard", onLog
 
       {user && user.emailVerified ? (
         <button
+          className="btn btn-outline"
           onClick={onLogout}
-          style={btnBase}
-          onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...btnBase, ...btnHover })}
-          onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnBase)}
-          onFocus={(e) => Object.assign(e.currentTarget.style, { ...btnBase, ...btnFocus })}
-          onBlur={(e) => Object.assign(e.currentTarget.style, btnBase)}
           aria-label="Log out"
         >
           Logout
