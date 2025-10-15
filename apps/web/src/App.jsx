@@ -24,6 +24,7 @@ import Messages from "./components/Messages";
 import Settings from "./components/Settings";
 import TopBar from "./components/TopBar";
 import Goals from "./components/Goals";
+import SuggestGoals from "./components/SuggestGoals";
 
 /* ---------------- Protected wrapper ---------------- */
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -42,7 +43,8 @@ function AppLayout({ user, userRole, onLogout }) {
     root === "settings" ? "settings" :
     root === "profile"  ? "profile"  :
     root === "messages" ? "messages" : 
-    root === "goals"    ? "goals" : "dashboard";
+    root === "goals"    ? "goals"    :
+    "dashboard";
 
     const mergedUser = user
     ? { ...user, role: userRole }
@@ -62,6 +64,7 @@ function AppLayout({ user, userRole, onLogout }) {
         activeTab={activeTab}
         onLogout={onLogout}
         user={mergedUser}
+        userRole={userRole}
       />
 
       {/* Routed content */}
@@ -219,7 +222,17 @@ export default function App() {
               <Goals user={user} />
              </ProtectedRoute>
           ),
-          },
+        },
+
+        {
+          path: "suggest-goals",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+
 
         // Keep other Settings sub-pages under /settings/*
         {
