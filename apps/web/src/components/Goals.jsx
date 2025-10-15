@@ -1,215 +1,170 @@
 ﻿import { useEffect, useState } from "react";
-import { auth, db } from "../firebase";
 import {
   collection,
-  addDoc,
-  doc,
-  deleteDoc,
-  updateDoc,
-  getDocs,
-  onSnapshot,
   query,
-  where,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  orderBy,
 } from "firebase/firestore";
+import { db } from "../firebase";
 
-export default function Goals() {
+export default function Goals({ user }) {
   const [goals, setGoals] = useState([]);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [user, setUser] = useState(null);
   const [filters, setFilters] = useState({
     Academic: true,
     Practice: true,
     Competition: true,
+    "Coach Suggested": true,
   });
+  const [loading, setLoading] = useState(true);
 
-  const [hasCustomGoal, setHasCustomGoal] = useState(false);
-
-  // Watch auth state and goals in real time
+  // Realtime listener for user's goals
   useEffect(() => {
-    let unsubscribeGoals = null;
+    if (!user) return;
+    const q = query(
+      collection(db, "users", user.uid, "goalsList"),
+      orderBy("createdAt", "desc")
+    );
 
-    const unsubscribeAuth = auth.onAuthStateChanged(async (u) => {
-      setUser(u);
-      if (!u) {
-        setGoals([]);
-        return;
-      }
-
-      const goalsRef = collection(db, "users", u.uid, "goalsList");
-
-      try {
-        // Check if subcollection exists or is empty
-        const existing = await getDocs(goalsRef);
-        if (existing.empty) {
-          console.log("No goals found. Creating Welcome Goal Example...");
-          await addDoc(goalsRef, {
-            title: "Welcome Goal Example",
-            category: "Academic",
-            completed: false,
-            systemGenerated: true,
-            createdAt: new Date(),
-          });
-        }
-      } catch (err) {
-        console.error("Error checking or creating subcollection:", err);
-      }
-
-      // Real-time listener for user’s goals
-      unsubscribeGoals = onSnapshot(goalsRef, (snapshot) => {
-        const allGoals = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
-        setGoals(allGoals);
-
-        // Track if user has any non-system goals
-        const custom = allGoals.some((g) => !g.systemGenerated);
-        setHasCustomGoal(custom);
-      });
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setGoals(list);
+      setLoading(false);
     });
 
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeGoals) unsubscribeGoals();
-    };
-  }, []);
+    return () => unsub();
+  }, [user]);
 
-  // Add a new goal
+  // Add new goal (by the athlete)
   const handleAddGoal = async (e) => {
     e.preventDefault();
-    if (!title || !category || !user) return;
+    if (!title || !category) return;
 
-    const goalsRef = collection(db, "users", user.uid, "goalsList");
     try {
-      await addDoc(goalsRef, {
+      const newGoal = {
         title,
         category,
         completed: false,
         createdAt: new Date(),
-      });
+      };
+
+      await addDoc(collection(db, "users", user.uid, "goalsList"), newGoal);
       setTitle("");
       setCategory("");
-
-      // Delete Welcome Example if present
-      const welcomeSnap = await getDocs(query(goalsRef, where("systemGenerated", "==", true)));
-      welcomeSnap.forEach(async (docSnap) => {
-        await deleteDoc(doc(db, "users", user.uid, "goalsList", docSnap.id));
-      });
     } catch (err) {
       console.error("Error adding goal:", err);
+      alert("Could not add goal.");
     }
   };
 
-  // Toggle completion
-  const handleToggleComplete = async (goalId, current) => {
-    if (!user) return;
+  const handleToggleComplete = async (goal) => {
     try {
-      const goalRef = doc(db, "users", user.uid, "goalsList", goalId);
-      await updateDoc(goalRef, { completed: !current });
+      const ref = doc(db, "users", user.uid, "goalsList", goal.id);
+      await updateDoc(ref, { completed: !goal.completed });
     } catch (err) {
-      console.error("Error toggling goal:", err);
+      console.error("Error updating goal:", err);
     }
   };
 
-  // Delete a goal
-  const handleDeleteGoal = async (goalId) => {
-    if (!user) return;
+  const handleDelete = async (goalId) => {
     try {
-      await deleteDoc(doc(db, "users", user.uid, "goalsList", goalId));
+      const ref = doc(db, "users", user.uid, "goalsList", goalId);
+      await deleteDoc(ref);
     } catch (err) {
       console.error("Error deleting goal:", err);
     }
   };
 
-  // Edit goal title
-  const handleEditTitle = async (goalId, newTitle) => {
-    if (!user) return;
-    try {
-      const goalRef = doc(db, "users", user.uid, "goalsList", goalId);
-      await updateDoc(goalRef, { title: newTitle });
-    } catch (err) {
-      console.error("Error editing title:", err);
-    }
-  };
-
-  // Filter
-  const toggleFilter = (cat) => {
-    setFilters((prev) => ({ ...prev, [cat]: !prev[cat] }));
-  };
-
   const filteredGoals = goals.filter((g) => filters[g.category]);
 
-  /* ---------- Render ---------- */
   return (
-    <div style={{ background: "#f9fafb", minHeight: "100vh" }}>
-      <div
-        className="container"
-        style={{
-          maxWidth: 800,
-          margin: "0 auto",
-          padding: "32px 16px",
-          fontFamily: "system-ui, sans-serif",
-        }}
-      >
-        <h1 style={{ textAlign: "center", fontSize: 28, fontWeight: 800, marginBottom: 20 }}>
+    <div style={{ background: "#fff", minHeight: "100vh" }}>
+      <div style={{ maxWidth: 700, margin: "40px auto", padding: "0 20px" }}>
+        <h2 style={{ fontWeight: 800, fontSize: 28, marginBottom: 10 }}>
           My Goals
-        </h1>
+        </h2>
 
-        {/* ---------- Add Goal Form ---------- */}
+        {/* Filter Bar */}
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            background: "#f9fafb",
+            borderRadius: 8,
+            padding: 10,
+            marginBottom: 20,
+            flexWrap: "wrap",
+          }}
+        >
+          {Object.keys(filters).map((key) => (
+            <label key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={filters[key]}
+                onChange={() =>
+                  setFilters((f) => ({ ...f, [key]: !f[key] }))
+                }
+              />
+              {key}
+            </label>
+          ))}
+        </div>
+
+        {/* Add Goal Form */}
         <form
           onSubmit={handleAddGoal}
           style={{
             display: "flex",
             flexDirection: "column",
             gap: 10,
-            marginBottom: 24,
-            background: "#fff",
-            padding: 16,
-            borderRadius: 8,
-            boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+            marginBottom: 20,
           }}
         >
           <input
             type="text"
-            placeholder="Enter goal title"
+            placeholder="Goal title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
             style={{
-              padding: "10px 12px",
+              padding: 10,
+              fontSize: 16,
               borderRadius: 6,
               border: "1px solid #d1d5db",
-              fontSize: 16,
             }}
           />
-
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             required
             style={{
-              padding: "10px 12px",
+              padding: 10,
+              fontSize: 16,
               borderRadius: 6,
               border: "1px solid #d1d5db",
-              fontSize: 16,
             }}
           >
-            <option value="">Select Category</option>
+            <option value="">Select category</option>
             <option value="Academic">Academic</option>
             <option value="Practice">Practice</option>
             <option value="Competition">Competition</option>
+            <option value="Coach Suggested">Coach Suggested</option>
           </select>
-
           <button
             type="submit"
             style={{
+              padding: 10,
+              fontSize: 16,
+              fontWeight: 600,
               background: "#10b981",
               color: "white",
               border: "none",
               borderRadius: 6,
-              padding: "10px 0",
-              fontSize: 16,
               cursor: "pointer",
             }}
           >
@@ -217,132 +172,85 @@ export default function Goals() {
           </button>
         </form>
 
-        {/* ---------- Filters ---------- */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: 16,
-            marginBottom: 20,
-          }}
-        >
-          {["Academic", "Practice", "Competition"].map((cat) => (
-            <label key={cat} style={{ fontSize: 15 }}>
-              <input
-                type="checkbox"
-                checked={filters[cat]}
-                onChange={() => toggleFilter(cat)}
-                style={{ marginRight: 6 }}
-              />
-              {cat}
-            </label>
-          ))}
-        </div>
-
-        {/* ---------- Goal List ---------- */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {filteredGoals.length === 0 ? (
-            <p style={{ textAlign: "center", color: "#6b7280" }}>
-              No goals yet. Add one above!
-            </p>
-          ) : (
-            filteredGoals.map((goal) => (
-              <GoalItem
-                key={goal.id}
-                goal={goal}
-                onToggleComplete={() => handleToggleComplete(goal.id, goal.completed)}
-                onDelete={() => handleDeleteGoal(goal.id)}
-                onEditTitle={(newTitle) => handleEditTitle(goal.id, newTitle)}
-              />
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Single Goal Component ---------- */
-function GoalItem({ goal, onToggleComplete, onDelete, onEditTitle }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(goal.title);
-
-  const handleSave = () => {
-    if (editTitle.trim() !== "" && editTitle !== goal.title) {
-      onEditTitle(editTitle);
-    }
-    setIsEditing(false);
-  };
-
-  return (
-    <div
-      style={{
-        background: "#fff",
-        padding: "12px 16px",
-        borderRadius: 8,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-        <input type="checkbox" checked={goal.completed} onChange={onToggleComplete} />
-
-        {isEditing ? (
-          <input
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            onBlur={handleSave}
-            onKeyDown={(e) => e.key === "Enter" && handleSave()}
-            autoFocus
-            style={{
-              flex: 1,
-              border: "1px solid #d1d5db",
-              borderRadius: 4,
-              padding: "4px 8px",
-              fontSize: 16,
-            }}
-          />
+        {/* Goal List */}
+        {loading ? (
+          <p>Loading goals...</p>
+        ) : filteredGoals.length === 0 ? (
+          <p style={{ color: "#6b7280" }}>No goals to display.</p>
         ) : (
-          <div
-            style={{
-              textDecoration: goal.completed ? "line-through" : "none",
-              color: goal.completed ? "#9ca3af" : "#111827",
-              cursor: "text",
-              flex: 1,
-            }}
-            onClick={() => setIsEditing(true)}
-          >
-            {goal.title}
-          </div>
+          filteredGoals.map((goal) => (
+            <div
+              key={goal.id}
+              className="goal-item"
+              style={{
+                background:
+                  goal.category === "Coach Suggested"
+                    ? "#ecfdf5"
+                    : "#fff",
+                border: "1px solid #e5e7eb",
+                borderLeft:
+                  goal.category === "Coach Suggested"
+                    ? "5px solid #10b981"
+                    : "5px solid transparent",
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 10,
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={goal.completed}
+                  onChange={() => handleToggleComplete(goal)}
+                  style={{ marginTop: 5 }}
+                />
+                <div>
+                  <h3
+                    style={{
+                      margin: 0,
+                      textDecoration: goal.completed ? "line-through" : "none",
+                      color: goal.completed ? "#9ca3af" : "#111827",
+                    }}
+                  >
+                    {goal.title}
+                  </h3>
+                  <p style={{ margin: "4px 0", color: "#6b7280", fontSize: 14 }}>
+                    Category: {goal.category}
+                  </p>
+                  {goal.category === "Coach Suggested" && goal.suggestedByName && (
+                    <p
+                      style={{
+                        margin: "2px 0 0",
+                        color: "#059669",
+                        fontSize: 13,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Suggested by {goal.suggestedByName}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => handleDelete(goal.id)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#9ca3af",
+                  cursor: "pointer",
+                  fontSize: 18,
+                }}
+              >
+                ✖
+              </button>
+            </div>
+          ))
         )}
-
-        <span
-          style={{
-            fontSize: 13,
-            color: "#6b7280",
-            fontStyle: "italic",
-          }}
-        >
-          {goal.category}
-        </span>
       </div>
-
-      <button
-        onClick={onDelete}
-        style={{
-          background: "none",
-          border: "none",
-          color: "#ef4444",
-          fontSize: 18,
-          cursor: "pointer",
-          marginLeft: 8,
-        }}
-        title="Delete Goal"
-      >
-        ✖
-      </button>
     </div>
   );
 }
