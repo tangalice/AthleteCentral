@@ -23,6 +23,8 @@ import Profile from "./components/Profile";
 import Messages from "./components/Messages";
 import Settings from "./components/Settings";
 import TopBar from "./components/TopBar";
+import Goals from "./components/Goals";
+import SuggestGoals from "./components/SuggestGoals";
 
 /* ---------------- Protected wrapper ---------------- */
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -33,14 +35,20 @@ function ProtectedRoute({ children, user, requireVerified = true }) {
 }
 
 /* --------- App layout (TopBar + content) ---------- */
-function AppLayout({ user, onLogout }) {
+function AppLayout({ user, userRole, onLogout }) {
   const { pathname } = useLocation();
   // Use first path segment to decide active tab (so /settings/edit-profile stays on "Settings")
   const root = (pathname.split("/")[1] || "").toLowerCase();
   const activeTab =
     root === "settings" ? "settings" :
     root === "profile"  ? "profile"  :
-    root === "messages" ? "messages" : "dashboard";
+    root === "messages" ? "messages" : 
+    root === "goals"    ? "goals"    :
+    "dashboard";
+
+    const mergedUser = user
+    ? { ...user, role: userRole }
+    : null;
 
   return (
     <div
@@ -55,7 +63,8 @@ function AppLayout({ user, onLogout }) {
         showNav={Boolean(user && user.emailVerified)}
         activeTab={activeTab}
         onLogout={onLogout}
-        user={user}
+        user={mergedUser}
+        userRole={userRole}
       />
 
       {/* Routed content */}
@@ -164,7 +173,7 @@ export default function App() {
     // Protected layout and children
     {
       path: "/",
-      element: <AppLayout user={user} onLogout={handleLogout} />,
+      element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} />,
       children: [
         {
           index: true,
@@ -204,7 +213,26 @@ export default function App() {
               <Messages />
             </ProtectedRoute>
           ),
+          },
+
+        {
+          path: "goals",
+          element: (
+            <ProtectedRoute user={user}>
+              <Goals user={user} />
+             </ProtectedRoute>
+          ),
         },
+
+        {
+          path: "suggest-goals",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+
 
         // Keep other Settings sub-pages under /settings/*
         {
