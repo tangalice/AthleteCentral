@@ -23,6 +23,7 @@ import Profile from "./components/Profile";
 import Messages from "./components/Messages";
 import Settings from "./components/Settings";
 import TopBar from "./components/TopBar";
+import Goals from "./components/Goals";
 
 /* ---------------- Protected wrapper ---------------- */
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -204,7 +205,16 @@ export default function App() {
               <Messages />
             </ProtectedRoute>
           ),
-        },
+          },
+
+        {
+          path: "goals",
+          element: (
+            <ProtectedRoute user={user}>
+              <Goals user={user} />
+             </ProtectedRoute>
+          ),
+          },
 
         // Keep other Settings sub-pages under /settings/*
         {
