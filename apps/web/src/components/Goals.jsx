@@ -1,206 +1,348 @@
-﻿import React, { useState, useEffect } from "react";
+﻿import { useEffect, useState } from "react";
 import { auth, db } from "../firebase";
 import {
-    collection,
-    addDoc,
-    deleteDoc,
-    updateDoc,
-    doc,
-    onSnapshot,
-    query,
-    orderBy,
-    setDoc,
+  collection,
+  addDoc,
+  doc,
+  deleteDoc,
+  updateDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  where,
 } from "firebase/firestore";
-import TopBar from "./TopBar";
 
-const Goals = () => {
-    const [user, setUser] = useState(null);
-    const [goals, setGoals] = useState([]);
-    const [newGoal, setNewGoal] = useState("");
-    const [category, setCategory] = useState("Academic");
-    const [filters, setFilters] = useState({
-        Academic: true,
-        Practice: true,
-        Competition: true,
+export default function Goals() {
+  const [goals, setGoals] = useState([]);
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [user, setUser] = useState(null);
+  const [filters, setFilters] = useState({
+    Academic: true,
+    Practice: true,
+    Competition: true,
+  });
+
+  const [hasCustomGoal, setHasCustomGoal] = useState(false);
+
+  // Watch auth state and goals in real time
+  useEffect(() => {
+    let unsubscribeGoals = null;
+
+    const unsubscribeAuth = auth.onAuthStateChanged(async (u) => {
+      setUser(u);
+      if (!u) {
+        setGoals([]);
+        return;
+      }
+
+      const goalsRef = collection(db, "users", u.uid, "goalsList");
+
+      try {
+        // Check if subcollection exists or is empty
+        const existing = await getDocs(goalsRef);
+        if (existing.empty) {
+          console.log("No goals found. Creating Welcome Goal Example...");
+          await addDoc(goalsRef, {
+            title: "Welcome Goal Example",
+            category: "Academic",
+            completed: false,
+            systemGenerated: true,
+            createdAt: new Date(),
+          });
+        }
+      } catch (err) {
+        console.error("Error checking or creating subcollection:", err);
+      }
+
+      // Real-time listener for user’s goals
+      unsubscribeGoals = onSnapshot(goalsRef, (snapshot) => {
+        const allGoals = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        setGoals(allGoals);
+
+        // Track if user has any non-system goals
+        const custom = allGoals.some((g) => !g.systemGenerated);
+        setHasCustomGoal(custom);
+      });
     });
 
-    useEffect(() => {
-        const unsubAuth = auth.onAuthStateChanged((u) => {
-            setUser(u);
-            if (u) listenToGoals(u.uid);
-            else setGoals([]);
-        });
-        return () => unsubAuth();
-    }, []);
-
-    const listenToGoals = (uid) => {
-        const goalsRef = collection(db, "users", uid, "goals");
-        const q = query(goalsRef, orderBy("createdAt", "asc"));
-        return onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-            setGoals(data);
-        });
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeGoals) unsubscribeGoals();
     };
+  }, []);
 
-    const handleAddGoal = async (e) => {
-        e.preventDefault();
-        if (!user || !newGoal.trim()) return;
-        const goalRef = doc(db, "users", user.uid);
-        await setDoc(goalRef, { email: user.email }, { merge: true });
-        await addDoc(collection(db, "users", user.uid, "goals"), {
-            title: newGoal.trim(),
-            category,
-            completed: false,
-            createdAt: new Date(),
-        });
-        setNewGoal("");
-    };
+  // Add a new goal
+  const handleAddGoal = async (e) => {
+    e.preventDefault();
+    if (!title || !category || !user) return;
 
-    const handleDelete = async (goalId) => {
-        if (!user) return;
-        await deleteDoc(doc(db, "users", user.uid, "goals", goalId));
-    };
+    const goalsRef = collection(db, "users", user.uid, "goalsList");
+    try {
+      await addDoc(goalsRef, {
+        title,
+        category,
+        completed: false,
+        createdAt: new Date(),
+      });
+      setTitle("");
+      setCategory("");
 
-    const toggleCompleted = async (goalId, completed) => {
-        if (!user) return;
-        await updateDoc(doc(db, "users", user.uid, "goals", goalId), {
-            completed: !completed,
-        });
-    };
+      // Delete Welcome Example if present
+      const welcomeSnap = await getDocs(query(goalsRef, where("systemGenerated", "==", true)));
+      welcomeSnap.forEach(async (docSnap) => {
+        await deleteDoc(doc(db, "users", user.uid, "goalsList", docSnap.id));
+      });
+    } catch (err) {
+      console.error("Error adding goal:", err);
+    }
+  };
 
-    const handleEdit = async (goalId, newTitle) => {
-        if (!user) return;
-        await updateDoc(doc(db, "users", user.uid, "goals", goalId), {
-            title: newTitle,
-        });
-    };
+  // Toggle completion
+  const handleToggleComplete = async (goalId, current) => {
+    if (!user) return;
+    try {
+      const goalRef = doc(db, "users", user.uid, "goalsList", goalId);
+      await updateDoc(goalRef, { completed: !current });
+    } catch (err) {
+      console.error("Error toggling goal:", err);
+    }
+  };
 
-    const handleFilterChange = (category) => {
-        setFilters((prev) => ({ ...prev, [category]: !prev[category] }));
-    };
+  // Delete a goal
+  const handleDeleteGoal = async (goalId) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "goalsList", goalId));
+    } catch (err) {
+      console.error("Error deleting goal:", err);
+    }
+  };
 
-    const visibleGoals = goals.filter((g) => filters[g.category]);
+  // Edit goal title
+  const handleEditTitle = async (goalId, newTitle) => {
+    if (!user) return;
+    try {
+      const goalRef = doc(db, "users", user.uid, "goalsList", goalId);
+      await updateDoc(goalRef, { title: newTitle });
+    } catch (err) {
+      console.error("Error editing title:", err);
+    }
+  };
 
-    return (
-        <div className="min-h-screen bg-gray-50">
-            <TopBar />
-            <div className="max-w-3xl mx-auto px-4 py-8">
-                <h1 className="text-3xl font-bold mb-6 text-gray-800">Goal Tracker</h1>
+  // Filter
+  const toggleFilter = (cat) => {
+    setFilters((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  };
 
-                <form
-                    onSubmit={handleAddGoal}
-                    className="flex flex-col sm:flex-row gap-3 mb-6"
-                >
-                    <input
-                        type="text"
-                        value={newGoal}
-                        onChange={(e) => setNewGoal(e.target.value)}
-                        placeholder="Enter a new goal"
-                        className="flex-1 border rounded-md px-3 py-2 text-gray-700 focus:outline-none focus:ring focus:ring-green-300"
-                    />
-                    <select
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                        className="border rounded-md px-3 py-2 text-gray-700 focus:outline-none focus:ring focus:ring-green-300"
-                    >
-                        <option value="Academic">Academic</option>
-                        <option value="Practice">Practice</option>
-                        <option value="Competition">Competition</option>
-                    </select>
-                    <button
-                        type="submit"
-                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md"
-                    >
-                        Add Goal
-                    </button>
-                </form>
+  const filteredGoals = goals.filter((g) => filters[g.category]);
 
-                <div className="flex justify-around mb-5">
-                    {Object.keys(filters).map((cat) => (
-                        <label key={cat} className="flex items-center gap-2 text-gray-700">
-                            <input
-                                type="checkbox"
-                                checked={filters[cat]}
-                                onChange={() => handleFilterChange(cat)}
-                            />
-                            {cat}
-                        </label>
-                    ))}
-                </div>
+  /* ---------- Render ---------- */
+  return (
+    <div style={{ background: "#f9fafb", minHeight: "100vh" }}>
+      <div
+        className="container"
+        style={{
+          maxWidth: 800,
+          margin: "0 auto",
+          padding: "32px 16px",
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        <h1 style={{ textAlign: "center", fontSize: 28, fontWeight: 800, marginBottom: 20 }}>
+          My Goals
+        </h1>
 
-                <div className="space-y-3">
-                    {visibleGoals.map((goal) => (
-                        <GoalItem
-                            key={goal.id}
-                            goal={goal}
-                            onDelete={() => handleDelete(goal.id)}
-                            onToggle={() => toggleCompleted(goal.id, goal.completed)}
-                            onEdit={(newTitle) => handleEdit(goal.id, newTitle)}
-                        />
-                    ))}
-                    {visibleGoals.length === 0 && (
-                        <p className="text-gray-500 text-center">No goals to display.</p>
-                    )}
-                </div>
-            </div>
+        {/* ---------- Add Goal Form ---------- */}
+        <form
+          onSubmit={handleAddGoal}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            marginBottom: 24,
+            background: "#fff",
+            padding: 16,
+            borderRadius: 8,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+          }}
+        >
+          <input
+            type="text"
+            placeholder="Enter goal title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            style={{
+              padding: "10px 12px",
+              borderRadius: 6,
+              border: "1px solid #d1d5db",
+              fontSize: 16,
+            }}
+          />
+
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            required
+            style={{
+              padding: "10px 12px",
+              borderRadius: 6,
+              border: "1px solid #d1d5db",
+              fontSize: 16,
+            }}
+          >
+            <option value="">Select Category</option>
+            <option value="Academic">Academic</option>
+            <option value="Practice">Practice</option>
+            <option value="Competition">Competition</option>
+          </select>
+
+          <button
+            type="submit"
+            style={{
+              background: "#10b981",
+              color: "white",
+              border: "none",
+              borderRadius: 6,
+              padding: "10px 0",
+              fontSize: 16,
+              cursor: "pointer",
+            }}
+          >
+            Add Goal
+          </button>
+        </form>
+
+        {/* ---------- Filters ---------- */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 16,
+            marginBottom: 20,
+          }}
+        >
+          {["Academic", "Practice", "Competition"].map((cat) => (
+            <label key={cat} style={{ fontSize: 15 }}>
+              <input
+                type="checkbox"
+                checked={filters[cat]}
+                onChange={() => toggleFilter(cat)}
+                style={{ marginRight: 6 }}
+              />
+              {cat}
+            </label>
+          ))}
         </div>
-    );
-};
 
-const GoalItem = ({ goal, onDelete, onToggle, onEdit }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [tempTitle, setTempTitle] = useState(goal.title);
-
-    const handleSave = () => {
-        if (tempTitle.trim()) {
-            onEdit(tempTitle.trim());
-            setIsEditing(false);
-        }
-    };
-
-    return (
-        <div className="bg-white p-4 rounded-lg shadow-sm flex items-start justify-between">
-            <div className="flex items-start gap-3">
-                <input
-                    type="checkbox"
-                    checked={goal.completed}
-                    onChange={onToggle}
-                    className="mt-1"
-                />
-                <div>
-                    {isEditing ? (
-                        <input
-                            type="text"
-                            value={tempTitle}
-                            onChange={(e) => setTempTitle(e.target.value)}
-                            onBlur={handleSave}
-                            onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                            autoFocus
-                            className="border-b border-gray-300 focus:border-green-500 outline-none text-lg text-gray-700"
-                        />
-                    ) : (
-                        <h3
-                            className={`text-lg font-medium ${goal.completed ? "line-through text-gray-400" : "text-gray-800"
-                                }`}
-                            onClick={() => setIsEditing(true)}
-                        >
-                            {goal.title}
-                        </h3>
-                    )}
-                    <p className="text-sm text-gray-500 mt-1 italic">
-                        Category: {goal.category}
-                    </p>
-                </div>
-            </div>
-
-            <button
-                onClick={onDelete}
-                className="text-gray-400 hover:text-red-500 transition"
-            >
-                ✖
-            </button>
+        {/* ---------- Goal List ---------- */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filteredGoals.length === 0 ? (
+            <p style={{ textAlign: "center", color: "#6b7280" }}>
+              No goals yet. Add one above!
+            </p>
+          ) : (
+            filteredGoals.map((goal) => (
+              <GoalItem
+                key={goal.id}
+                goal={goal}
+                onToggleComplete={() => handleToggleComplete(goal.id, goal.completed)}
+                onDelete={() => handleDeleteGoal(goal.id)}
+                onEditTitle={(newTitle) => handleEditTitle(goal.id, newTitle)}
+              />
+            ))
+          )}
         </div>
-    );
-};
+      </div>
+    </div>
+  );
+}
 
-export default Goals;
+/* ---------- Single Goal Component ---------- */
+function GoalItem({ goal, onToggleComplete, onDelete, onEditTitle }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(goal.title);
+
+  const handleSave = () => {
+    if (editTitle.trim() !== "" && editTitle !== goal.title) {
+      onEditTitle(editTitle);
+    }
+    setIsEditing(false);
+  };
+
+  return (
+    <div
+      style={{
+        background: "#fff",
+        padding: "12px 16px",
+        borderRadius: 8,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+        <input type="checkbox" checked={goal.completed} onChange={onToggleComplete} />
+
+        {isEditing ? (
+          <input
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            onBlur={handleSave}
+            onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            autoFocus
+            style={{
+              flex: 1,
+              border: "1px solid #d1d5db",
+              borderRadius: 4,
+              padding: "4px 8px",
+              fontSize: 16,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              textDecoration: goal.completed ? "line-through" : "none",
+              color: goal.completed ? "#9ca3af" : "#111827",
+              cursor: "text",
+              flex: 1,
+            }}
+            onClick={() => setIsEditing(true)}
+          >
+            {goal.title}
+          </div>
+        )}
+
+        <span
+          style={{
+            fontSize: 13,
+            color: "#6b7280",
+            fontStyle: "italic",
+          }}
+        >
+          {goal.category}
+        </span>
+      </div>
+
+      <button
+        onClick={onDelete}
+        style={{
+          background: "none",
+          border: "none",
+          color: "#ef4444",
+          fontSize: 18,
+          cursor: "pointer",
+          marginLeft: 8,
+        }}
+        title="Delete Goal"
+      >
+        ✖
+      </button>
+    </div>
+  );
+}

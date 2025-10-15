@@ -34,14 +34,19 @@ function ProtectedRoute({ children, user, requireVerified = true }) {
 }
 
 /* --------- App layout (TopBar + content) ---------- */
-function AppLayout({ user, onLogout }) {
+function AppLayout({ user, userRole, onLogout }) {
   const { pathname } = useLocation();
   // Use first path segment to decide active tab (so /settings/edit-profile stays on "Settings")
   const root = (pathname.split("/")[1] || "").toLowerCase();
   const activeTab =
     root === "settings" ? "settings" :
     root === "profile"  ? "profile"  :
-    root === "messages" ? "messages" : "dashboard";
+    root === "messages" ? "messages" : 
+    root === "goals"    ? "goals" : "dashboard";
+
+    const mergedUser = user
+    ? { ...user, role: userRole }
+    : null;
 
   return (
     <div
@@ -56,7 +61,7 @@ function AppLayout({ user, onLogout }) {
         showNav={Boolean(user && user.emailVerified)}
         activeTab={activeTab}
         onLogout={onLogout}
-        user={user}
+        user={mergedUser}
       />
 
       {/* Routed content */}
@@ -165,7 +170,7 @@ export default function App() {
     // Protected layout and children
     {
       path: "/",
-      element: <AppLayout user={user} onLogout={handleLogout} />,
+      element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} />,
       children: [
         {
           index: true,

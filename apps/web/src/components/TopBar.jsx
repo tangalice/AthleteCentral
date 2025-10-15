@@ -55,13 +55,20 @@ export default function TopBar({ showNav = false, activeTab = "dashboard", onLog
       <BrandMark />
 
       {showNav ? (
-        <nav style={{ display: "flex", gap: 24 }}>
-          <Link to="/dashboard" style={linkStyle(activeTab === "dashboard")}>Dashboard</Link>
-          <Link to="/profile"   style={linkStyle(activeTab === "profile")}>Profile</Link>
-          <Link to="/messages"  style={linkStyle(activeTab === "messages")}>Messages</Link>
-          <Link to="/settings"  style={linkStyle(activeTab === "settings")}>Settings</Link>
-        </nav>
-      ) : <div />}
+  <nav style={{ display: "flex", gap: 24 }}>
+    <Link to="/dashboard" style={linkStyle(activeTab === "dashboard")}>Dashboard</Link>
+    <Link to="/profile"   style={linkStyle(activeTab === "profile")}>Profile</Link>
+    <Link to="/messages"  style={linkStyle(activeTab === "messages")}>Messages</Link>
+
+    {/* ✅ Only show this link if the logged-in user is an athlete */}
+    {user?.role === "athlete" && (
+      <Link to="/goals" style={linkStyle(activeTab === "goals")}>Goals</Link>
+    )}
+
+    <Link to="/settings"  style={linkStyle(activeTab === "settings")}>Settings</Link>
+  </nav>
+) : <div />}
+
 
       {user && user.emailVerified ? (
         <button
