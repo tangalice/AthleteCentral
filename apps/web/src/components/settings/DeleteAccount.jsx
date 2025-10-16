@@ -1,6 +1,6 @@
 // src/components/settings/DeleteAccount.jsx
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { auth, db } from "../../firebase";
 import {
   deleteUser,
@@ -8,61 +8,79 @@ import {
   reauthenticateWithCredential,
 } from "firebase/auth";
 import { doc, deleteDoc } from "firebase/firestore";
+import SessionsService from "../../services/SessionsService";
 
-/**
- * DeleteAccount — themed with index.css classes
- * - Back to Settings link
- * - Danger card + alert
- * - Re-auth on requires-recent-login
- */
+
 export default function DeleteAccount() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const navigate = useNavigate();
 
   const handleDelete = async () => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) {
+      setMsg("No logged-in user found.");
+      return;
+    }
 
-    if (!window.confirm("This will permanently delete your account and data. Continue?")) return;
+    if (!window.confirm("This will permanently delete your account and data. Continue?")) {
+      return;
+    }
+
+    if (!password) {
+      setMsg("Please enter your current password to confirm.");
+      return;
+    }
 
     setBusy(true);
     setMsg("");
+
     try {
-      // Try direct delete first
+      if (!user.email) {
+        setMsg("Your account has no email. Please sign out and sign in again, then retry.");
+        setBusy(false);
+        return;
+      }
+      const cred = EmailAuthProvider.credential(user.email, password);
+      await reauthenticateWithCredential(user, cred);
+
       try {
-        await deleteUser(user);
-      } catch (err) {
-        if (err.code === "auth/requires-recent-login") {
-          if (!user.email) {
-            setMsg("Recent login required but no email is associated. Please sign out and sign in again, then retry.");
-            setBusy(false);
-            return;
-          }
-          if (!password) {
-            setMsg("Recent login required. Enter your current password, then click Delete again.");
-            setBusy(false);
-            return;
-          }
-          const cred = EmailAuthProvider.credential(user.email, password);
-          await reauthenticateWithCredential(user, cred);
-          await deleteUser(user);
-        } else {
-          throw err;
+        const currentSessionId =
+          SessionsService.getCurrentSessionId?.() || localStorage.getItem("currentSessionId");
+        if (currentSessionId) {
+          await SessionsService.logoutSession(currentSessionId);
+          SessionsService.clearCurrentSession?.();
+          localStorage.removeItem("currentSessionId");
         }
+      } catch (e) {
+        // 
+        console.warn("Failed to close current session before deletion:", e);
       }
 
-      // Best-effort: remove Firestore user profile
       try {
         await deleteDoc(doc(db, "users", user.uid));
-      } catch {
-        /* ignore */
+      } catch (e) {
+        console.warn("Failed to delete user profile document:", e);
       }
 
-      await auth.signOut();
+      await deleteUser(user);
+
       alert("Your account has been deleted.");
+      navigate("/signup", { replace: true });
     } catch (err) {
-      setMsg(err?.message || String(err));
+      console.error("Delete error:", err);
+      switch (err?.code) {
+        case "auth/wrong-password":
+        case "auth/invalid-credential":
+          setMsg("Incorrect password. Please try again.");
+          break;
+        case "auth/requires-recent-login":
+          setMsg("Please sign in again, then retry deleting your account.");
+          break;
+        default:
+          setMsg(err?.message || String(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -82,14 +100,15 @@ export default function DeleteAccount() {
           This action is <b>permanent</b> and cannot be undone. Your profile and related data will be removed.
         </p>
 
-        {/* Warning */}
         <div className="alert alert-error" style={{ marginTop: 12 }}>
-          ⚠️ Please make sure you have exported any data you need before proceeding.
+          ⚠️ Make sure you have exported any data you need before proceeding.
         </div>
 
-        {/* Password input (only if prompted) */}
-        <div className="form-group">
-          <label htmlFor="current-password" style={{ fontWeight: 700 }}>Current password (only if prompted)</label>
+        {/* Password input (now required) */}
+        <div className="form-group" style={{ marginTop: 12 }}>
+          <label htmlFor="current-password" style={{ fontWeight: 700 }}>
+            Current password <span style={{ color: "#ef4444" }}>*</span>
+          </label>
           <input
             id="current-password"
             type="password"
@@ -97,6 +116,8 @@ export default function DeleteAccount() {
             placeholder="Enter current password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
           />
         </div>
 
@@ -105,7 +126,7 @@ export default function DeleteAccount() {
           onClick={handleDelete}
           disabled={busy}
           className="btn btn-danger"
-          style={{ width: "100%" }}
+          style={{ width: "100%", marginTop: 12 }}
         >
           {busy ? "Deleting…" : "Delete My Account"}
         </button>
