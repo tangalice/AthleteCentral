@@ -1,0 +1,498 @@
+import { useState, useEffect } from "react";
+import { auth, db } from "../firebase";
+import { collection, query, where, getDocs, addDoc, doc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from "firebase/firestore";
+
+export default function Teams() {
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [teams, setTeams] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showJoinTeam, setShowJoinTeam] = useState(false);
+  const [message, setMessage] = useState("");
+  
+  // Create team form state
+  const [newTeam, setNewTeam] = useState({
+    name: "",
+    description: "",
+    joinCode: "",
+    selectedUsers: []
+  });
+  
+  // Join team form state
+  const [joinCode, setJoinCode] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+
+  // Get current user and role
+  useEffect(() => {
+    const getUserData = async () => {
+      try {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        
+        setUser(currentUser);
+        
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        if (userDoc.exists()) {
+          setUserRole(userDoc.data().role);
+        }
+      } catch (error) {
+        console.error("Error getting user data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    getUserData();
+  }, []);
+
+  // Load user's teams
+  useEffect(() => {
+    if (!user) return;
+
+    const teamsQuery = query(
+      collection(db, "teams"),
+      where("members", "array-contains", user.uid)
+    );
+
+    const unsubscribe = onSnapshot(teamsQuery, (snapshot) => {
+      const teamsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setTeams(teamsData);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Load all users for coach team creation
+  useEffect(() => {
+    if (userRole !== "coach" || !user) return;
+
+    const loadUsers = async () => {
+      try {
+        const usersQuery = query(collection(db, "users"));
+        const snapshot = await getDocs(usersQuery);
+        const usersData = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(userData => userData.id !== user.uid); // Exclude current user
+        
+        setAllUsers(usersData);
+      } catch (error) {
+        console.error("Error loading users:", error);
+      }
+    };
+
+    loadUsers();
+  }, [user, userRole]);
+
+  // Generate random join code
+  const generateJoinCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewTeam(prev => ({ ...prev, joinCode: result }));
+  };
+
+  // Create new team (coach only)
+  const createTeam = async () => {
+    if (!newTeam.name.trim()) {
+      setMessage("Team name is required");
+      return;
+    }
+
+    if (!newTeam.joinCode) {
+      generateJoinCode();
+      return;
+    }
+
+    try {
+      const teamData = {
+        name: newTeam.name.trim(),
+        description: newTeam.description.trim(),
+        joinCode: newTeam.joinCode,
+        createdBy: user.uid,
+        createdAt: new Date(),
+        members: [user.uid, ...newTeam.selectedUsers.map(u => u.id)],
+        coaches: [user.uid],
+        athletes: newTeam.selectedUsers.map(u => u.id)
+      };
+
+      await addDoc(collection(db, "teams"), teamData);
+      
+      setMessage("Team created successfully!");
+      setShowCreateTeam(false);
+      setNewTeam({ name: "", description: "", joinCode: "", selectedUsers: [] });
+    } catch (error) {
+      console.error("Error creating team:", error);
+      setMessage(`Error creating team: ${error.message}`);
+    }
+  };
+
+  // Join team by code (athlete only)
+  const joinTeamByCode = async () => {
+    if (!joinCode.trim()) {
+      setMessage("Please enter a join code");
+      return;
+    }
+
+    try {
+      const teamsQuery = query(
+        collection(db, "teams"),
+        where("joinCode", "==", joinCode.trim().toUpperCase())
+      );
+      
+      const snapshot = await getDocs(teamsQuery);
+      
+      if (snapshot.empty) {
+        setMessage("Invalid join code");
+        return;
+      }
+
+      const teamDoc = snapshot.docs[0];
+      const teamData = teamDoc.data();
+      
+      // Check if user is already a member
+      if (teamData.members.includes(user.uid)) {
+        setMessage("You are already a member of this team");
+        return;
+      }
+
+      // Add user to team
+      await updateDoc(doc(db, "teams", teamDoc.id), {
+        members: arrayUnion(user.uid),
+        athletes: arrayUnion(user.uid)
+      });
+
+      setMessage("Successfully joined team!");
+      setJoinCode("");
+      setShowJoinTeam(false);
+    } catch (error) {
+      console.error("Error joining team:", error);
+      setMessage(`Error joining team: ${error.message}`);
+    }
+  };
+
+  // Leave team
+  const leaveTeam = async (teamId) => {
+    try {
+      await updateDoc(doc(db, "teams", teamId), {
+        members: arrayRemove(user.uid),
+        athletes: arrayRemove(user.uid),
+        coaches: arrayRemove(user.uid)
+      });
+      
+      setMessage("Left team successfully");
+    } catch (error) {
+      console.error("Error leaving team:", error);
+      setMessage(`Error leaving team: ${error.message}`);
+    }
+  };
+
+  // Filter users for search
+  const filteredUsers = allUsers.filter(userData =>
+    userData.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
+    userData.email?.toLowerCase().includes(userSearch.toLowerCase())
+  );
+
+  // Toggle user selection for team creation
+  const toggleUserSelection = (userData) => {
+    setNewTeam(prev => ({
+      ...prev,
+      selectedUsers: prev.selectedUsers.some(u => u.id === userData.id)
+        ? prev.selectedUsers.filter(u => u.id !== userData.id)
+        : [...prev.selectedUsers, userData]
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
+        <div className="spinner" aria-label="Loading teams"></div>
+      </div>
+    );
+  }
+
+  const isCoach = userRole === "coach";
+
+  return (
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <h1 style={{ marginBottom: 8 }}>Teams</h1>
+        <p className="text-muted" style={{ marginBottom: 24 }}>
+          {isCoach ? "Manage your teams and create new ones" : "Join teams and view your current teams"}
+        </p>
+
+        {/* Coach Actions */}
+        {isCoach && (
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowCreateTeam(true)}
+              >
+                Create New Team
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Athlete Actions */}
+        {!isCoach && (
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowJoinTeam(true)}
+              >
+                Join Team by Code
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Create Team Modal */}
+        {showCreateTeam && (
+          <div style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000
+          }}>
+            <div className="card" style={{ maxWidth: 600, width: "90%", maxHeight: "80vh", overflowY: "auto" }}>
+              <h2 style={{ marginBottom: 16 }}>Create New Team</h2>
+              
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>Team Name *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={newTeam.name}
+                  onChange={(e) => setNewTeam(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Enter team name"
+                />
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>Description</label>
+                <textarea
+                  className="form-control"
+                  value={newTeam.description}
+                  onChange={(e) => setNewTeam(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Enter team description (optional)"
+                  rows={3}
+                />
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>Join Code</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={newTeam.joinCode}
+                    onChange={(e) => setNewTeam(prev => ({ ...prev, joinCode: e.target.value.toUpperCase() }))}
+                    placeholder="Enter or generate join code"
+                    maxLength={6}
+                  />
+                  <button
+                    className="btn btn-outline"
+                    onClick={generateJoinCode}
+                    type="button"
+                  >
+                    Generate
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>Add Members</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Search users by name or email"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  style={{ marginBottom: 12 }}
+                />
+                
+                {userSearch && (
+                  <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 4 }}>
+                    {filteredUsers.map(userData => {
+                      const isSelected = newTeam.selectedUsers.some(u => u.id === userData.id);
+                      return (
+                        <div
+                          key={userData.id}
+                          style={{
+                            padding: 12,
+                            borderBottom: "1px solid var(--border)",
+                            cursor: "pointer",
+                            backgroundColor: isSelected ? "#f0f9ff" : "white",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12
+                          }}
+                          onClick={() => toggleUserSelection(userData)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleUserSelection(userData)}
+                            style={{ 
+                              width: 16, 
+                              height: 16, 
+                              accentColor: "#10b981",
+                              cursor: "pointer"
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600 }}>{userData.displayName || userData.email}</div>
+                            <div className="text-muted" style={{ fontSize: 14 }}>{userData.email}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {newTeam.selectedUsers.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <strong>Selected Members:</strong>
+                    {newTeam.selectedUsers.map(userData => (
+                      <div key={userData.id} style={{ display: "inline-block", margin: "4px 8px 4px 0", padding: "4px 8px", backgroundColor: "#e0f2fe", borderRadius: 4 }}>
+                        {userData.displayName || userData.email}
+                        <button
+                          type="button"
+                          onClick={() => toggleUserSelection(userData)}
+                          style={{ marginLeft: 8, background: "none", border: "none", cursor: "pointer" }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 24 }}>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setShowCreateTeam(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={createTeam}
+                >
+                  Create Team
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Join Team Modal */}
+        {showJoinTeam && (
+          <div style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000
+          }}>
+            <div className="card" style={{ maxWidth: 400, width: "90%" }}>
+              <h2 style={{ marginBottom: 16 }}>Join Team</h2>
+              
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>Join Code</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                  placeholder="Enter 6-letter join code"
+                  maxLength={6}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 24 }}>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setShowJoinTeam(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={joinTeamByCode}
+                >
+                  Join Team
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Teams List */}
+        <div className="card">
+          <h2 style={{ marginBottom: 16 }}>My Teams ({teams.length})</h2>
+          
+          {teams.length === 0 ? (
+            <p className="text-muted">You're not part of any teams yet.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {teams.map(team => (
+                <div key={team.id} style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <h3 style={{ margin: "0 0 8px 0" }}>{team.name}</h3>
+                      {team.description && (
+                        <p className="text-muted" style={{ margin: "0 0 8px 0" }}>{team.description}</p>
+                      )}
+                      <div style={{ display: "flex", gap: 16, fontSize: 14 }}>
+                        <span className="text-muted">Join Code: {team.joinCode}</span>
+                        <span className="text-muted">Members: {team.members?.length || 0}</span>
+                        {team.createdBy === user.uid && <span className="text-primary">(You created this team)</span>}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-outline text-danger"
+                      onClick={() => leaveTeam(team.id)}
+                      style={{ marginLeft: 16 }}
+                    >
+                      Leave
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Message Display */}
+        {message && (
+          <div className={`alert ${message.includes("Error") ? "alert-error" : "alert-success"}`} role="status" style={{ marginTop: 16 }}>
+            {message}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

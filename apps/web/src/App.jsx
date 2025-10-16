@@ -22,6 +22,7 @@ import Dashboard from "./components/Dashboard";
 import Profile from "./components/Profile";
 import Messages from "./components/Messages";
 import Settings from "./components/Settings";
+import Teams from "./components/Teams";
 import TopBar from "./components/TopBar";
 import Goals from "./components/Goals";
 import SuggestGoals from "./components/SuggestGoals";
@@ -42,12 +43,13 @@ function AppLayout({ user, userRole, onLogout }) {
   const { pathname } = useLocation();
   // Use first path segment to decide active tab (so /settings/edit-profile stays on "Settings")
   const root = (pathname.split("/")[1] || "").toLowerCase();
-  const activeTab =
-    root === "settings" ? "settings" :
-    root === "profile"  ? "profile"  :
-    root === "messages" ? "messages" : 
-    root === "goals"    ? "goals"    :
-    "dashboard";
+           const activeTab =
+             root === "settings" ? "settings" :
+             root === "profile"  ? "profile"  :
+             root === "messages" ? "messages" : 
+             root === "teams"    ? "teams"    :
+             root === "goals"    ? "goals"    :
+             "dashboard";
 
   return (
     <div
@@ -233,14 +235,23 @@ export default function App() {
           ),
         },
 
-        {
-          path: "messages",
-          element: (
-            <ProtectedRoute user={user}>
-              <Messages />
-            </ProtectedRoute>
-          ),
-          },
+                 {
+                   path: "messages",
+                   element: (
+                     <ProtectedRoute user={user}>
+                       <Messages />
+                     </ProtectedRoute>
+                   ),
+                 },
+
+                 {
+                   path: "teams",
+                   element: (
+                     <ProtectedRoute user={user}>
+                       <Teams />
+                     </ProtectedRoute>
+                   ),
+                 },
 
         {
           path: "goals",

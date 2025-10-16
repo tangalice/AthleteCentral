@@ -59,6 +59,7 @@ export default function TopBar({ showNav = false, activeTab = "dashboard", onLog
     <Link to="/dashboard" style={linkStyle(activeTab === "dashboard")}>Dashboard</Link>
     <Link to="/profile"   style={linkStyle(activeTab === "profile")}>Profile</Link>
     <Link to="/messages"  style={linkStyle(activeTab === "messages")}>Messages</Link>
+    <Link to="/teams"     style={linkStyle(activeTab === "teams")}>Teams</Link>
 
     {/* Only show these links if the logged-in user is an athlete */}
     {user?.role === "athlete" && (
