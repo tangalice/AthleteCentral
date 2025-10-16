@@ -37,7 +37,14 @@ function SettingsMenu() {
           <div style={{ borderTop: "1px solid var(--border)", margin: "8px 0" }} />
 
           {/* Keep danger action neutral here; emphasize danger on the page itself */}
-          <MenuItem to="/settings/delete-account" label="Delete Account" />
+          <Link to="/settings/delete-account" className="card" style={{ padding: 14, display: "block" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ fontWeight: 700 }} className="text-danger">Delete Account</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9 5l7 7-7 7" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          </Link>
         </div>
       </div>
     </div>
