@@ -4,7 +4,7 @@ export default function PracticePerformances({ user }) {
   const [selectedIntensity, setSelectedIntensity] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("all");
 
-  // Empty array - will be populated from Firestore later
+  //needs to be populated by firestore
   const performances = [];
 
   // Filter performances by intensity and date

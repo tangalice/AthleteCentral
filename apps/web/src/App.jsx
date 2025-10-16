@@ -25,6 +25,7 @@ import Settings from "./components/Settings";
 import TopBar from "./components/TopBar";
 import Goals from "./components/Goals";
 import SuggestGoals from "./components/SuggestGoals";
+import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
 
 /* ---------------- Protected wrapper ---------------- */
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -223,7 +224,14 @@ export default function App() {
              </ProtectedRoute>
           ),
         },
-
+        {
+          path: "practice-performances",
+          element: (
+            <ProtectedRoute user={user}>
+              <PracticePerformances />
+            </ProtectedRoute>
+          ),
+        },
         {
           path: "suggest-goals",
           element: (
