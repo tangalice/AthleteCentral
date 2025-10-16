@@ -235,6 +235,15 @@ export default function App() {
             </ProtectedRoute>
           ),
         },
+
+        {
+          path: "athlete-feedback",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
         {
           path: "practice-performances",
           element: (
