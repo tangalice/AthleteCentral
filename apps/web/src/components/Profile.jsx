@@ -1,5 +1,6 @@
 // src/components/Profile.jsx
 import { useLoaderData } from "react-router-dom";
+import { SPORTS, GRADES, EXPERIENCE_LEVELS } from "../constants/constants";
 
 /** A two-column row: bold label on the left, value on the right. */
 function Row({ label, value }) {
@@ -66,9 +67,29 @@ function Section({ title, children }) {
   );
 }
 
-export default function Profile() {
+export default function Profile({ user }) {
   const p = useLoaderData() || {};
-  const name = p.name || "Athlete";
+  const name = p.name || user?.displayName || user?.email || "User";
+  const userRole = user?.role;
+
+  // Get user role from the merged user object
+  const isCoach = userRole === "coach";
+
+  // Helper functions to convert stored values to display labels
+  const getSportLabel = (value) => {
+    const sport = SPORTS.find(s => s.value === value);
+    return sport ? sport.label : value;
+  };
+
+  const getGradeLabel = (value) => {
+    const grade = GRADES.find(g => g.value === value);
+    return grade ? grade.label : value;
+  };
+
+  const getExperienceLabel = (value) => {
+    const experience = EXPERIENCE_LEVELS.find(e => e.value === value);
+    return experience ? experience.label : value;
+  };
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
@@ -98,22 +119,41 @@ export default function Profile() {
           }}
         />
 
-        {/* Personal Information */}
-        <Section title="Personal Information">
-          <Row label="School" value={p.school} />
-          <Row label="Grade" value={p.grade} />
-          <Row label="Bio" value={p.bio} />
-        </Section>
+        {isCoach ? (
+          <>
+            {/* Coach Personal Information */}
+            <Section title="Personal Information">
+              <Row label="School" value={p.school} />
+              <Row label="Bio" value={p.bio} />
+            </Section>
 
-        {/* Sports Information */}
-        <Section title="Sports Information">
-          <Row label="Sport" value={p.sport} />
-          <Row label="Position/Role" value={p.position} />
-          <Row label="Team" value={p.team} />
-          <Row label="Experience Level" value={p.experience} />
-          <Row label="Sport Details" value={p.sportDetails} />
-          <Row label="Goals & Objectives" value={p.goals} />
-        </Section>
+            {/* Coach Sports Information */}
+            <Section title="Sports Information">
+              <Row label="Sport" value={getSportLabel(p.sport)} />
+              <Row label="Team" value={p.team} />
+              <Row label="Sport Details" value={p.sportDetails} />
+            </Section>
+          </>
+        ) : (
+          <>
+            {/* Athlete Personal Information */}
+            <Section title="Personal Information">
+              <Row label="School" value={p.school} />
+              <Row label="Grade" value={getGradeLabel(p.grade)} />
+              <Row label="Bio" value={p.bio} />
+            </Section>
+
+            {/* Athlete Sports Information */}
+            <Section title="Sports Information">
+              <Row label="Sport" value={getSportLabel(p.sport)} />
+              <Row label="Position/Role" value={p.position} />
+              <Row label="Team" value={p.team} />
+              <Row label="Experience Level" value={getExperienceLabel(p.experience)} />
+              <Row label="Sport Details" value={p.sportDetails} />
+              <Row label="Goals & Objectives" value={p.goals} />
+            </Section>
+          </>
+        )}
 
         {/* Footer tip */}
         <div className="card" style={{ marginTop: 16, textAlign: "center" }}>

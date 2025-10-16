@@ -49,10 +49,6 @@ function AppLayout({ user, userRole, onLogout }) {
     root === "goals"    ? "goals"    :
     "dashboard";
 
-    const mergedUser = user
-    ? { ...user, role: userRole }
-    : null;
-
   return (
     <div
       style={{
@@ -66,7 +62,7 @@ function AppLayout({ user, userRole, onLogout }) {
         showNav={Boolean(user && user.emailVerified)}
         activeTab={activeTab}
         onLogout={onLogout}
-        user={mergedUser}
+        user={user ? { ...user, role: userRole } : null}
         userRole={userRole}
       />
 
@@ -125,35 +121,63 @@ export default function App() {
     );
   }
 
+
+
   /* ------ Data loaders to avoid flicker on first paint ------- */
   async function dashboardLoader() {
-    const u = auth.currentUser;
-    if (!u || !u.emailVerified) return null;
-    const snap = await getDoc(doc(db, "users", u.uid));
-    const d = snap.exists() ? snap.data() : {};
-    return {
-      displayName: d.displayName ?? u.displayName ?? "",
-      role: d.role ?? null,
-      raw: d,
-    };
+    try {
+      const u = auth.currentUser;
+      if (!u || !u.emailVerified) return null;
+      const snap = await getDoc(doc(db, "users", u.uid));
+      const d = snap.exists() ? snap.data() : {};
+      return {
+        displayName: d.displayName ?? u.displayName ?? "",
+        role: d.role ?? null,
+        raw: d,
+      };
+    } catch (error) {
+      console.error("Error in dashboardLoader:", error);
+      return null;
+    }
   }
 
   async function profileLoader() {
-    const u = auth.currentUser;
-    if (!u || !u.emailVerified) return null;
-    const snap = await getDoc(doc(db, "users", u.uid));
-    const d = snap.exists() ? snap.data() : {};
-    return {
-      name: d.displayName ?? u.displayName ?? "",
-      bio: d.bio ?? "",
-      school: d.school ?? "",
-      grade: d.grade ?? "",
-      sport: d.sport ?? "",
-      position: d.position ?? "",
-      team: d.team ?? "",
-      experience: d.experience ?? "",
-    };
+    try {
+      const u = auth.currentUser;
+      if (!u || !u.emailVerified) return null;
+      const snap = await getDoc(doc(db, "users", u.uid));
+      const d = snap.exists() ? snap.data() : {};
+      return {
+        name: d.displayName ?? u.displayName ?? "",
+        bio: d.bio ?? "",
+        school: d.school ?? "",
+        grade: d.grade ?? "",
+        sport: d.sport ?? "",
+        position: d.position ?? "",
+        team: d.team ?? "",
+        experience: d.experience ?? "",
+        sportDetails: d.sportDetails ?? "",
+        goals: d.goals ?? "",
+      };
+    } catch (error) {
+      console.error("Error in profileLoader:", error);
+      return {
+        name: "",
+        bio: "",
+        school: "",
+        grade: "",
+        sport: "",
+        position: "",
+        team: "",
+        experience: "",
+        sportDetails: "",
+        goals: "",
+      };
+    }
   }
+
+  // Create merged user object for components that need role information
+  const mergedUser = user ? { ...user, role: userRole } : null;
 
   /* ---------------- Router ---------------- */
   const router = createBrowserRouter([
@@ -204,7 +228,7 @@ export default function App() {
           loader: profileLoader,
           element: (
             <ProtectedRoute user={user}>
-              <Profile user={user} />
+              <Profile user={mergedUser} />
             </ProtectedRoute>
           ),
         },
@@ -276,7 +300,7 @@ export default function App() {
           path: "settings/*",
           element: (
             <ProtectedRoute user={user}>
-              <Settings user={user} />
+              <Settings user={mergedUser} />
             </ProtectedRoute>
           ),
         },

@@ -19,11 +19,30 @@ function MenuItem({ to, label }) {
   );
 }
 
-function SettingsMenu() {
+function SettingsMenu({ user }) {
+  const userRole = user?.role;
+  const isCoach = userRole === "coach";
+  
   return (
     <div className="container" style={{ paddingTop: 20, paddingBottom: 20 }}>
       <div style={{ maxWidth: 640, margin: "28px auto 0" }}>
-        <h2 style={{ marginBottom: 8 }}>Settings</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Settings</h2>
+          <div 
+            style={{ 
+              padding: "4px 12px", 
+              borderRadius: "20px", 
+              fontSize: "12px", 
+              fontWeight: "600", 
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              background: isCoach ? "#3b82f6" : "#10b981",
+              color: "white"
+            }}
+          >
+            {isCoach ? "Coach" : "Athlete"}
+          </div>
+        </div>
         <p className="text-muted" style={{ marginBottom: 16 }}>
           Manage your profile, password, sessions, and account preferences.
         </p>
@@ -54,8 +73,8 @@ function SettingsMenu() {
 export default function Settings({ user }) {
   return (
     <Routes>
-      <Route path="/" element={<SettingsMenu />} />
-      <Route path="edit-profile" element={<EditProfile />} />
+      <Route path="/" element={<SettingsMenu user={user} />} />
+      <Route path="edit-profile" element={<EditProfile user={user} />} />
       <Route path="change-password" element={<ChangePassword user={user} />} />
       <Route path="manage-sessions" element={<SessionsManager />} />
       <Route path="delete-account" element={<DeleteAccount />} />
