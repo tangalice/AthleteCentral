@@ -26,6 +26,8 @@ import TopBar from "./components/TopBar";
 import Goals from "./components/Goals";
 import SuggestGoals from "./components/SuggestGoals";
 import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
+import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
+import CoachFeedbackPage from "./components/CoachFeedbackPage";
 
 /* ---------------- Protected wrapper ---------------- */
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -224,6 +226,24 @@ export default function App() {
              </ProtectedRoute>
           ),
         },
+
+        {
+          path: "athlete-feedback",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+
+        {
+          path: "athlete-feedback",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
         {
           path: "practice-performances",
           element: (
@@ -236,8 +256,17 @@ export default function App() {
           path: "suggest-goals",
           element: (
             <ProtectedRoute user={user}>
-              {userRole === "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
+              {userRole=== "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
             </ProtectedRoute>
+          ),
+        },
+
+        {
+          path: "coach-feedback",
+          element: (
+          <ProtectedRoute user={user}>
+          {userRole === "coach" ? <CoachFeedbackPage coach={user} /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
           ),
         },
 
