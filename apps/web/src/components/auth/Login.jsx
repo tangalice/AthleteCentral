@@ -1,4 +1,4 @@
-// src/components/Login.jsx
+// src/components/auth/Login.jsx
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { auth, db } from "../../firebase";
@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import AuthShell from "./AuthShell";
+import SessionsService from "../../services/SessionsService";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -41,6 +42,22 @@ export default function Login() {
       const data = snap.data();
       const role = data.role;
 
+      try {
+        const created = await SessionsService.createSession(user.uid, user.email);
+        // 
+        const sessionId =
+          typeof created === "string"
+            ? created
+            : created?.sessionId || SessionsService.getCurrentSessionId?.();
+
+        if (sessionId) {
+          localStorage.setItem("currentSessionId", sessionId);
+        }
+        console.log("Session created successfully:", sessionId);
+      } catch (sessionError) {
+        console.error("Error creating session:", sessionError);
+      }
+
       await updateDoc(doc(db, "users", user.uid), {
         lastLoginAt: serverTimestamp(),
         emailVerified: true,
@@ -48,7 +65,6 @@ export default function Login() {
 
       setMessage("Login successful! Welcome back!");
 
-      // keep your original role-based routing
       setTimeout(() => {
         if (role === "athlete") navigate("/athlete-dashboard");
         else if (role === "coach") navigate("/coach-dashboard");
@@ -66,6 +82,12 @@ export default function Login() {
         case "auth/invalid-credential":
           setMessage("Invalid email or password.");
           break;
+        case "auth/network-request-failed":
+          setMessage("Network error. Please check your connection.");
+          break;
+        case "auth/too-many-requests":
+          setMessage("Too many failed login attempts. Please try again later.");
+          break;
         default:
           setMessage(`Error: ${error.message}`);
       }
@@ -81,9 +103,13 @@ export default function Login() {
     }
     try {
       await sendPasswordResetEmail(auth, email);
-      setMessage("Password reset email sent!");
+      setMessage("Password reset email sent! Check your inbox.");
     } catch (error) {
-      setMessage(`Error: ${error.message}`);
+      if (error.code === "auth/user-not-found") {
+        setMessage("No account found with this email.");
+      } else {
+        setMessage(`Error: ${error.message}`);
+      }
     }
   };
 
@@ -91,7 +117,7 @@ export default function Login() {
     <AuthShell
       footer={
         <p style={{ margin: 0, textAlign: "center", color: "#6b7280" }}>
-          Don’t have an account?{" "}
+          Don't have an account?{" "}
           <Link to="/signup" style={{ color: "#10b981", textDecoration: "none" }}>
             Create one
           </Link>
@@ -116,7 +142,14 @@ export default function Login() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          style={{ width: "100%", padding: 12, borderRadius: 10, border: "1px solid #e5e7eb", marginBottom: 14, fontSize: 16 }}
+          style={{ 
+            width: "100%", 
+            padding: 12, 
+            borderRadius: 10, 
+            border: "1px solid #e5e7eb", 
+            marginBottom: 14, 
+            fontSize: 16 
+          }}
           required
         />
 
@@ -130,7 +163,14 @@ export default function Login() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
-          style={{ width: "100%", padding: 12, borderRadius: 10, border: "1px solid #e5e7eb", marginBottom: 6, fontSize: 16 }}
+          style={{ 
+            width: "100%", 
+            padding: 12, 
+            borderRadius: 10, 
+            border: "1px solid #e5e7eb", 
+            marginBottom: 6, 
+            fontSize: 16 
+          }}
           required
         />
 
@@ -138,7 +178,14 @@ export default function Login() {
           <button
             type="button"
             onClick={handleForgotPassword}
-            style={{ background: "none", border: "none", color: "#10b981", cursor: "pointer", padding: 0, fontSize: 14 }}
+            style={{ 
+              background: "none", 
+              border: "none", 
+              color: "#10b981", 
+              cursor: "pointer", 
+              padding: 0, 
+              fontSize: 14 
+            }}
           >
             Forgot password?
           </button>
@@ -148,16 +195,30 @@ export default function Login() {
           type="submit"
           disabled={loading}
           style={{
-            width: "100%", padding: "12px 16px", borderRadius: 10,
-            background: "#10b981", color: "#fff", fontSize: 16, border: "none",
-            cursor: loading ? "not-allowed" : "pointer", boxShadow: "0 6px 20px rgba(16,185,129,0.25)"
+            width: "100%", 
+            padding: "12px 16px", 
+            borderRadius: 10,
+            background: loading ? "#9ca3af" : "#10b981", 
+            color: "#fff", 
+            fontSize: 16, 
+            border: "none",
+            cursor: loading ? "not-allowed" : "pointer", 
+            boxShadow: loading ? "none" : "0 6px 20px rgba(16,185,129,0.25)",
+            transition: "all 0.2s"
           }}
         >
           {loading ? "Signing in..." : "Sign In"}
         </button>
 
         {message && (
-          <div style={{ marginTop: 14, padding: 10, borderRadius: 8, background: message.includes("Error") || message.includes("verify") ? "#fef2f2" : "#ecfdf5", color: message.includes("Error") || message.includes("verify") ? "#b91c1c" : "#065f46", fontSize: 14 }}>
+          <div style={{ 
+            marginTop: 14, 
+            padding: 10, 
+            borderRadius: 8, 
+            background: message.includes("Error") || message.includes("verify") || message.includes("No account") || message.includes("Invalid") ? "#fef2f2" : "#ecfdf5", 
+            color: message.includes("Error") || message.includes("verify") || message.includes("No account") || message.includes("Invalid") ? "#b91c1c" : "#065f46", 
+            fontSize: 14 
+          }}>
             {message}
           </div>
         )}

@@ -1,27 +1,36 @@
 // src/App.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createBrowserRouter,
   RouterProvider,
   Navigate,
   Outlet,
-  Link,
   useLocation,
 } from "react-router-dom";
-import { auth, db } from "./firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 
-// Auth Components
+import { auth, db } from "./firebase";
+import {
+  onAuthStateChanged,
+  signOut as firebaseSignOut,
+} from "firebase/auth";
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+} from "firebase/firestore";
+import SessionsService from "./services/SessionsService";
+
+// Auth
 import SignUp from "./components/auth/SignUp";
 import Login from "./components/auth/Login";
 import VerifyEmail from "./components/auth/VerifyEmail";
 
-// Main Components
+// Main
 import Dashboard from "./components/Dashboard";
 import Profile from "./components/Profile";
 import Messages from "./components/Messages";
 import Settings from "./components/Settings";
+
 import Teams from "./components/Teams";
 import TopBar from "./components/TopBar";
 import Goals from "./components/Goals";
@@ -30,39 +39,142 @@ import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
 import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
 import CoachFeedbackPage from "./components/CoachFeedbackPage";
 
-/* ---------------- Protected wrapper ---------------- */
+
+/* ---------------- Protected wrapper with Session Check ---------------- */
 function ProtectedRoute({ children, user, requireVerified = true }) {
+  const [checking, setChecking] = useState(true);
+  const [ok, setOk] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (!user) {
+        setChecking(false);
+        setOk(false);
+        return;
+      }
+      if (requireVerified && !user.emailVerified) {
+        setChecking(false);
+        setOk(false);
+        return;
+      }
+
+      try {
+        const sessionId =
+          SessionsService.getCurrentSessionId?.() ||
+          localStorage.getItem("currentSessionId");
+        if (!sessionId) {
+          await SessionsService.createSession(user.uid, user.email);
+          setOk(true);
+        } else {
+          const isValid = await SessionsService.isSessionValid(sessionId);
+          if (!isValid) {
+            await SessionsService.createSession(user.uid, user.email);
+          } else {
+            await SessionsService.updateSessionActivity(sessionId);
+          }
+          setOk(true);
+        }
+      } catch (e) {
+        console.warn("ProtectedRoute session bootstrap error:", e);
+        setOk(true); 
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, requireVerified]);
+
+  if (checking) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+        <p>Verifying session...</p>
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
-  if (requireVerified && !user.emailVerified)
-    return <Navigate to="/verify-email" replace />;
+  if (requireVerified && !user.emailVerified) return <Navigate to="/verify-email" replace />;
+  if (!ok) return <Navigate to="/login" replace />;
+
   return children;
 }
 
-/* --------- App layout (TopBar + content) ---------- */
+/* --------- Layout (TopBar + Outlet) + activity heartbeat ---------- */
 function AppLayout({ user, userRole, onLogout }) {
   const { pathname } = useLocation();
-  // Use first path segment to decide active tab (so /settings/edit-profile stays on "Settings")
+  const activityTimerRef = useRef(null);
+  const lastBeatRef = useRef(0);
+
+  useEffect(() => {
+    if (!user || !user.emailVerified) return;
+
+    const beat = async () => {
+      const sessionId =
+        SessionsService.getCurrentSessionId?.() ||
+        localStorage.getItem("currentSessionId");
+      if (sessionId) {
+        try { await SessionsService.updateSessionActivity(sessionId); } catch {}
+      }
+    };
+
+    beat();
+
+    // 
+    activityTimerRef.current = setInterval(beat, 60_000);
+
+    // 
+    const onUserActivity = () => {
+      const now = Date.now();
+      if (now - lastBeatRef.current > 300_000) {
+        lastBeatRef.current = now;
+        beat();
+      }
+    };
+
+    window.addEventListener("mousemove", onUserActivity);
+    window.addEventListener("keydown", onUserActivity);
+    window.addEventListener("click", onUserActivity);
+
+    // 
+    const onVisibility = () => {
+      if (!document.hidden) beat();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      if (activityTimerRef.current) clearInterval(activityTimerRef.current);
+      window.removeEventListener("mousemove", onUserActivity);
+      window.removeEventListener("keydown", onUserActivity);
+      window.removeEventListener("click", onUserActivity);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [user]);
+
   const root = (pathname.split("/")[1] || "").toLowerCase();
-           const activeTab =
-             root === "settings" ? "settings" :
-             root === "profile"  ? "profile"  :
-             root === "messages" ? "messages" : 
-             root === "teams"    ? "teams"    :
-             root === "goals"    ? "goals"    :
-             root === "coach-feedback" ? "coach-feedback" :
-             root === "athlete-feedback" ? "athlete-feedback" :
-             root === "suggest-goals" ? "suggest-goals" :
-             "dashboard";
+  const activeTab =
+    root === "settings" ? "settings" :
+    root === "profile"  ? "profile"  :
+    root === "messages" ? "messages" : 
+    root === "teams"    ? "teams"    :
+    root === "goals"    ? "goals"    :
+    root === "coach-feedback" ? "coach-feedback" :
+    root === "athlete-feedback" ? "athlete-feedback" :
+    root === "suggest-goals" ? "suggest-goals" :
+    "dashboard";
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        backgroundColor: "#ffffff",
+        backgroundColor: "#fff",
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}
     >
-      {/* Unified top bar: BrandMark + Nav + Logout */}
       <TopBar
         showNav={Boolean(user && user.emailVerified)}
         activeTab={activeTab}
@@ -70,8 +182,6 @@ function AppLayout({ user, userRole, onLogout }) {
         user={user ? { ...user, role: userRole } : null}
         userRole={userRole}
       />
-
-      {/* Routed content */}
       <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 20px" }}>
         <Outlet />
       </main>
@@ -79,53 +189,134 @@ function AppLayout({ user, userRole, onLogout }) {
   );
 }
 
-/* ------------- Main App ------------- */
+/* ---------------------------- Main App ---------------------------- */
 export default function App() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // Bootstrap: wait for Firebase Auth state
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u || null);
+  const signingOutRef = useRef(false); 
+  const sessionUnsubRef = useRef(null);
 
-      if (u && u.emailVerified) {
-        try {
-          const userDoc = await getDoc(doc(db, "users", u.uid));
-          if (userDoc.exists()) setUserRole(userDoc.data().role || null);
-          else setUserRole(null);
-        } catch (e) {
-          console.error("Error fetching user role:", e);
-          setUserRole(null);
-        }
-      } else {
-        setUserRole(null);
+  useEffect(() => {
+    let cancelled = false;
+
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) setReady(true);
+    }, 10_000);
+
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (cancelled) return;
+
+      setUser(u || null);
+      setUserRole(null);
+      setReady(true);
+
+      if (sessionUnsubRef.current) {
+        sessionUnsubRef.current();
+        sessionUnsubRef.current = null;
       }
 
-      setReady(true);
+      try {
+        if (u && u.emailVerified) {
+          try {
+            const snap = await getDoc(doc(db, "users", u.uid));
+            if (!cancelled && snap.exists()) {
+              setUserRole(snap.data().role || null);
+            }
+          } catch (e) {
+            console.error("Fetch role error:", e);
+          }
+
+          try {
+            const sessionId =
+              SessionsService.getCurrentSessionId?.() ||
+              localStorage.getItem("currentSessionId");
+
+            if (!sessionId) {
+              await SessionsService.createSession(u.uid, u.email);
+            } else {
+              const ok = await SessionsService.isSessionValid(sessionId);
+              if (!ok) await SessionsService.createSession(u.uid, u.email);
+              else await SessionsService.updateSessionActivity(sessionId);
+            }
+          } catch (e) {
+            console.warn("Session bootstrap error:", e);
+          }
+
+          //
+          const currentId =
+            SessionsService.getCurrentSessionId?.() ||
+            localStorage.getItem("currentSessionId");
+          if (currentId) {
+            const ref = doc(db, "users", u.uid, "sessions", currentId);
+            sessionUnsubRef.current = onSnapshot(ref, (snap) => {
+              if (!snap.exists()) return;
+              const d = snap.data();
+              if (d.isActive === false && !signingOutRef.current) {
+                signingOutRef.current = true;
+                try {
+                  SessionsService.clearCurrentSession?.();
+                  localStorage.removeItem("currentSessionId");
+                } catch {}
+                firebaseSignOut(auth).finally(() => {
+                  signingOutRef.current = false;
+                });
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Auth state handler error:", e);
+      } finally {
+        clearTimeout(safetyTimer);
+      }
     });
-    return () => unsub();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+      unsub();
+      if (sessionUnsubRef.current) {
+        sessionUnsubRef.current();
+        sessionUnsubRef.current = null;
+      }
+    };
   }, []);
 
   const handleLogout = async () => {
+    if (signingOutRef.current) return;
+    signingOutRef.current = true;
     try {
-      await auth.signOut();
+      const sessionId =
+        SessionsService.getCurrentSessionId?.() ||
+        localStorage.getItem("currentSessionId");
+      if (sessionId) {
+        try {
+          await SessionsService.logoutSession(sessionId);
+        } catch (e) {
+          console.warn("logoutSession error:", e);
+        }
+        SessionsService.clearCurrentSession?.();
+        localStorage.removeItem("currentSessionId");
+      }
+      await firebaseSignOut(auth);
       setUser(null);
       setUserRole(null);
-    } catch (error) {
-      console.error("Error signing out:", error);
+    } catch (e) {
+      console.error("Error signing out:", e);
+    } finally {
+      signingOutRef.current = false;
     }
   };
 
   if (!ready) {
     return (
-      <div style={{ display:"flex", justifyContent:"center", alignItems:"center", height:"100vh" }}>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
         <p>Loading...</p>
       </div>
     );
   }
-
 
 
   /* ------ Data loaders to avoid flicker on first paint ------- */
@@ -145,7 +336,6 @@ export default function App() {
       return null;
     }
   }
-
   async function profileLoader() {
     try {
       const u = auth.currentUser;
@@ -181,42 +371,29 @@ export default function App() {
     }
   }
 
+
   // Create merged user object for components that need role information
   const mergedUser = user ? { ...user, role: userRole } : null;
 
   /* ---------------- Router ---------------- */
   const router = createBrowserRouter([
-    // Public routes
-    {
-      path: "/signup",
-      element: user ? <Navigate to="/dashboard" replace /> : <SignUp />,
-    },
+    // Public
+    { path: "/signup", element: user ? <Navigate to="/dashboard" replace /> : <SignUp /> },
     {
       path: "/login",
-      element:
-        user && user.emailVerified ? (
-          <Navigate to="/dashboard" replace />
-        ) : (
-          <Login />
-        ),
+      element: user && user.emailVerified ? <Navigate to="/dashboard" replace /> : <Login />,
     },
     { path: "/verify-email", element: <VerifyEmail /> },
 
-    // Protected layout and children
+    // App layout + protected routes
     {
       path: "/",
       element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} />,
       children: [
         {
           index: true,
-          element: user ? (
-            <Navigate to="/dashboard" replace />
-          ) : (
-            <Navigate to="/login" replace />
-          ),
+          element: user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />,
         },
-
-        // Dashboard — preloaded to avoid flicker
         {
           path: "dashboard",
           loader: dashboardLoader,
@@ -226,8 +403,24 @@ export default function App() {
             </ProtectedRoute>
           ),
         },
-
-        // Profile — preloaded to avoid flicker
+        {
+          path: "athlete-dashboard",
+          loader: dashboardLoader,
+          element: (
+            <ProtectedRoute user={user}>
+              <Dashboard userRole={userRole} user={user} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "coach-dashboard",
+          loader: dashboardLoader,
+          element: (
+            <ProtectedRoute user={user}>
+              <Dashboard userRole={userRole} user={user} />
+            </ProtectedRoute>
+          ),
+        },
         {
           path: "profile",
           loader: profileLoader,
@@ -238,33 +431,32 @@ export default function App() {
           ),
         },
 
-                 {
-                   path: "messages",
-                   element: (
-                     <ProtectedRoute user={user}>
-                       <Messages />
-                     </ProtectedRoute>
-                   ),
-                 },
+        {
+            path: "messages",
+            element: (
+              <ProtectedRoute user={user}>
+                <Messages />
+              </ProtectedRoute>
+            ),
+        },
 
-                 {
-                   path: "teams",
-                   element: (
-                     <ProtectedRoute user={user}>
-                       <Teams />
-                     </ProtectedRoute>
-                   ),
-                 },
+        {
+            path: "teams",
+            element: (
+              <ProtectedRoute user={user}>
+                <Teams />
+              </ProtectedRoute>
+            ),
+        },
 
         {
           path: "goals",
           element: (
             <ProtectedRoute user={user}>
               <Goals user={user} />
-             </ProtectedRoute>
+            </ProtectedRoute>
           ),
         },
-
         {
           path: "athlete-feedback",
           element: (
@@ -308,8 +500,8 @@ export default function App() {
           ),
         },
 
-
         // Keep other Settings sub-pages under /settings/*
+
         {
           path: "settings/*",
           element: (
@@ -318,7 +510,6 @@ export default function App() {
             </ProtectedRoute>
           ),
         },
-
         { path: "*", element: <Navigate to="/" replace /> },
       ],
     },
