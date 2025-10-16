@@ -4,6 +4,7 @@ import DeleteAccount from "./settings/DeleteAccount";
 import EditProfile from "./settings/EditProfile";
 import ChangePassword from "./settings/ChangePassword";
 import SessionsManager from "./settings/SessionsManager";
+import Notifications from "./settings/Notifications";
 
 /** Reusable settings link styled with index.css helpers */
 function MenuItem({ to, label }) {
@@ -47,10 +48,11 @@ function SettingsMenu({ user }) {
           Manage your profile, password, sessions, and account preferences.
         </p>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <MenuItem to="/settings/edit-profile" label="Edit Profile" />
-          <MenuItem to="/settings/change-password" label="Change Password" />
-          <MenuItem to="/settings/manage-sessions" label="Manage Sessions" />
+                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                   <MenuItem to="/settings/edit-profile" label="Edit Profile" />
+                   <MenuItem to="/settings/change-password" label="Change Password" />
+                   <MenuItem to="/settings/manage-sessions" label="Manage Sessions" />
+                   <MenuItem to="/settings/notifications" label="Notifications" />
 
           {/* Divider */}
           <div style={{ borderTop: "1px solid var(--border)", margin: "8px 0" }} />
@@ -72,12 +74,13 @@ function SettingsMenu({ user }) {
 
 export default function Settings({ user }) {
   return (
-    <Routes>
-      <Route path="/" element={<SettingsMenu user={user} />} />
-      <Route path="edit-profile" element={<EditProfile user={user} />} />
-      <Route path="change-password" element={<ChangePassword user={user} />} />
-      <Route path="manage-sessions" element={<SessionsManager />} />
-      <Route path="delete-account" element={<DeleteAccount />} />
-    </Routes>
+             <Routes>
+               <Route path="/" element={<SettingsMenu user={user} />} />
+               <Route path="edit-profile" element={<EditProfile user={user} />} />
+               <Route path="change-password" element={<ChangePassword user={user} />} />
+               <Route path="manage-sessions" element={<SessionsManager />} />
+               <Route path="notifications" element={<Notifications />} />
+               <Route path="delete-account" element={<DeleteAccount />} />
+             </Routes>
   );
 }

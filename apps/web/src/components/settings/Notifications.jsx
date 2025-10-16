@@ -1,0 +1,218 @@
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { auth, db } from "../../firebase";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+
+export default function Notifications() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  
+  const [notificationSettings, setNotificationSettings] = useState({
+    textNotifications: false,
+    phoneNumber: "",
+    emailNotifications: true, // Default to true since they have an email account
+  });
+
+  // Fetch notification settings on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setNotificationSettings({
+            textNotifications: userData.textNotifications ?? false,
+            phoneNumber: userData.phoneNumber ?? "",
+            emailNotifications: userData.emailNotifications ?? true,
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching notification settings:", error);
+        setMessage("Error loading notification settings");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const handleSave = async () => {
+    if (!auth.currentUser) return;
+    
+    setSaving(true);
+    setMessage("");
+
+    try {
+      await setDoc(
+        doc(db, "users", auth.currentUser.uid),
+        {
+          textNotifications: notificationSettings.textNotifications,
+          phoneNumber: notificationSettings.phoneNumber,
+          emailNotifications: notificationSettings.emailNotifications,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setMessage("Notification settings saved successfully!");
+    } catch (error) {
+      console.error("Error saving notification settings:", error);
+      setMessage(`Error: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggle = (setting) => {
+    setNotificationSettings(prev => ({
+      ...prev,
+      [setting]: !prev[setting]
+    }));
+  };
+
+  const handleInputChange = (field, value) => {
+    setNotificationSettings(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="container" style={{ paddingTop: 20, paddingBottom: 20 }}>
+        <div className="spinner" aria-label="Loading notification settings"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container" style={{ paddingTop: 20, paddingBottom: 20 }}>
+      <Link to="/settings" className="text-primary" style={{ display: "inline-block", marginBottom: 16 }}>
+        ← Back to Settings
+      </Link>
+
+      <div className="card" style={{ maxWidth: 720, margin: "0 auto" }}>
+        <h2 className="mb-2">Notification Settings</h2>
+        <p className="text-muted mb-3">
+          Choose how you'd like to receive notifications about messages, goals, and updates.
+        </p>
+
+        {/* Text Notifications */}
+        <div className="form-group">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <label style={{ fontWeight: 700, margin: 0 }}>Text Notifications</label>
+            <button
+              type="button"
+              onClick={() => handleToggle('textNotifications')}
+              style={{
+                width: 50,
+                height: 28,
+                borderRadius: 14,
+                border: "none",
+                background: notificationSettings.textNotifications ? "#10b981" : "#d1d5db",
+                position: "relative",
+                cursor: "pointer",
+                transition: "background-color 0.2s ease",
+              }}
+              aria-label={`${notificationSettings.textNotifications ? 'Disable' : 'Enable'} text notifications`}
+            >
+              <div
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  background: "#fff",
+                  position: "absolute",
+                  top: 2,
+                  left: notificationSettings.textNotifications ? 24 : 2,
+                  transition: "left 0.2s ease",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                }}
+              />
+            </button>
+          </div>
+          <p className="text-muted" style={{ fontSize: 14, marginBottom: 16 }}>
+            Receive text messages for important updates and messages.
+          </p>
+          
+          {notificationSettings.textNotifications && (
+            <div className="form-group">
+              <label htmlFor="phoneNumber" style={{ fontWeight: 700 }}>Phone Number</label>
+              <input
+                id="phoneNumber"
+                type="tel"
+                className="form-control"
+                placeholder="e.g., (555) 123-4567"
+                value={notificationSettings.phoneNumber}
+                onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
+                style={{ marginTop: 8 }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div style={{ borderTop: "1px solid var(--border)", margin: "24px 0" }} />
+
+        {/* Email Notifications */}
+        <div className="form-group">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <label style={{ fontWeight: 700, margin: 0 }}>Email Notifications</label>
+            <button
+              type="button"
+              onClick={() => handleToggle('emailNotifications')}
+              style={{
+                width: 50,
+                height: 28,
+                borderRadius: 14,
+                border: "none",
+                background: notificationSettings.emailNotifications ? "#10b981" : "#d1d5db",
+                position: "relative",
+                cursor: "pointer",
+                transition: "background-color 0.2s ease",
+              }}
+              aria-label={`${notificationSettings.emailNotifications ? 'Disable' : 'Enable'} email notifications`}
+            >
+              <div
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  background: "#fff",
+                  position: "absolute",
+                  top: 2,
+                  left: notificationSettings.emailNotifications ? 24 : 2,
+                  transition: "left 0.2s ease",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                }}
+              />
+            </button>
+          </div>
+          <p className="text-muted" style={{ fontSize: 14, marginBottom: 16 }}>
+            Receive email notifications for important updates and messages at {auth.currentUser?.email}.
+          </p>
+        </div>
+
+        <button 
+          onClick={handleSave} 
+          disabled={saving} 
+          className="btn btn-primary" 
+          style={{ width: "100%", marginTop: 24 }}
+        >
+          {saving ? "Saving..." : "Save Settings"}
+        </button>
+
+        {message && (
+          <div className={`alert ${message.startsWith("Error") ? "alert-error" : "alert-success"}`} role="status" style={{ marginTop: 16 }}>
+            {message}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
