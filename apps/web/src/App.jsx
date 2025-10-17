@@ -22,8 +22,16 @@ import Dashboard from "./components/Dashboard";
 import Profile from "./components/Profile";
 import Messages from "./components/Messages";
 import Settings from "./components/Settings";
+import Teams from "./components/Teams";
 import TopBar from "./components/TopBar";
-
+import Goals from "./components/Goals";
+import SuggestGoals from "./components/SuggestGoals";
+import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
+import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
+import CoachFeedbackPage from "./components/CoachFeedbackPage";
+import Results from './Billa_UI_Pages/Results';
+import EnterResults from './Billa_UI_Pages/EnterResults';
+import ViewResults from './Billa_UI_Pages/ViewResults';
 /* ---------------- Protected wrapper ---------------- */
 function ProtectedRoute({ children, user, requireVerified = true }) {
   if (!user) return <Navigate to="/login" replace />;
@@ -33,14 +41,21 @@ function ProtectedRoute({ children, user, requireVerified = true }) {
 }
 
 /* --------- App layout (TopBar + content) ---------- */
-function AppLayout({ user, onLogout }) {
+function AppLayout({ user, userRole, onLogout }) {
   const { pathname } = useLocation();
   // Use first path segment to decide active tab (so /settings/edit-profile stays on "Settings")
   const root = (pathname.split("/")[1] || "").toLowerCase();
-  const activeTab =
-    root === "settings" ? "settings" :
-    root === "profile"  ? "profile"  :
-    root === "messages" ? "messages" : "dashboard";
+           const activeTab =
+             root === "settings" ? "settings" :
+             root === "profile"  ? "profile"  :
+             root === "messages" ? "messages" : 
+             root === "teams"    ? "teams"    :
+             root === "results"  ? "results"  :
+             root === "goals"    ? "goals"    :
+             root === "coach-feedback" ? "coach-feedback" :
+             root === "athlete-feedback" ? "athlete-feedback" :
+             root === "suggest-goals" ? "suggest-goals" :
+             "dashboard";
 
   return (
     <div
@@ -55,7 +70,8 @@ function AppLayout({ user, onLogout }) {
         showNav={Boolean(user && user.emailVerified)}
         activeTab={activeTab}
         onLogout={onLogout}
-        user={user}
+        user={user ? { ...user, role: userRole } : null}
+        userRole={userRole}
       />
 
       {/* Routed content */}
@@ -113,35 +129,84 @@ export default function App() {
     );
   }
 
+
+
   /* ------ Data loaders to avoid flicker on first paint ------- */
   async function dashboardLoader() {
-    const u = auth.currentUser;
-    if (!u || !u.emailVerified) return null;
-    const snap = await getDoc(doc(db, "users", u.uid));
-    const d = snap.exists() ? snap.data() : {};
-    return {
-      displayName: d.displayName ?? u.displayName ?? "",
-      role: d.role ?? null,
-      raw: d,
-    };
+    try {
+      const u = auth.currentUser;
+      if (!u || !u.emailVerified) return null;
+      const snap = await getDoc(doc(db, "users", u.uid));
+      const d = snap.exists() ? snap.data() : {};
+      
+      // Calculate profile completion based on required fields
+      const userRole = d.role ?? null;
+      let profileComplete = false;
+      
+      if (userRole === "coach") {
+        // Coach required fields: displayName, bio, school, sport, team, sportDetails
+        const requiredFields = ['displayName', 'bio', 'school', 'sport', 'team', 'sportDetails'];
+        profileComplete = requiredFields.every(field => {
+          const value = field === 'displayName' ? (d.displayName ?? u.displayName ?? "") : d[field];
+          return value && value.toString().trim() !== "";
+        });
+      } else if (userRole === "athlete") {
+        // Athlete required fields: displayName, bio, school, grade, sport, position, team, experience, sportDetails, goals
+        const requiredFields = ['displayName', 'bio', 'school', 'grade', 'sport', 'position', 'team', 'experience', 'sportDetails', 'goals'];
+        profileComplete = requiredFields.every(field => {
+          const value = field === 'displayName' ? (d.displayName ?? u.displayName ?? "") : d[field];
+          return value && value.toString().trim() !== "";
+        });
+      }
+      
+      return {
+        displayName: d.displayName ?? u.displayName ?? "",
+        role: userRole,
+        raw: { ...d, profileComplete },
+      };
+    } catch (error) {
+      console.error("Error in dashboardLoader:", error);
+      return null;
+    }
   }
 
   async function profileLoader() {
-    const u = auth.currentUser;
-    if (!u || !u.emailVerified) return null;
-    const snap = await getDoc(doc(db, "users", u.uid));
-    const d = snap.exists() ? snap.data() : {};
-    return {
-      name: d.displayName ?? u.displayName ?? "",
-      bio: d.bio ?? "",
-      school: d.school ?? "",
-      grade: d.grade ?? "",
-      sport: d.sport ?? "",
-      position: d.position ?? "",
-      team: d.team ?? "",
-      experience: d.experience ?? "",
-    };
+    try {
+      const u = auth.currentUser;
+      if (!u || !u.emailVerified) return null;
+      const snap = await getDoc(doc(db, "users", u.uid));
+      const d = snap.exists() ? snap.data() : {};
+      return {
+        name: d.displayName ?? u.displayName ?? "",
+        bio: d.bio ?? "",
+        school: d.school ?? "",
+        grade: d.grade ?? "",
+        sport: d.sport ?? "",
+        position: d.position ?? "",
+        team: d.team ?? "",
+        experience: d.experience ?? "",
+        sportDetails: d.sportDetails ?? "",
+        goals: d.goals ?? "",
+      };
+    } catch (error) {
+      console.error("Error in profileLoader:", error);
+      return {
+        name: "",
+        bio: "",
+        school: "",
+        grade: "",
+        sport: "",
+        position: "",
+        team: "",
+        experience: "",
+        sportDetails: "",
+        goals: "",
+      };
+    }
   }
+
+  // Create merged user object for components that need role information
+  const mergedUser = user ? { ...user, role: userRole } : null;
 
   /* ---------------- Router ---------------- */
   const router = createBrowserRouter([
@@ -164,7 +229,7 @@ export default function App() {
     // Protected layout and children
     {
       path: "/",
-      element: <AppLayout user={user} onLogout={handleLogout} />,
+      element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} />,
       children: [
         {
           index: true,
@@ -192,26 +257,97 @@ export default function App() {
           loader: profileLoader,
           element: (
             <ProtectedRoute user={user}>
-              <Profile user={user} />
+              <Profile user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+
+                 {
+                   path: "messages",
+                   element: (
+                     <ProtectedRoute user={user}>
+                       <Messages />
+                     </ProtectedRoute>
+                   ),
+                 },
+
+                 {
+                   path: "teams",
+                   element: (
+                     <ProtectedRoute user={user}>
+                       <Teams />
+                     </ProtectedRoute>
+                   ),
+                 },
+                 {
+                  path: "results",
+                  element: (
+                    <ProtectedRoute user={user}>
+                      <Results user={mergedUser} userRole={userRole} />
+                    </ProtectedRoute>
+                  ),
+                },
+                
+
+        {
+          path: "goals",
+          element: (
+            <ProtectedRoute user={user}>
+              <Goals user={user} />
+             </ProtectedRoute>
+          ),
+        },
+
+        {
+          path: "athlete-feedback",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
             </ProtectedRoute>
           ),
         },
 
         {
-          path: "messages",
+          path: "athlete-feedback",
           element: (
             <ProtectedRoute user={user}>
-              <Messages />
+              {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
             </ProtectedRoute>
           ),
         },
+        {
+          path: "practice-performances",
+          element: (
+            <ProtectedRoute user={user}>
+              <PracticePerformances />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "suggest-goals",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole=== "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+
+        {
+          path: "coach-feedback",
+          element: (
+          <ProtectedRoute user={user}>
+          {userRole === "coach" ? <CoachFeedbackPage coach={user} /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+          ),
+        },
+
 
         // Keep other Settings sub-pages under /settings/*
         {
           path: "settings/*",
           element: (
             <ProtectedRoute user={user}>
-              <Settings user={user} />
+              <Settings user={mergedUser} />
             </ProtectedRoute>
           ),
         },

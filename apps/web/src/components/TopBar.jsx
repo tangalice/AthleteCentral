@@ -26,7 +26,13 @@ function BrandMark({ size = 28, textSize = 22 }) {
   );
 }
 
-export default function TopBar({ showNav = false, activeTab = "dashboard", onLogout, user }) {
+export default function TopBar({ 
+  showNav = false, 
+  activeTab = "dashboard", 
+  onLogout, 
+  user, 
+  userRole, 
+}) {
   // keep minimal inline for active underline; colors align with index.css variables
   const linkStyle = (isActive) => ({
     textDecoration: "none",
@@ -53,15 +59,58 @@ export default function TopBar({ showNav = false, activeTab = "dashboard", onLog
       }}
     >
       <BrandMark />
-
+      
       {showNav ? (
         <nav style={{ display: "flex", gap: 24 }}>
-          <Link to="/dashboard" style={linkStyle(activeTab === "dashboard")}>Dashboard</Link>
-          <Link to="/profile"   style={linkStyle(activeTab === "profile")}>Profile</Link>
-          <Link to="/messages"  style={linkStyle(activeTab === "messages")}>Messages</Link>
-          <Link to="/settings"  style={linkStyle(activeTab === "settings")}>Settings</Link>
+          <Link to="/dashboard" style={linkStyle(activeTab === "dashboard")}>
+            Dashboard
+          </Link>
+          <Link to="/profile" style={linkStyle(activeTab === "profile")}>
+            Profile
+          </Link>
+          <Link to="/messages" style={linkStyle(activeTab === "messages")}>
+            Messages
+          </Link>
+          <Link to="/teams" style={linkStyle(activeTab === "teams")}>
+            Teams
+          </Link>
+
+          {/* RESULTS TAB - Available to BOTH athletes and coaches */}
+          <Link to="/results" style={linkStyle(activeTab === "results")}>
+            Results
+          </Link>
+
+          {/* Athlete-only tabs */}
+          {user?.role === "athlete" && (
+            <>
+              <Link to="/goals" style={linkStyle(activeTab === "goals")}>
+                Goals
+              </Link>
+              <Link to="/athlete-feedback" style={linkStyle(activeTab === "athlete-feedback")}>
+                Feedback
+              </Link>
+            </>
+          )}
+
+          {/* Coach-only tabs */}
+          {user?.role === "coach" && (
+            <>
+              <Link to="/suggest-goals" style={linkStyle(activeTab === "suggest-goals")}>
+                Suggest Goals
+              </Link>
+              <Link to="/coach-feedback" style={linkStyle(activeTab === "coach-feedback")}>
+                Give Feedback
+              </Link>
+            </>
+          )}
+
+          <Link to="/settings" style={linkStyle(activeTab === "settings")}>
+            Settings
+          </Link>
         </nav>
-      ) : <div />}
+      ) : (
+        <div />
+      )}
 
       {user && user.emailVerified ? (
         <button

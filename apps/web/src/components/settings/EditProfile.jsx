@@ -7,7 +7,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { GRADES, SPORTS, EXPERIENCE_LEVELS, TWILIO_INFO } from "../../constants/constants";
 //import { Twilio } from "twilio";
 
-export default function EditProfile() {
+export default function EditProfile({ user }) {
   const navigate = useNavigate();
   const [uid, setUid] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -15,6 +15,10 @@ export default function EditProfile() {
   const [message, setMessage] = useState("");
 
   //const client = Twilio(TWILIO_INFO.ACCOUNT_SID, TWILIO_INFO.AUTH_TOKEN);
+  
+  // Get user role to determine which fields to show
+  const userRole = user?.role;
+  const isCoach = userRole === "coach";
 
   const [profileData, setProfileData] = useState({
     name: "",
@@ -134,7 +138,12 @@ export default function EditProfile() {
 
       <div className="card" style={{ maxWidth: 720, margin: "0 auto" }}>
         <h2 className="mb-2">Edit Profile</h2>
-        <p className="text-muted mb-3">Update your personal and sport information below.</p>
+        <p className="text-muted mb-3">
+          {isCoach 
+            ? "Update your coaching profile information below." 
+            : "Update your personal and sport information below."
+          }
+        </p>
 
         {/* Display Name */}
         <div className="form-group">
@@ -155,7 +164,7 @@ export default function EditProfile() {
           <textarea
             id="bio"
             className="form-control"
-            placeholder="Introduce yourself to coaches and teammates"
+            placeholder={isCoach ? "Introduce yourself to athletes and colleagues" : "Introduce yourself to coaches and teammates"}
             value={profileData.bio}
             onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
             style={{ minHeight: 100, resize: "vertical" }}
@@ -175,23 +184,25 @@ export default function EditProfile() {
           />
         </div>
 
-        {/* Grade */}
-        <div className="form-group">
-          <label htmlFor="grade" style={{ fontWeight: 700 }}>Grade</label>
-          <select
-            id="grade"
-            className="form-control"
-            value={profileData.grade}
-            onChange={(e) => setProfileData({ ...profileData, grade: e.target.value })}
-          >
-            <option value="">Select Grade</option>
-            {GRADES.map((grade) => (
-              <option key={grade.value} value={grade.value}>
-                {grade.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Grade - Only for Athletes */}
+        {!isCoach && (
+          <div className="form-group">
+            <label htmlFor="grade" style={{ fontWeight: 700 }}>Grade</label>
+            <select
+              id="grade"
+              className="form-control"
+              value={profileData.grade}
+              onChange={(e) => setProfileData({ ...profileData, grade: e.target.value })}
+            >
+              <option value="">Select Grade</option>
+              {GRADES.map((grade) => (
+                <option key={grade.value} value={grade.value}>
+                  {grade.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Sport */}
         <div className="form-group">
@@ -211,18 +222,20 @@ export default function EditProfile() {
           </select>
         </div>
 
-        {/* Position/Role */}
-        <div className="form-group">
-          <label htmlFor="position" style={{ fontWeight: 700 }}>Position/Role</label>
-          <input
-            id="position"
-            type="text"
-            className="form-control"
-            placeholder="e.g., Sprinter, Point Guard"
-            value={profileData.position}
-            onChange={(e) => setProfileData({ ...profileData, position: e.target.value })}
-          />
-        </div>
+        {/* Position/Role - Only for Athletes */}
+        {!isCoach && (
+          <div className="form-group">
+            <label htmlFor="position" style={{ fontWeight: 700 }}>Position/Role</label>
+            <input
+              id="position"
+              type="text"
+              className="form-control"
+              placeholder="e.g., Sprinter, Point Guard"
+              value={profileData.position}
+              onChange={(e) => setProfileData({ ...profileData, position: e.target.value })}
+            />
+          </div>
+        )}
 
         {/* Team */}
         <div className="form-group">
@@ -231,29 +244,31 @@ export default function EditProfile() {
             id="team"
             type="text"
             className="form-control"
-            placeholder="Team/Club name (optional)"
+            placeholder={isCoach ? "Team/Club you coach (optional)" : "Team/Club name (optional)"}
             value={profileData.team}
             onChange={(e) => setProfileData({ ...profileData, team: e.target.value })}
           />
         </div>
 
-        {/* Experience Level */}
-        <div className="form-group">
-          <label htmlFor="experience" style={{ fontWeight: 700 }}>Experience Level</label>
-          <select
-            id="experience"
-            className="form-control"
-            value={profileData.experience}
-            onChange={(e) => setProfileData({ ...profileData, experience: e.target.value })}
-          >
-            <option value="">Select Experience Level</option>
-            {EXPERIENCE_LEVELS.map((level) => (
-              <option key={level.value} value={level.value}>
-                {level.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Experience Level - Only for Athletes */}
+        {!isCoach && (
+          <div className="form-group">
+            <label htmlFor="experience" style={{ fontWeight: 700 }}>Experience Level</label>
+            <select
+              id="experience"
+              className="form-control"
+              value={profileData.experience}
+              onChange={(e) => setProfileData({ ...profileData, experience: e.target.value })}
+            >
+              <option value="">Select Experience Level</option>
+              {EXPERIENCE_LEVELS.map((level) => (
+                <option key={level.value} value={level.value}>
+                  {level.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Sport Details */}
         <div className="form-group">
@@ -261,25 +276,27 @@ export default function EditProfile() {
           <textarea
             id="sportDetails"
             className="form-control"
-            placeholder="Optional notes about events, distances, PBs, certifications, etc."
+            placeholder={isCoach ? "Optional notes about your coaching experience, certifications, etc." : "Optional notes about events, distances, PBs, certifications, etc."}
             value={profileData.sportDetails}
             onChange={(e) => setProfileData({ ...profileData, sportDetails: e.target.value })}
             style={{ minHeight: 90, resize: "vertical" }}
           />
         </div>
 
-        {/* Goals & Objectives */}
-        <div className="form-group">
-          <label htmlFor="goals" style={{ fontWeight: 700 }}>Goals & Objectives</label>
-          <textarea
-            id="goals"
-            className="form-control"
-            placeholder="What are your upcoming goals?"
-            value={profileData.goals}
-            onChange={(e) => setProfileData({ ...profileData, goals: e.target.value })}
-            style={{ minHeight: 100, resize: "vertical" }}
-          />
-        </div>
+        {/* Goals & Objectives - Only for Athletes */}
+        {!isCoach && (
+          <div className="form-group">
+            <label htmlFor="goals" style={{ fontWeight: 700 }}>Goals & Objectives</label>
+            <textarea
+              id="goals"
+              className="form-control"
+              placeholder="What are your upcoming goals?"
+              value={profileData.goals}
+              onChange={(e) => setProfileData({ ...profileData, goals: e.target.value })}
+              style={{ minHeight: 100, resize: "vertical" }}
+            />
+          </div>
+        )}
 
         {/* Text Notifications */}
         <div className="form-group">

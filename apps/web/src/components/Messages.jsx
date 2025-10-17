@@ -25,6 +25,12 @@ const Messages = () => {
   const [showNewChat, setShowNewChat] = useState(false);
   const [showChatDetails, setShowChatDetails] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // New states for user management
+  const [allUsers, setAllUsers] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [chatUsers, setChatUsers] = useState([]);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
 
   // Loading/auth states (UI only restyled)
   if (authLoading) {
@@ -44,6 +50,30 @@ const Messages = () => {
     );
   }
 
+  // Load all users for chat creation
+  useEffect(() => {
+    if (!user) return;
+    
+    console.log('Loading users for chat creation...');
+    const usersQuery = query(collection(db, 'users'));
+    const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
+      console.log('Users snapshot received:', snapshot.size, 'total users');
+      const allUsersData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      console.log('All users:', allUsersData);
+      
+      const filteredUsers = allUsersData.filter(u => u.id !== user.uid);
+      console.log('Filtered users (excluding current user):', filteredUsers);
+      console.log('Current user UID:', user.uid);
+      
+      setAllUsers(filteredUsers);
+    }, (error) => {
+      console.error('Error loading users:', error);
+      setAllUsers([]);
+    });
+    
+    return () => unsubscribeUsers();
+  }, [user]);
+
   // Load user's chats
   useEffect(() => {
     if (!user) return;
@@ -60,14 +90,17 @@ const Messages = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // Load messages for selected chat
+  // Load messages and participants for selected chat
   useEffect(() => {
     if (!selectedChat) {
       setMessages([]);
+      setChatUsers([]);
       return;
     }
+    
+    // Load messages
     const messagesQuery = query(collection(db, 'messages'), where('chatId', '==', selectedChat.id));
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+    const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a, b) => {
         const aTime = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
@@ -76,23 +109,66 @@ const Messages = () => {
       });
       setMessages(data);
     });
-    return () => unsubscribe();
+    
+    // Load chat participants
+    const loadChatUsers = async () => {
+      try {
+        const userIds = selectedChat.participants || [];
+        if (userIds.length === 0) {
+          setChatUsers([]);
+          return;
+        }
+        
+        const userPromises = userIds.map(async (userId) => {
+          try {
+            const userDoc = await getDocs(query(collection(db, 'users')));
+            const userData = userDoc.docs.find(d => d.id === userId);
+            if (userData) {
+              return { id: userId, ...userData.data() };
+            }
+            return { id: userId, displayName: 'Unknown User', email: 'unknown@example.com' };
+          } catch (error) {
+            console.error('Error fetching user:', userId, error);
+            return { id: userId, displayName: 'Unknown User', email: 'unknown@example.com' };
+          }
+        });
+        
+        const users = await Promise.all(userPromises);
+        setChatUsers(users);
+      } catch (error) {
+        console.error('Error loading chat users:', error);
+        setChatUsers([]);
+      }
+    };
+    
+    loadChatUsers();
+    
+    return () => unsubscribeMessages();
   }, [selectedChat]);
 
   const createNewChat = async () => {
     if (!newChatName.trim()) return;
     setLoading(true);
     try {
+      // Include current user and selected users
+      const participants = [user.uid, ...selectedUsers.map(u => u.id)];
+      
       await addDoc(collection(db, 'chats'), {
         name: newChatName.trim(),
-        participants: [user.uid],
+        participants: participants,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
         lastMessageTime: serverTimestamp(),
         lastMessage: ''
       });
+      
       setNewChatName('');
+      setSelectedUsers([]);
+      setUserSearchTerm('');
       setShowNewChat(false);
+    } catch (error) {
+      console.error('Error creating chat:', error);
+      alert('Failed to create chat. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -149,6 +225,29 @@ const Messages = () => {
     if (d.toDateString() === y.toDateString()) return 'Yesterday';
     return d.toLocaleDateString();
   };
+
+  // User selection helpers
+  const toggleUserSelection = (userToToggle) => {
+    setSelectedUsers(prev => 
+      prev.some(u => u.id === userToToggle.id)
+        ? prev.filter(u => u.id !== userToToggle.id)
+        : [...prev, userToToggle]
+    );
+  };
+
+  const isUserSelected = (userToCheck) => {
+    return selectedUsers.some(u => u.id === userToCheck.id);
+  };
+
+  // Filter users based on search term
+  const filteredUsers = allUsers.filter(user => {
+    const displayName = user.displayName || '';
+    const email = user.email || '';
+    const searchTerm = userSearchTerm.toLowerCase();
+    
+    return displayName.toLowerCase().includes(searchTerm) || 
+           email.toLowerCase().includes(searchTerm);
+  });
 
   // Layout
   return (
@@ -311,23 +410,145 @@ const Messages = () => {
       {/* New Chat Modal */}
       {showNewChat && (
         <div style={modalBackdrop}>
-          <div className="card" style={modalCard}>
+          <div className="card" style={{...modalCard, maxWidth: 500, maxHeight: '90vh', overflowY: 'auto'}}>
             <h3 style={{ marginTop: 0, marginBottom: 12, textAlign: 'center' }}>New Chat</h3>
-            <input
-              type="text"
-              value={newChatName}
-              onChange={(e) => setNewChatName(e.target.value)}
-              placeholder="Chat name"
-              className="form-control"
-              style={{ textAlign: 'center', marginBottom: 12 }}
-              onKeyDown={(e) => e.key === 'Enter' && createNewChat()}
-            />
+            
+            {/* Chat Name Input */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Chat Name</label>
+              <input
+                type="text"
+                value={newChatName}
+                onChange={(e) => setNewChatName(e.target.value)}
+                placeholder="Enter chat name"
+                className="form-control"
+                onKeyDown={(e) => e.key === 'Enter' && createNewChat()}
+              />
+            </div>
+
+            {/* User Selection */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Add People</label>
+              
+              {/* Search Bar */}
+              <input
+                type="text"
+                value={userSearchTerm}
+                onChange={(e) => setUserSearchTerm(e.target.value)}
+                placeholder="Search by name or email..."
+                className="form-control"
+                style={{ marginBottom: 12 }}
+              />
+              
+              <div style={{ 
+                maxHeight: 200, 
+                overflowY: 'auto', 
+                border: '1px solid var(--border)', 
+                borderRadius: 8,
+                padding: 8
+              }}>
+                {allUsers.length === 0 ? (
+                  <div className="text-muted" style={{ textAlign: 'center', padding: 20 }}>
+                    No other users found
+                  </div>
+                ) : filteredUsers.length === 0 ? (
+                  <div className="text-muted" style={{ textAlign: 'center', padding: 20 }}>
+                    No users match your search
+                  </div>
+                ) : (
+                  filteredUsers.map((userOption) => (
+                    <div
+                      key={userOption.id}
+                      onClick={() => toggleUserSelection(userOption)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '8px 12px',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        backgroundColor: isUserSelected(userOption) ? 'var(--brand-primary-50)' : 'transparent',
+                        border: isUserSelected(userOption) ? '1px solid var(--brand-primary)' : '1px solid transparent',
+                        marginBottom: 4
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isUserSelected(userOption)}
+                        onChange={() => toggleUserSelection(userOption)}
+                        style={{ marginRight: 12 }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600 }}>
+                          {userOption.displayName || userOption.email}
+                        </div>
+                        <div className="text-muted" style={{ fontSize: 14 }}>
+                          {userOption.email}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Selected Users Summary */}
+            {selectedUsers.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Selected Users</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {selectedUsers.map((selectedUser) => (
+                    <span
+                      key={selectedUser.id}
+                      style={{
+                        backgroundColor: 'var(--brand-primary)',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: 4,
+                        fontSize: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      {selectedUser.displayName || selectedUser.email}
+                      <button
+                        onClick={() => toggleUserSelection(selectedUser)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          padding: 0,
+                          marginLeft: 4
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button className="btn btn-outline" onClick={() => { setShowNewChat(false); setNewChatName(''); }}>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => { 
+                  setShowNewChat(false); 
+                  setNewChatName(''); 
+                  setSelectedUsers([]); 
+                  setUserSearchTerm('');
+                }}
+              >
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={createNewChat} disabled={!newChatName.trim() || loading}>
-                {loading ? 'Creating...' : 'Create'}
+              <button 
+                className="btn btn-primary" 
+                onClick={createNewChat} 
+                disabled={!newChatName.trim() || loading}
+              >
+                {loading ? 'Creating...' : 'Create Chat'}
               </button>
             </div>
           </div>
@@ -337,18 +558,99 @@ const Messages = () => {
       {/* Chat Details Modal */}
       {showChatDetails && selectedChat && (
         <div style={modalBackdrop}>
-          <div className="card" style={modalCard}>
-            <h3 style={{ marginTop: 0, marginBottom: 12, textAlign: 'center' }}>Chat Details</h3>
-            <div style={{ textAlign: 'center', marginBottom: 12 }}>
-              <p style={{ margin: 0, fontWeight: 600 }}>Chat Name:</p>
-              <p style={{ margin: '4px 0 10px' }}>{selectedChat.name}</p>
-              <p style={{ margin: 0, fontWeight: 600 }}>Created:</p>
-              <p style={{ margin: '4px 0 10px' }}>{selectedChat.createdAt ? formatDate(selectedChat.createdAt) : 'Unknown'}</p>
-              <p style={{ margin: 0, fontWeight: 600 }}>Messages:</p>
-              <p style={{ margin: '4px 0 0' }}>
-                {messages.length} message{messages.length !== 1 ? 's' : ''}
-              </p>
+          <div className="card" style={{...modalCard, maxWidth: 500}}>
+            <h3 style={{ marginTop: 0, marginBottom: 16, textAlign: 'center' }}>Chat Details</h3>
+            
+            {/* Chat Info */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Chat Name</label>
+                <p style={{ margin: 0, padding: 8, backgroundColor: 'var(--surface-alt)', borderRadius: 6 }}>
+                  {selectedChat.name}
+                </p>
+              </div>
+              
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Created</label>
+                <p style={{ margin: 0, padding: 8, backgroundColor: 'var(--surface-alt)', borderRadius: 6 }}>
+                  {selectedChat.createdAt ? formatDate(selectedChat.createdAt) : 'Unknown'}
+                </p>
+              </div>
+              
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Messages</label>
+                <p style={{ margin: 0, padding: 8, backgroundColor: 'var(--surface-alt)', borderRadius: 6 }}>
+                  {messages.length} message{messages.length !== 1 ? 's' : ''}
+                </p>
+              </div>
             </div>
+
+            {/* Participants */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Participants</label>
+              <div style={{ 
+                maxHeight: 200, 
+                overflowY: 'auto', 
+                border: '1px solid var(--border)', 
+                borderRadius: 8,
+                padding: 8
+              }}>
+                {chatUsers.length === 0 ? (
+                  <div className="text-muted" style={{ textAlign: 'center', padding: 20 }}>
+                    Loading participants...
+                  </div>
+                ) : (
+                  chatUsers.map((participant) => (
+                    <div
+                      key={participant.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '8px 12px',
+                        borderRadius: 6,
+                        backgroundColor: participant.id === user.uid ? 'var(--brand-primary-50)' : 'var(--surface-alt)',
+                        marginBottom: 4
+                      }}
+                    >
+                      <div style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        backgroundColor: participant.id === user.uid ? 'var(--brand-primary)' : 'var(--ink-500)',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        marginRight: 12
+                      }}>
+                        {(participant.displayName || participant.email).charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>
+                          {participant.displayName || participant.email}
+                          {participant.id === user.uid && (
+                            <span style={{ 
+                              marginLeft: 8, 
+                              fontSize: 12, 
+                              color: 'var(--brand-primary)',
+                              fontWeight: 600 
+                            }}>
+                              (You)
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-muted" style={{ fontSize: 14 }}>
+                          {participant.email}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               <button className="btn btn-outline" onClick={() => setShowChatDetails(false)}>
                 Close
