@@ -1,13 +1,36 @@
 // src/components/Dashboard.jsx
-import { useLoaderData } from "react-router-dom";
+import { useLoaderData, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { auth, db } from "../firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 export default function Dashboard({ userRole, user }) {
   const data = useLoaderData();
-  const displayName = data?.displayName || user?.displayName || user?.email || "User";
+  const navigate = useNavigate();
+  const displayName = data?.displayName || user?.email || "";
+  const [inTeam, setInTeam] = useState(true);
 
-  // helpers for tiny color accents
-  const brand = "var(--brand-primary)";       // #10b981
-  const brandTint = "var(--brand-primary-50)"; // #ecfdf5
+  useEffect(() => {
+    const checkTeamMembership = async () => {
+      if (!auth.currentUser) return;
+      try {
+        const q = query(
+          collection(db, "teams"),
+          where("members", "array-contains", auth.currentUser.uid)
+        );
+        const snap = await getDocs(q);
+        setInTeam(!snap.empty);
+      } catch (e) {
+        console.error("Error checking team membership:", e);
+        setInTeam(true); // 
+      }
+    };
+    checkTeamMembership();
+  }, []);
+
+  // 
+  const brand = "var(--brand-primary)";
+  const brandTint = "var(--brand-primary-50)";
   const ink900 = "#111827";
 
   const cardBase = {
@@ -21,7 +44,7 @@ export default function Dashboard({ userRole, user }) {
 
   const onHover = (e) => {
     e.currentTarget.style.background = brandTint;
-    e.currentTarget.style.borderColor = "#a7f3d0"; // emerald-200
+    e.currentTarget.style.borderColor = "#a7f3d0";
     e.currentTarget.style.transform = "translateY(-1px)";
     e.currentTarget.style.boxShadow = "0 2px 6px rgba(16,185,129,.12)";
   };
@@ -30,22 +53,14 @@ export default function Dashboard({ userRole, user }) {
   };
 
   const profileDone = !!data?.raw?.profileComplete;
-  const statusColor = profileDone ? brand : "#d97706"; // amber-600 for "Incomplete"
+  const statusColor = profileDone ? brand : "#d97706";
   const statusText = profileDone ? "Complete" : "Incomplete";
   const statusMark = profileDone ? "✓" : "!";
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minHeight: 300 }}>
-        {/* Title with subtle brand accent bar */}
-        <h2
-          style={{
-            fontSize: 28,
-            marginBottom: 8,
-            fontWeight: 800,
-            color: ink900,
-          }}
-        >
+        <h2 style={{ fontSize: 28, marginBottom: 8, fontWeight: 800, color: ink900 }}>
           Welcome back, {displayName}!
         </h2>
         <p className="text-muted" style={{ fontSize: 18, marginBottom: 16 }}>
@@ -62,7 +77,33 @@ export default function Dashboard({ userRole, user }) {
           }}
         />
 
-        {/* Quick Stats */}
+        {/* notice */}
+        {!inTeam && (
+          <div
+            style={{
+              border: "1px solid #f59e0b",
+              background: "#fff7ed",
+              color: "#92400e",
+              padding: "16px 20px",
+              borderRadius: 8,
+              textAlign: "center",
+              marginBottom: 24,
+              maxWidth: 600,
+            }}
+          >
+            <p style={{ marginBottom: 12 }}>
+              You are not in any team yet — please join or create one.
+            </p>
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate("/teams")}
+            >
+              Go to Teams Page
+            </button>
+          </div>
+        )}
+
+        {/* calculate */}
         <div
           style={{
             display: "grid",
@@ -107,7 +148,6 @@ export default function Dashboard({ userRole, user }) {
           </div>
         </div>
 
-        {/* Recent Activity */}
         <div style={{ marginTop: 32, width: "100%", maxWidth: 1000 }}>
           <h3 style={{ fontSize: 20, marginBottom: 12, color: ink900, fontWeight: 800 }}>Recent Activity</h3>
           <div className="card" style={{ borderColor: "var(--border)" }}>

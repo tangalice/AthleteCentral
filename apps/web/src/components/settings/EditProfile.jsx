@@ -5,7 +5,6 @@ import { auth, db } from "../../firebase";
 import { updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { GRADES, SPORTS, EXPERIENCE_LEVELS, TWILIO_INFO } from "../../constants/constants";
-//import { Twilio } from "twilio";
 
 export default function EditProfile({ user }) {
   const navigate = useNavigate();
@@ -13,8 +12,6 @@ export default function EditProfile({ user }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-
-  //const client = Twilio(TWILIO_INFO.ACCOUNT_SID, TWILIO_INFO.AUTH_TOKEN);
   
   // Get user role to determine which fields to show
   const userRole = user?.role;
@@ -79,18 +76,6 @@ export default function EditProfile({ user }) {
       // sync display name to Firebase Auth
       if (profileData.name) {
         await updateProfile(auth.currentUser, { displayName: profileData.name });
-      }
-
-      if (profileData.textNotifications && (profileData.phoneNumber.trim() === "" )) {
-        throw new Error("Phone number is required to enable text notifications.");
-      }
-
-      const snap = await getDoc(doc(db, "users", uid));
-      const d = snap.exists() ? snap.data() : {};
-      if (profileData.textNotifications && (d.textNotifications === false || d.textNotifications === undefined) && profileData.phoneNumber.trim() !== "") {
-        // Just enabled text notifications, show alert
-        setMessage("You have enabled text notifications. A test message will be sent to your phone shortly. If you do not receive it, please ensure you have entered the correct phone number.");
-
       }
       
       // upsert to Firestore
@@ -297,31 +282,6 @@ export default function EditProfile({ user }) {
             />
           </div>
         )}
-
-        {/* Text Notifications */}
-        <div className="form-group">
-          <label htmlFor="textNotifications" style={{ fontWeight: 700 }}>Text Notifications</label>
-          <input
-            id="textNotifications"
-            type="checkbox"
-            className="form-control"
-            checked={profileData.textNotifications}
-            onChange={(e) => setProfileData({ ...profileData, textNotifications: e.target.checked })}
-          />
-        </div>
-
-        {/* Phone Number */}
-        <div className="form-group">
-          <label htmlFor="phoneNumber" style={{ fontWeight: 700 }}>Phone Number</label>
-          <input
-            id="phoneNumber"
-            type="tel"
-            className="form-control"
-            placeholder="+12345678910"
-            value={profileData.phoneNumber}
-            onChange={(e) => setProfileData({ ...profileData, phoneNumber: e.target.value })}
-          />
-        </div>
 
         <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ width: "100%" }}>
           {saving ? "Saving..." : "Save Changes"}
