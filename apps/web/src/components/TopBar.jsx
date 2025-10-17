@@ -33,7 +33,6 @@ export default function TopBar({
   user, 
   userRole, 
 }) {
-  // keep minimal inline for active underline; colors align with index.css variables
   const linkStyle = (isActive) => ({
     textDecoration: "none",
     color: isActive ? "#111827" : "#6b7280",
@@ -75,21 +74,29 @@ export default function TopBar({
             Teams
           </Link>
 
-          {/* RESULTS TAB - Available to BOTH athletes and coaches */}
+          {/* RESULTS TAB - Available to BOTH */}
           <Link to="/results" style={linkStyle(activeTab === "results")}>
             Results
           </Link>
 
-          {/* Athlete-only tabs */}
+          {/* GOALS TABS - Different for coach vs athlete */}
           {user?.role === "athlete" && (
-            <>
-              <Link to="/goals" style={linkStyle(activeTab === "goals")}>
-                Goals
-              </Link>
-              <Link to="/athlete-feedback" style={linkStyle(activeTab === "athlete-feedback")}>
-                Feedback
-              </Link>
-            </>
+            <Link to="/goals" style={linkStyle(activeTab === "goals")}>
+              Goals
+            </Link>
+          )}
+
+          {user?.role === "coach" && (
+            <Link to="/view-athlete-goals" style={linkStyle(activeTab === "view-athlete-goals")}>
+              View Athlete Goals
+            </Link>
+          )}
+
+          {/* Athlete-only Feedback */}
+          {user?.role === "athlete" && (
+            <Link to="/athlete-feedback" style={linkStyle(activeTab === "athlete-feedback")}>
+              Feedback
+            </Link>
           )}
 
           {/* Coach-only tabs */}

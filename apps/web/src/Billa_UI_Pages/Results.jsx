@@ -4,6 +4,10 @@ import EnterResults from './EnterResults';
 import ViewResults from './ViewResults';
 
 export default function Results({ user, userRole }) {
+  console.log('Results component - user:', user);
+  console.log('Results component - userRole:', userRole);
+  console.log('Results component - user.role:', user?.role);
+
   return (
     <div style={{ padding: '24px 0' }}>
       <h1 style={{ 
@@ -15,12 +19,17 @@ export default function Results({ user, userRole }) {
         Performance Results
       </h1>
       
+      
+    
+      
       {userRole === 'coach' ? (
         <EnterResults user={user} />
       ) : userRole === 'athlete' ? (
         <ViewResults user={user} />
       ) : (
-        <p>Loading...</p>
+        <div>
+          <p>Loading... (userRole is: {userRole || 'null/undefined'})</p>
+        </div>
       )}
     </div>
   );

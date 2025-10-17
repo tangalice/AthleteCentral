@@ -1,552 +1,385 @@
-import { useState, useEffect } from "react";
-import { db } from "../firebase";
-import { collection, query, where, getDocs, addDoc, Timestamp } from "firebase/firestore";
+// src/Billa_UI_Pages/EnterResults.jsx
+
+import { useState, useEffect } from 'react';
+import { collection, addDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 
 export default function EnterResults({ user }) {
-  const [athletes, setAthletes] = useState([]);
-  const [selectedAthlete, setSelectedAthlete] = useState("");
-  const [resultType, setResultType] = useState("practice"); // practice or competition
   const [formData, setFormData] = useState({
-    date: "",
-    eventName: "",
-    result: "",
-    notes: "",
-    // for practice
-    workoutType: "",
-    intensity: "moderate",
-    // for competition
-    competitionName: "",
-    location: "",
-    placement: "",
-    eventType: ""
+    athleteId: '',
+    athleteName: '',
+    eventType: '',
+    type: 'practice', // 'practice' or 'competition'
+    time: '',
+    date: '',
+    notes: ''
   });
-  const [status, setStatus] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  // fetch all athletes
+  const [athletes, setAthletes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // Fetch athletes from the coach's team
   useEffect(() => {
     const fetchAthletes = async () => {
       try {
-        const athletesQuery = query(
-          collection(db, "users"),
-          where("role", "==", "athlete")
-        );
-        const snapshot = await getDocs(athletesQuery);
+        // TODO: Replace with actual team query once Teams feature is built
+        // For now, fetch all athletes (you'll need to filter by team later)
+        const q = query(collection(db, 'users'), where('role', '==', 'athlete'));
+        const snapshot = await getDocs(q);
         const athletesList = snapshot.docs.map(doc => ({
           id: doc.id,
+          name: doc.data().displayName || doc.data().email,
           ...doc.data()
         }));
         setAthletes(athletesList);
       } catch (error) {
-        console.error("Error fetching athletes:", error);
+        console.error('Error fetching athletes:', error);
       }
     };
+
     fetchAthletes();
   }, []);
 
-  const handleInputChange = (e) => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+
+    // Update athlete name when athlete is selected
+    if (name === 'athleteId') {
+      const selectedAthlete = athletes.find(a => a.id === value);
+      setFormData(prev => ({
+        ...prev,
+        athleteName: selectedAthlete?.name || ''
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    if (!formData.athleteId) {
+      setErrorMessage('Please select an athlete');
+      return false;
+    }
+    if (!formData.eventType) {
+      setErrorMessage('Please enter an event type');
+      return false;
+    }
+    if (!formData.time) {
+      setErrorMessage('Please enter a time');
+      return false;
+    }
+    if (!formData.date) {
+      setErrorMessage('Please select a date');
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!selectedAthlete) {
-      setStatus("Please select an athlete");
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!validateForm()) {
       return;
     }
 
     setLoading(true);
-    setStatus("");
 
     try {
-      const collectionName = resultType === "competition" 
-        ? "competitionResults" 
-        : "practiceResults";
-
-      const resultData = {
+      await addDoc(collection(db, 'performances'), {
+        userId: formData.athleteId,
+        athleteName: formData.athleteName,
+        eventType: formData.eventType,
+        type: formData.type,
+        time: parseFloat(formData.time),
         date: Timestamp.fromDate(new Date(formData.date)),
-        result: formData.result,
         notes: formData.notes,
         coachId: user.uid,
-        coachName: user.displayName || "Coach",
-        createdAt: Timestamp.now()
-      };
+        coachName: user.displayName || user.email,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now()
+      });
 
-      // Add type-specific fields
-      if (resultType === "competition") {
-        resultData.competitionName = formData.competitionName;
-        resultData.eventName = formData.eventName;
-        resultData.location = formData.location;
-        resultData.placement = formData.placement;
-        resultData.eventType = formData.eventType;
-      } else {
-        resultData.workoutType = formData.workoutType;
-        resultData.intensity = formData.intensity;
-      }
-
-      await addDoc(
-        collection(db, "users", selectedAthlete, collectionName),
-        resultData
-      );
-
-      setStatus(`${resultType === "competition" ? "Competition" : "Practice"} result added successfully!`);
+      setSuccessMessage(`Result added successfully for ${formData.athleteName}!`);
       
       // Reset form
       setFormData({
-        date: "",
-        eventName: "",
-        result: "",
-        notes: "",
-        workoutType: "",
-        intensity: "moderate",
-        competitionName: "",
-        location: "",
-        placement: "",
-        eventType: ""
+        athleteId: '',
+        athleteName: '',
+        eventType: '',
+        type: 'practice',
+        time: '',
+        date: '',
+        notes: ''
       });
-      setSelectedAthlete("");
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error("Error adding result:", error);
-      setStatus("Error adding result. Please try again.");
+      console.error('Error adding result:', error);
+      setErrorMessage('Failed to add result. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: "800px", margin: "0 auto", padding: "20px" }}>
-      <h2 style={{ color: "#fff" }}>Enter Results</h2>
-      <p style={{ color: "#999", marginBottom: "30px" }}>
-        Add competition or practice results for your athletes
-      </p>
-
-      <form onSubmit={handleSubmit}>
-        {/* Select Athlete */}
-        <div style={{
-          marginBottom: "20px",
-          padding: "20px",
-          backgroundColor: "#2a2a2a",
-          borderRadius: "8px",
-          border: "1px solid #444"
+    <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <div style={{ 
+        padding: '32px', 
+        border: '1px solid #e5e7eb', 
+        borderRadius: '12px',
+        backgroundColor: '#ffffff',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+      }}>
+        <h2 style={{ 
+          fontSize: '24px', 
+          fontWeight: 600, 
+          marginBottom: '8px', 
+          color: '#111827' 
         }}>
-          <label style={{ 
-            display: "block", 
-            marginBottom: "8px", 
-            fontWeight: "bold",
-            color: "#fff"
-          }}>
-            Select Athlete: *
-          </label>
-          <select
-            value={selectedAthlete}
-            onChange={(e) => setSelectedAthlete(e.target.value)}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              borderRadius: "5px",
-              border: "1px solid #444",
-              backgroundColor: "#1a1a1a",
-              color: "#fff",
-              fontSize: "14px"
-            }}
-          >
-            <option value="">-- Select an athlete --</option>
-            {athletes.map(athlete => (
-              <option key={athlete.id} value={athlete.id}>
-                {athlete.displayName || athlete.email}
-              </option>
-            ))}
-          </select>
-        </div>
+          Enter Performance Result
+        </h2>
+        <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '24px' }}>
+        </p>
 
-        {/* Result Type Toggle */}
-        <div style={{
-          marginBottom: "20px",
-          padding: "20px",
-          backgroundColor: "#2a2a2a",
-          borderRadius: "8px",
-          border: "1px solid #444"
-        }}>
-          <label style={{ 
-            display: "block", 
-            marginBottom: "8px", 
-            fontWeight: "bold",
-            color: "#fff"
+        {successMessage && (
+          <div style={{
+            padding: '12px',
+            marginBottom: '16px',
+            backgroundColor: '#d1fae5',
+            border: '1px solid #10b981',
+            borderRadius: '8px',
+            color: '#065f46'
           }}>
-            Result Type: *
-          </label>
-          <div style={{ display: "flex", gap: "15px" }}>
-            <label style={{ display: "flex", alignItems: "center", color: "#fff", cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="resultType"
-                value="practice"
-                checked={resultType === "practice"}
-                onChange={(e) => setResultType(e.target.value)}
-                style={{ marginRight: "8px" }}
-              />
-              Practice
-            </label>
-            <label style={{ display: "flex", alignItems: "center", color: "#fff", cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="resultType"
-                value="competition"
-                checked={resultType === "competition"}
-                onChange={(e) => setResultType(e.target.value)}
-                style={{ marginRight: "8px" }}
-              />
-              Competition
-            </label>
+            {successMessage}
           </div>
-        </div>
+        )}
 
-        {/* Common Fields */}
-        <div style={{
-          marginBottom: "20px",
-          padding: "20px",
-          backgroundColor: "#2a2a2a",
-          borderRadius: "8px",
-          border: "1px solid #444"
-        }}>
-          <h3 style={{ color: "#fff", marginBottom: "15px", fontSize: "18px" }}>
-            {resultType === "competition" ? "Competition" : "Practice"} Details
-          </h3>
+        {errorMessage && (
+          <div style={{
+            padding: '12px',
+            marginBottom: '16px',
+            backgroundColor: '#fee2e2',
+            border: '1px solid #ef4444',
+            borderRadius: '8px',
+            color: '#991b1b'
+          }}>
+            {errorMessage}
+          </div>
+        )}
 
-          {/* Date */}
-          <div style={{ marginBottom: "15px" }}>
+        <form onSubmit={handleSubmit}>
+          {/* Result Type */}
+          <div style={{ marginBottom: '20px' }}>
             <label style={{ 
-              display: "block", 
-              marginBottom: "5px", 
-              fontWeight: "bold",
-              color: "#fff"
+              display: 'block', 
+              marginBottom: '6px', 
+              fontWeight: 600, 
+              fontSize: '14px',
+              color: '#374151'
             }}>
-              Date: *
+              Type *
             </label>
-            <input
-              type="date"
-              name="date"
-              value={formData.date}
-              onChange={handleInputChange}
+            <select 
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: 'white'
+              }}
+            >
+              <option value="practice">Practice/Training</option>
+              <option value="competition">Competition/Meet</option>
+            </select>
+          </div>
+
+          {/* Athlete Selection */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '6px', 
+              fontWeight: 600, 
+              fontSize: '14px',
+              color: '#374151'
+            }}>
+              Athlete *
+            </label>
+            <select 
+              name="athleteId"
+              value={formData.athleteId}
+              onChange={handleChange}
               required
               style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "5px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#fff"
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: 'white'
+              }}
+            >
+              <option value="">Select an athlete...</option>
+              {athletes.map(athlete => (
+                <option key={athlete.id} value={athlete.id}>
+                  {athlete.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Event Type */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '6px', 
+              fontWeight: 600, 
+              fontSize: '14px',
+              color: '#374151'
+            }}>
+              Event *
+            </label>
+            <input 
+              type="text"
+              name="eventType"
+              value={formData.eventType}
+              onChange={handleChange}
+              placeholder="e.g., 50 FR, 100 Backstroke, 2k Row"
+              required
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px'
               }}
             />
           </div>
 
-          {/* Competition-specific fields */}
-          {resultType === "competition" && (
-            <>
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "5px", 
-                  fontWeight: "bold",
-                  color: "#fff"
-                }}>
-                  Competition Name: *
-                </label>
-                <input
-                  type="text"
-                  name="competitionName"
-                  value={formData.competitionName}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="e.g., State Championships"
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "5px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff"
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "5px", 
-                  fontWeight: "bold",
-                  color: "#fff"
-                }}>
-                  Event Name: *
-                </label>
-                <input
-                  type="text"
-                  name="eventName"
-                  value={formData.eventName}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="e.g., 100m Freestyle"
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "5px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff"
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "5px", 
-                  fontWeight: "bold",
-                  color: "#fff"
-                }}>
-                  Location:
-                </label>
-                <input
-                  type="text"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleInputChange}
-                  placeholder="e.g., City Arena"
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "5px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff"
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "5px", 
-                  fontWeight: "bold",
-                  color: "#fff"
-                }}>
-                  Event Type:
-                </label>
-                <select
-                  name="eventType"
-                  value={formData.eventType}
-                  onChange={handleInputChange}
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "5px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff"
-                  }}
-                >
-                  <option value="">Select type</option>
-                  <option value="sprint">Sprint</option>
-                  <option value="distance">Distance</option>
-                  <option value="relay">Relay</option>
-                  <option value="field">Field</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "5px", 
-                  fontWeight: "bold",
-                  color: "#fff"
-                }}>
-                  Placement:
-                </label>
-                <input
-                  type="text"
-                  name="placement"
-                  value={formData.placement}
-                  onChange={handleInputChange}
-                  placeholder="e.g., 1, 2, 3"
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "5px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff"
-                  }}
-                />
-              </div>
-            </>
-          )}
-
-          {/* Practice-specific fields */}
-          {resultType === "practice" && (
-            <>
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "5px", 
-                  fontWeight: "bold",
-                  color: "#fff"
-                }}>
-                  Workout Type: *
-                </label>
-                <input
-                  type="text"
-                  name="workoutType"
-                  value={formData.workoutType}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="e.g., Endurance Training, Speed Work"
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "5px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff"
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "5px", 
-                  fontWeight: "bold",
-                  color: "#fff"
-                }}>
-                  Intensity: *
-                </label>
-                <select
-                  name="intensity"
-                  value={formData.intensity}
-                  onChange={handleInputChange}
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "5px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff"
-                  }}
-                >
-                  <option value="easy">Easy</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="hard">Hard</option>
-                </select>
-              </div>
-            </>
-          )}
-
-          {/* Result/Time */}
-          <div style={{ marginBottom: "15px" }}>
+          {/* Time/Score */}
+          <div style={{ marginBottom: '20px' }}>
             <label style={{ 
-              display: "block", 
-              marginBottom: "5px", 
-              fontWeight: "bold",
-              color: "#fff"
+              display: 'block', 
+              marginBottom: '6px', 
+              fontWeight: 600, 
+              fontSize: '14px',
+              color: '#374151'
             }}>
-              Result/Time: *
+              Time/Score *
             </label>
-            <input
+            <input 
               type="text"
-              name="result"
-              value={formData.result}
-              onChange={handleInputChange}
+              name="time"
+              value={formData.time}
+              onChange={handleChange}
+              placeholder="e.g., 23.45 (in seconds)"
               required
-              placeholder="e.g., 52.3s, 5:23.1"
               style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "5px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#fff"
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+            />
+            <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+              Enter time in seconds (e.g., 23.45 for 23.45 seconds)
+            </p>
+          </div>
+
+          {/* Date */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '6px', 
+              fontWeight: 600, 
+              fontSize: '14px',
+              color: '#374151'
+            }}>
+              Date *
+            </label>
+            <input 
+              type="date"
+              name="date"
+              value={formData.date}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px'
               }}
             />
           </div>
 
           {/* Notes */}
-          <div style={{ marginBottom: "15px" }}>
+          <div style={{ marginBottom: '24px' }}>
             <label style={{ 
-              display: "block", 
-              marginBottom: "5px", 
-              fontWeight: "bold",
-              color: "#fff"
+              display: 'block', 
+              marginBottom: '6px', 
+              fontWeight: 600, 
+              fontSize: '14px',
+              color: '#374151'
             }}>
-              Notes:
+              Notes (Optional)
             </label>
-            <textarea
+            <textarea 
               name="notes"
               value={formData.notes}
-              onChange={handleInputChange}
-              placeholder="Additional comments or observations"
+              onChange={handleChange}
+              placeholder="Any additional notes about this performance..."
               rows="4"
               style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "5px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#fff",
-                resize: "vertical",
-                fontFamily: "inherit"
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                resize: 'vertical'
               }}
             />
           </div>
-        </div>
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "14px",
-            fontSize: "16px",
-            fontWeight: "bold",
-            backgroundColor: loading ? "#666" : "#10b981",
-            color: "white",
-            border: "none",
-            borderRadius: "8px",
-            cursor: loading ? "not-allowed" : "pointer",
-            transition: "background-color 0.2s"
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) e.target.style.backgroundColor = "#059669";
-          }}
-          onMouseLeave={(e) => {
-            if (!loading) e.target.style.backgroundColor = "#10b981";
-          }}
-        >
-          {loading ? "Adding Result..." : "Add Result"}
-        </button>
-
-        {/* Status Message */}
-        {status && (
-          <div style={{
-            marginTop: "20px",
-            padding: "12px",
-            backgroundColor: status.includes("Error") ? "#7f1d1d" : "#065f46",
-            color: "#fff",
-            borderRadius: "6px",
-            textAlign: "center"
-          }}>
-            {status}
-          </div>
-        )}
-      </form>
+          {/* Submit Button */}
+          <button 
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              backgroundColor: loading ? '#9ca3af' : '#10b981',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '16px',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseOver={(e) => {
+              if (!loading) e.target.style.backgroundColor = '#059669';
+            }}
+            onMouseOut={(e) => {
+              if (!loading) e.target.style.backgroundColor = '#10b981';
+            }}
+          >
+            {loading ? 'Adding Result...' : 'Add Result'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
