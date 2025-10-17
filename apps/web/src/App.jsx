@@ -49,6 +49,9 @@ function AppLayout({ user, userRole, onLogout }) {
              root === "messages" ? "messages" : 
              root === "teams"    ? "teams"    :
              root === "goals"    ? "goals"    :
+             root === "coach-feedback" ? "coach-feedback" :
+             root === "athlete-feedback" ? "athlete-feedback" :
+             root === "suggest-goals" ? "suggest-goals" :
              "dashboard";
 
   return (
