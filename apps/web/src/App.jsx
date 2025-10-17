@@ -84,6 +84,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [ready, setReady] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   // Bootstrap: wait for Firebase Auth state
   useEffect(() => {
@@ -243,7 +244,7 @@ export default function App() {
           loader: dashboardLoader,
           element: (
             <ProtectedRoute user={user}>
-              <Dashboard userRole={userRole} user={user} />
+              <Dashboard userRole={userRole} user={user} unreadMessageCount={unreadMessageCount} />
             </ProtectedRoute>
           ),
         },
@@ -263,7 +264,7 @@ export default function App() {
                    path: "messages",
                    element: (
                      <ProtectedRoute user={user}>
-                       <Messages />
+                       <Messages onUnreadCountChange={setUnreadMessageCount} />
                      </ProtectedRoute>
                    ),
                  },

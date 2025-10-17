@@ -1,7 +1,7 @@
 // src/components/Dashboard.jsx
 import { useLoaderData } from "react-router-dom";
 
-export default function Dashboard({ userRole, user }) {
+export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const data = useLoaderData();
   const displayName = data?.displayName || user?.displayName || user?.email || "User";
 
@@ -91,7 +91,7 @@ export default function Dashboard({ userRole, user }) {
             onMouseLeave={offHover}
           >
             <h3 style={{ marginBottom: 8, color: ink900 }}>Messages</h3>
-            <p style={{ fontSize: 36, fontWeight: 800, margin: "6px 0", color: brand }}>0</p>
+            <p style={{ fontSize: 36, fontWeight: 800, margin: "6px 0", color: unreadMessageCount > 0 ? "#ef4444" : brand }}>{unreadMessageCount}</p>
             <p className="text-muted">Unread</p>
           </div>
 

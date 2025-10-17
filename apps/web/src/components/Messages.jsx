@@ -10,12 +10,13 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  serverTimestamp
+  serverTimestamp,
+  increment
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
-const Messages = () => {
+const Messages = ({ onUnreadCountChange = () => {} }) => {
   const [user, authLoading] = useAuthState(auth);
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
@@ -31,6 +32,25 @@ const Messages = () => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [chatUsers, setChatUsers] = useState([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+
+  // Unread helpers
+  const getUnreadCount = (chat) => {
+    if (!chat || !user) return 0;
+    const perUser = (chat.unreadCounts || {})[user.uid];
+    return typeof perUser === 'number' ? perUser : 0;
+  };
+
+  const markChatAsRead = async (chatId) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'chats', chatId), {
+        [`unreadCounts.${user.uid}`]: 0,
+        [`readBy.${user.uid}`]: serverTimestamp()
+      });
+    } catch (e) {
+      console.error('Error marking chat as read:', e);
+    }
+  };
 
   // Loading/auth states (UI only restyled)
   if (authLoading) {
@@ -86,6 +106,9 @@ const Messages = () => {
         return bTime - aTime;
       });
       setChats(chatsData);
+      // Update total unread for Dashboard
+      const total = chatsData.reduce((sum, c) => sum + getUnreadCount(c), 0);
+      onUnreadCountChange(total);
     });
     return () => unsubscribe();
   }, [user]);
@@ -152,14 +175,15 @@ const Messages = () => {
     try {
       // Include current user and selected users
       const participants = [user.uid, ...selectedUsers.map(u => u.id)];
-      
       await addDoc(collection(db, 'chats'), {
         name: newChatName.trim(),
-        participants: participants,
+        participants,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
         lastMessageTime: serverTimestamp(),
-        lastMessage: ''
+        lastMessage: '',
+        unreadCounts: participants.reduce((acc, id) => { acc[id] = 0; return acc; }, {}),
+        readBy: { [user.uid]: serverTimestamp() }
       });
       
       setNewChatName('');
@@ -185,9 +209,17 @@ const Messages = () => {
         text: newMessage.trim(),
         timestamp: serverTimestamp()
       });
-      await updateDoc(doc(db, 'chats', selectedChat.id), {
+      const chatRef = doc(db, 'chats', selectedChat.id);
+      const others = (selectedChat.participants || []).filter(id => id !== user.uid);
+      const unreadUpdates = others.reduce((acc, id) => {
+        acc[`unreadCounts.${id}`] = increment(1);
+        return acc;
+      }, {});
+      await updateDoc(chatRef, {
         lastMessageTime: serverTimestamp(),
-        lastMessage: newMessage.trim()
+        lastMessage: newMessage.trim(),
+        lastMessageSenderId: user.uid,
+        ...unreadUpdates
       });
       setNewMessage('');
     } finally {
@@ -274,7 +306,7 @@ const Messages = () => {
             chats.map((chat) => (
               <div
                 key={chat.id}
-                onClick={() => setSelectedChat(chat)}
+                onClick={() => { setSelectedChat(chat); markChatAsRead(chat.id); }}
                 className="card"
                 style={{
                   margin: 0,
@@ -298,11 +330,35 @@ const Messages = () => {
                       </div>
                     )}
                   </div>
-                  {chat.lastMessageTime && (
-                    <span className="text-muted" style={{ fontSize: 12, flexShrink: 0 }}>
-                      {formatTime(chat.lastMessageTime)}
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    {chat.lastMessageTime && (
+                      <span className="text-muted" style={{ fontSize: 12, flexShrink: 0 }}>
+                        {formatTime(chat.lastMessageTime)}
+                      </span>
+                    )}
+                    {(() => {
+                      const unreadCount = getUnreadCount(chat);
+                      return unreadCount > 0 ? (
+                        <span
+                          style={{
+                            background: '#ef4444',
+                            color: 'white',
+                            borderRadius: '50%',
+                            minWidth: 20,
+                            height: 20,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            padding: '0 6px'
+                          }}
+                        >
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
                 </div>
               </div>
             ))
