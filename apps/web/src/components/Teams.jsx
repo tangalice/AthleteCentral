@@ -11,6 +11,8 @@ export default function Teams() {
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [showJoinTeam, setShowJoinTeam] = useState(false);
   const [message, setMessage] = useState("");
+  const [teamMembers, setTeamMembers] = useState({});
+  const [memberSearch, setMemberSearch] = useState({});
   
   // Create team form state
   const [newTeam, setNewTeam] = useState({
@@ -56,16 +58,21 @@ export default function Teams() {
       where("members", "array-contains", user.uid)
     );
 
-    const unsubscribe = onSnapshot(teamsQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(teamsQuery, async (snapshot) => {
       const teamsData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       setTeams(teamsData);
+      
+      // Load team members for coaches
+      if (userRole === "coach") {
+        await loadTeamMembers(teamsData);
+      }
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, userRole]);
 
   // Load all users for coach team creation
   useEffect(() => {
@@ -177,6 +184,57 @@ export default function Teams() {
     }
   };
 
+  // Load team members with user details
+  const loadTeamMembers = async (teamsData) => {
+    try {
+      const membersData = {};
+      
+      for (const team of teamsData) {
+        if (team.members && team.members.length > 0) {
+          const memberPromises = team.members.map(async (memberId) => {
+            try {
+              const userDoc = await getDoc(doc(db, "users", memberId));
+              if (userDoc.exists()) {
+                return { id: memberId, ...userDoc.data() };
+              }
+              return { id: memberId, displayName: "Unknown User", email: "unknown@example.com" };
+            } catch (error) {
+              console.error("Error fetching user:", memberId, error);
+              return { id: memberId, displayName: "Unknown User", email: "unknown@example.com" };
+            }
+          });
+          
+          const members = await Promise.all(memberPromises);
+          membersData[team.id] = members;
+        }
+      }
+      
+      setTeamMembers(membersData);
+    } catch (error) {
+      console.error("Error loading team members:", error);
+    }
+  };
+
+  // Remove user from team (coach only)
+  const removeUserFromTeam = async (teamId, userId) => {
+    if (!window.confirm("Are you sure you want to remove this user from the team?")) {
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, "teams", teamId), {
+        members: arrayRemove(userId),
+        athletes: arrayRemove(userId),
+        coaches: arrayRemove(userId)
+      });
+      
+      setMessage("User removed from team successfully");
+    } catch (error) {
+      console.error("Error removing user from team:", error);
+      setMessage(`Error removing user: ${error.message}`);
+    }
+  };
+
   // Leave team
   const leaveTeam = async (teamId) => {
     try {
@@ -198,6 +256,27 @@ export default function Teams() {
     userData.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
     userData.email?.toLowerCase().includes(userSearch.toLowerCase())
   );
+
+  // Filter team members for search
+  const getFilteredTeamMembers = (teamId) => {
+    const members = teamMembers[teamId] || [];
+    const searchTerm = memberSearch[teamId] || "";
+    
+    if (!searchTerm) return members;
+    
+    return members.filter(member =>
+      member.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
+
+  // Update member search for specific team
+  const updateMemberSearch = (teamId, searchTerm) => {
+    setMemberSearch(prev => ({
+      ...prev,
+      [teamId]: searchTerm
+    }));
+  };
 
   // Toggle user selection for team creation
   const toggleUserSelection = (userData) => {
@@ -461,7 +540,7 @@ export default function Teams() {
               {teams.map(team => (
                 <div key={team.id} style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <h3 style={{ margin: "0 0 8px 0" }}>{team.name}</h3>
                       {team.description && (
                         <p className="text-muted" style={{ margin: "0 0 8px 0" }}>{team.description}</p>
@@ -480,6 +559,67 @@ export default function Teams() {
                       Leave
                     </button>
                   </div>
+
+                  {/* Team Members Management (Coach only) */}
+                  {isCoach && teamMembers[team.id] && (
+                    <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+                      <h4 style={{ margin: "0 0 12px 0", fontSize: 16 }}>Team Members</h4>
+                      
+                      {/* Search Members */}
+                      <div style={{ marginBottom: 12 }}>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Search members by name or email"
+                          value={memberSearch[team.id] || ""}
+                          onChange={(e) => updateMemberSearch(team.id, e.target.value)}
+                          style={{ maxWidth: 300 }}
+                        />
+                      </div>
+
+                      {/* Members List */}
+                      <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 4 }}>
+                        {getFilteredTeamMembers(team.id).length === 0 ? (
+                          <div style={{ padding: 12, textAlign: "center", color: "#6b7280" }}>
+                            {memberSearch[team.id] ? "No members found matching your search" : "No members in this team"}
+                          </div>
+                        ) : (
+                          getFilteredTeamMembers(team.id).map(member => (
+                            <div
+                              key={member.id}
+                              style={{
+                                padding: 12,
+                                borderBottom: "1px solid var(--border)",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center"
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 600 }}>
+                                  {member.displayName || member.email}
+                                  {member.id === user.uid && <span style={{ marginLeft: 8, color: "#10b981", fontSize: 12 }}>(You)</span>}
+                                </div>
+                                <div className="text-muted" style={{ fontSize: 14 }}>{member.email}</div>
+                                <div className="text-muted" style={{ fontSize: 12 }}>
+                                  {member.role === "coach" ? "Coach" : member.role === "athlete" ? "Athlete" : "User"}
+                                </div>
+                              </div>
+                              {member.id !== user.uid && (
+                                <button
+                                  className="btn btn-outline text-danger"
+                                  onClick={() => removeUserFromTeam(team.id, member.id)}
+                                  style={{ fontSize: 12, padding: "4px 8px" }}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
