@@ -8,7 +8,6 @@ export default function CoachGoals({ user }) {
   const [athletes, setAthletes] = useState([]);
   const [selectedAthlete, setSelectedAthlete] = useState(null);
   const [athleteGoals, setAthleteGoals] = useState([]);
-  const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [goalCounts, setGoalCounts] = useState({});
 
@@ -92,11 +91,7 @@ export default function CoachGoals({ user }) {
     }
   };
 
-  const filteredGoals = filter === 'all' 
-    ? athleteGoals 
-    : filter === 'suggested'
-    ? athleteGoals.filter(g => g.type === 'suggested')
-    : athleteGoals.filter(g => g.category === filter);
+  const filteredGoals = athleteGoals;
 
   return (
     <div style={{ display: 'flex', gap: '24px', minHeight: '600px' }}>
@@ -122,10 +117,7 @@ export default function CoachGoals({ user }) {
             athletes.map(athlete => (
               <button
                 key={athlete.id}
-                onClick={() => {
-                  setSelectedAthlete(athlete);
-                  setFilter('all');
-                }}
+                onClick={() => setSelectedAthlete(athlete)}
                 style={{
                   padding: '16px',
                   backgroundColor: selectedAthlete?.id === athlete.id ? '#10b981' : 'white',
@@ -263,55 +255,6 @@ export default function CoachGoals({ user }) {
               </div>
             </div>
 
-            {/* Filter Buttons */}
-            {athleteGoals.length > 0 && (
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ 
-                  fontSize: '14px', 
-                  fontWeight: 600, 
-                  color: '#6b7280'
-                }}>
-                  Filter:
-                </span>
-                {['all', 'academic', 'practice', 'competition'].map(f => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    style={{
-                      padding: '8px 16px',
-                      border: `2px solid ${filter === f ? '#10b981' : '#d1d5db'}`,
-                      borderRadius: '6px',
-                      backgroundColor: filter === f ? '#10b981' : 'white',
-                      color: filter === f ? 'white' : '#6b7280',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
-                  </button>
-                ))}
-                {/* Add Coach Suggested filter separately */}
-                <button
-                  onClick={() => setFilter('suggested')}
-                  style={{
-                    padding: '8px 16px',
-                    border: `2px solid ${filter === 'suggested' ? '#fbbf24' : '#d1d5db'}`,
-                    borderRadius: '6px',
-                    backgroundColor: filter === 'suggested' ? '#fbbf24' : 'white',
-                    color: filter === 'suggested' ? 'white' : '#6b7280',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  Coach Suggested
-                </button>
-              </div>
-            )}
-
             {/* Goals List */}
             {loading ? (
               <div style={{ textAlign: 'center', padding: '60px' }}>
@@ -326,10 +269,7 @@ export default function CoachGoals({ user }) {
                 border: '2px solid #e5e7eb'
               }}>
                 <p style={{ color: '#6b7280', fontSize: '18px', fontWeight: 500 }}>
-                  {filter === 'all' 
-                    ? 'No goals yet'
-                    : `No ${filter} goals found`
-                  }
+                  No goals yet
                 </p>
               </div>
             ) : (
@@ -351,16 +291,18 @@ export default function CoachGoals({ user }) {
                           <h3 style={{ fontSize: '20px', fontWeight: 600, color: '#111827', margin: 0 }}>
                             {goal.title}
                           </h3>
-                          <span style={{
-                            padding: '4px 12px',
-                            borderRadius: '6px',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            backgroundColor: '#dbeafe',
-                            color: '#1e40af'
-                          }}>
-                            {goal.category}
-                          </span>
+                          {goal.category && (
+                            <span style={{
+                              padding: '4px 12px',
+                              borderRadius: '6px',
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              backgroundColor: '#dbeafe',
+                              color: '#1e40af'
+                            }}>
+                              {goal.category}
+                            </span>
+                          )}
                           {goal.type === 'suggested' && (
                             <span style={{
                               padding: '4px 12px',
@@ -382,7 +324,7 @@ export default function CoachGoals({ user }) {
                               backgroundColor: '#d1fae5',
                               color: '#065f46'
                             }}>
-                              ✓ Completed
+                              Completed
                             </span>
                           )}
                         </div>
@@ -393,13 +335,13 @@ export default function CoachGoals({ user }) {
                         )}
                         <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#9ca3af', flexWrap: 'wrap' }}>
                           {goal.targetDate && (
-                            <span>🎯 Target: {goal.targetDate.toLocaleDateString()}</span>
+                            <span>Target: {goal.targetDate.toLocaleDateString()}</span>
                           )}
                           {goal.createdAt && (
-                            <span>📅 Created: {goal.createdAt.toLocaleDateString()}</span>
+                            <span>Created: {goal.createdAt.toLocaleDateString()}</span>
                           )}
                           {goal.completedAt && (
-                            <span>✅ Completed: {goal.completedAt.toLocaleDateString()}</span>
+                            <span>Completed: {goal.completedAt.toLocaleDateString()}</span>
                           )}
                         </div>
                       </div>
