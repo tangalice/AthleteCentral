@@ -135,10 +135,31 @@ export default function App() {
       if (!u || !u.emailVerified) return null;
       const snap = await getDoc(doc(db, "users", u.uid));
       const d = snap.exists() ? snap.data() : {};
+      
+      // Calculate profile completion based on required fields
+      const userRole = d.role ?? null;
+      let profileComplete = false;
+      
+      if (userRole === "coach") {
+        // Coach required fields: displayName, bio, school, sport, team, sportDetails
+        const requiredFields = ['displayName', 'bio', 'school', 'sport', 'team', 'sportDetails'];
+        profileComplete = requiredFields.every(field => {
+          const value = field === 'displayName' ? (d.displayName ?? u.displayName ?? "") : d[field];
+          return value && value.toString().trim() !== "";
+        });
+      } else if (userRole === "athlete") {
+        // Athlete required fields: displayName, bio, school, grade, sport, position, team, experience, sportDetails, goals
+        const requiredFields = ['displayName', 'bio', 'school', 'grade', 'sport', 'position', 'team', 'experience', 'sportDetails', 'goals'];
+        profileComplete = requiredFields.every(field => {
+          const value = field === 'displayName' ? (d.displayName ?? u.displayName ?? "") : d[field];
+          return value && value.toString().trim() !== "";
+        });
+      }
+      
       return {
         displayName: d.displayName ?? u.displayName ?? "",
-        role: d.role ?? null,
-        raw: d,
+        role: userRole,
+        raw: { ...d, profileComplete },
       };
     } catch (error) {
       console.error("Error in dashboardLoader:", error);
