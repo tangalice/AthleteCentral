@@ -37,7 +37,7 @@ export default function AthleteFeedbackPage({ user }) {
     <div style={{ background: "#fff", minHeight: "100vh" }}>
       <div style={{ maxWidth: 700, margin: "40px auto", padding: "0 20px" }}>
         <h2 style={{ fontWeight: 800, fontSize: 28, marginBottom: 10 }}>
-          My Coach Feedback
+          My Feedback
         </h2>
 
         {/* Filter Buttons */}

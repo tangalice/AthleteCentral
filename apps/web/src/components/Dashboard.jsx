@@ -2,8 +2,8 @@
 import { useLoaderData } from "react-router-dom";
 
 export default function Dashboard({ userRole, user }) {
-  const data = useLoaderData(); // unchanged
-  const displayName = data?.displayName || user?.email || "";
+  const data = useLoaderData();
+  const displayName = data?.displayName || user?.displayName || user?.email || "User";
 
   // helpers for tiny color accents
   const brand = "var(--brand-primary)";       // #10b981
