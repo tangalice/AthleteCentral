@@ -11,48 +11,36 @@ export default function ViewResults({ user }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchResults = async () => {
-      if (!user?.uid) return;
+  const fetchResults = async () => {
+    if (!user?.uid) return;
 
-      setLoading(true);
-      try {
-        // Fetch practice results
-        const practiceQuery = query(
-          collection(db, 'users', user.uid, 'practiceResults'),
-          orderBy('date', 'desc')
-        );
-        const practiceSnapshot = await getDocs(practiceQuery);
-        const practiceData = practiceSnapshot.docs.map(doc => ({
-          id: doc.id,
-          type: 'practice',
-          ...doc.data(),
-          date: doc.data().date?.toDate() // Convert Firestore Timestamp to Date
-        }));
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, 'users', user.uid, 'performances'),
+        orderBy('date', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      const allResults = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate() || null
+      }));
 
-        // Fetch competition results
-        const competitionQuery = query(
-          collection(db, 'users', user.uid, 'competitionResults'),
-          orderBy('date', 'desc')
-        );
-        const competitionSnapshot = await getDocs(competitionQuery);
-        const competitionData = competitionSnapshot.docs.map(doc => ({
-          id: doc.id,
-          type: 'competition',
-          ...doc.data(),
-          date: doc.data().date?.toDate()
-        }));
+      const practiceData = allResults.filter(r => r.type === 'practice');
+      const competitionData = allResults.filter(r => r.type === 'competition');
 
-        setPracticeResults(practiceData);
-        setCompetitionResults(competitionData);
-      } catch (error) {
-        console.error('Error fetching results:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+      setPracticeResults(practiceData);
+      setCompetitionResults(competitionData);
+    } catch (error) {
+      console.error('Error fetching results:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchResults();
-  }, [user]);
+  fetchResults();
+}, [user]);
 
   // Combine and filter results
   const getFilteredResults = () => {
@@ -181,46 +169,66 @@ export default function ViewResults({ user }) {
             </thead>
             <tbody>
               {filteredResults.map((result, index) => (
-                <tr 
-                  key={result.id}
-                  style={{ 
-                    borderBottom: index < filteredResults.length - 1 ? '1px solid #e5e7eb' : 'none',
-                    backgroundColor: index % 2 === 0 ? 'white' : '#f9fafb'
-                  }}
-                >
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: '#111827' }}>
-                    {result.date?.toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric', 
-                      year: 'numeric' 
-                    }) || 'N/A'}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      backgroundColor: result.type === 'competition' ? '#dbeafe' : '#f3e8ff',
-                      color: result.type === 'competition' ? '#1e40af' : '#6b21a8'
-                    }}>
-                      {result.type === 'competition' ? 'Competition' : 'Practice'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: '#111827' }}>
-                    {result.type === 'competition' 
-                      ? result.eventName || result.competitionName 
-                      : result.workoutType || 'N/A'}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: 600, color: '#10b981' }}>
-                    {result.result}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: '#6b7280' }}>
-                    {result.notes || '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            <tr
+              key={result.id}
+              style={{
+              borderBottom: index < filteredResults.length - 1 ? '1px solid #e5e7eb' : 'none',
+              backgroundColor: index % 2 === 0 ? 'white' : '#f9fafb'
+            }}
+    >
+          {/* Date */}
+          <td style={{ padding: '12px 16px', fontSize: '14px', color: '#111827' }}>
+            {result.date
+              ? result.date.toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric'
+            })
+          : 'N/A'}
+      </td>
+
+      {/* Type badge */}
+      <td style={{ padding: '12px 16px' }}>
+        <span
+          style={{
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 600,
+            backgroundColor:
+              result.type === 'competition' ? '#dbeafe' : '#f3e8ff',
+            color: result.type === 'competition' ? '#1e40af' : '#6b21a8'
+          }}
+        >
+          {result.type === 'competition' ? 'Competition' : 'Practice'}
+        </span>
+      </td>
+
+      {/* Event Type */}
+      <td style={{ padding: '12px 16px', fontSize: '14px', color: '#111827' }}>
+        {result.eventType || '—'}
+      </td>
+
+      {/* Time / Score */}
+      <td
+        style={{
+          padding: '12px 16px',
+          fontSize: '14px',
+          fontWeight: 600,
+          color: '#10b981'
+        }}
+      >
+        {result.time != null ? `${result.time}s` : '—'}
+      </td>
+
+      {/* Notes */}
+      <td style={{ padding: '12px 16px', fontSize: '14px', color: '#6b7280' }}>
+        {result.notes || '—'}
+      </td>
+    </tr>
+  ))}
+</tbody>
+
           </table>
         </div>
       )}

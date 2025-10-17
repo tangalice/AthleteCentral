@@ -91,7 +91,7 @@ export default function EnterResults({ user }) {
     setLoading(true);
 
     try {
-      await addDoc(collection(db, 'performances'), {
+      await addDoc(collection(db, 'users', formData.athleteId, 'performances'), {
         userId: formData.athleteId,
         athleteName: formData.athleteName,
         eventType: formData.eventType,
