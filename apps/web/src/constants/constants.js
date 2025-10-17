@@ -71,3 +71,9 @@ export const GRADES = [
       accent: "#ffeaa7",
     },
   };
+
+  export const TWILIO_INFO = {
+    ACCOUNT_SID: "ACaec207959fe6a2a15127fe0b94259b0f",
+    AUTH_TOKEN: "7a26d7376f3486bc4c3dd45ca936295e",
+    FROM_PHONE: "+8665666430",
+  };

@@ -4,7 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { auth, db } from "../../firebase";
 import { updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { GRADES, SPORTS, EXPERIENCE_LEVELS } from "../../constants/constants";
+import { GRADES, SPORTS, EXPERIENCE_LEVELS, TWILIO_INFO } from "../../constants/constants";
+//import { Twilio } from "twilio";
 
 export default function EditProfile() {
   const navigate = useNavigate();
@@ -12,6 +13,8 @@ export default function EditProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  //const client = Twilio(TWILIO_INFO.ACCOUNT_SID, TWILIO_INFO.AUTH_TOKEN);
 
   const [profileData, setProfileData] = useState({
     name: "",
@@ -24,6 +27,8 @@ export default function EditProfile() {
     experience: "",
     sportDetails: "",
     goals: "",
+    textNotifications: false,
+    phoneNumber: "",
   });
 
   // fetch profile on mount
@@ -50,6 +55,8 @@ export default function EditProfile() {
           experience: d.experience ?? "",
           sportDetails: d.sportDetails ?? "",
           goals: d.goals ?? "",
+          textNotifications: d.textNotifications ?? false,
+          phoneNumber: d.phoneNumber ?? "",
         });
       } catch (e) {
         setMessage(`Error loading profile: ${e.message}`);
@@ -70,6 +77,18 @@ export default function EditProfile() {
         await updateProfile(auth.currentUser, { displayName: profileData.name });
       }
 
+      if (profileData.textNotifications && (profileData.phoneNumber.trim() === "" )) {
+        throw new Error("Phone number is required to enable text notifications.");
+      }
+
+      const snap = await getDoc(doc(db, "users", uid));
+      const d = snap.exists() ? snap.data() : {};
+      if (profileData.textNotifications && (d.textNotifications === false || d.textNotifications === undefined) && profileData.phoneNumber.trim() !== "") {
+        // Just enabled text notifications, show alert
+        setMessage("You have enabled text notifications. A test message will be sent to your phone shortly. If you do not receive it, please ensure you have entered the correct phone number.");
+
+      }
+      
       // upsert to Firestore
       await setDoc(
         doc(db, "users", uid),
@@ -84,6 +103,8 @@ export default function EditProfile() {
           experience: profileData.experience,
           sportDetails: profileData.sportDetails,
           goals: profileData.goals,
+          textNotifications: profileData.textNotifications,
+          phoneNumber: profileData.phoneNumber,
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -257,6 +278,31 @@ export default function EditProfile() {
             value={profileData.goals}
             onChange={(e) => setProfileData({ ...profileData, goals: e.target.value })}
             style={{ minHeight: 100, resize: "vertical" }}
+          />
+        </div>
+
+        {/* Text Notifications */}
+        <div className="form-group">
+          <label htmlFor="textNotifications" style={{ fontWeight: 700 }}>Text Notifications</label>
+          <input
+            id="textNotifications"
+            type="checkbox"
+            className="form-control"
+            checked={profileData.textNotifications}
+            onChange={(e) => setProfileData({ ...profileData, textNotifications: e.target.checked })}
+          />
+        </div>
+
+        {/* Phone Number */}
+        <div className="form-group">
+          <label htmlFor="phoneNumber" style={{ fontWeight: 700 }}>Phone Number</label>
+          <input
+            id="phoneNumber"
+            type="tel"
+            className="form-control"
+            placeholder="+12345678910"
+            value={profileData.phoneNumber}
+            onChange={(e) => setProfileData({ ...profileData, phoneNumber: e.target.value })}
           />
         </div>
 
