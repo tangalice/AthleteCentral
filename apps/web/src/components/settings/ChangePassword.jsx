@@ -6,8 +6,9 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
 } from "firebase/auth";
+import { auth } from "../../firebase"; //   auth 
 
-export default function ChangePassword({ user }) {
+export default function ChangePassword() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -15,10 +16,17 @@ export default function ChangePassword({ user }) {
   const [loading, setLoading] = useState(false);
 
   const handleChangePassword = async () => {
+    const user = auth.currentUser; // 
+    if (!user) {
+      setMessage("Error: No authenticated user found.");
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       setMessage("Passwords do not match");
       return;
     }
+
     if (newPassword.length < 8) {
       setMessage("Password must be at least 8 characters");
       return;
@@ -26,12 +34,13 @@ export default function ChangePassword({ user }) {
 
     setLoading(true);
     setMessage("");
+
     try {
-      // Re-authenticate with current password
+      // 
       const credential = EmailAuthProvider.credential(user.email, currentPassword);
       await reauthenticateWithCredential(user, credential);
 
-      // Update password
+      //
       await updatePassword(user, newPassword);
 
       setMessage("Password updated successfully!");
@@ -39,6 +48,7 @@ export default function ChangePassword({ user }) {
       setNewPassword("");
       setConfirmPassword("");
     } catch (error) {
+      console.error("Password update error:", error);
       setMessage(`Error: ${error.message}`);
     } finally {
       setLoading(false);
@@ -47,7 +57,11 @@ export default function ChangePassword({ user }) {
 
   return (
     <div className="container" style={{ paddingTop: 20, paddingBottom: 20 }}>
-      <Link to="/settings" className="text-primary" style={{ display: "inline-block", marginBottom: 16 }}>
+      <Link
+        to="/settings"
+        className="text-primary"
+        style={{ display: "inline-block", marginBottom: 16 }}
+      >
         ← Back to Settings
       </Link>
 
@@ -58,7 +72,9 @@ export default function ChangePassword({ user }) {
         </p>
 
         <div className="form-group">
-          <label htmlFor="current" style={{ fontWeight: 700 }}>Current Password</label>
+          <label htmlFor="current" style={{ fontWeight: 700 }}>
+            Current Password
+          </label>
           <input
             id="current"
             type="password"
@@ -70,7 +86,9 @@ export default function ChangePassword({ user }) {
         </div>
 
         <div className="form-group">
-          <label htmlFor="new" style={{ fontWeight: 700 }}>New Password</label>
+          <label htmlFor="new" style={{ fontWeight: 700 }}>
+            New Password
+          </label>
           <input
             id="new"
             type="password"
@@ -82,7 +100,9 @@ export default function ChangePassword({ user }) {
         </div>
 
         <div className="form-group">
-          <label htmlFor="confirm" style={{ fontWeight: 700 }}>Confirm New Password</label>
+          <label htmlFor="confirm" style={{ fontWeight: 700 }}>
+            Confirm New Password
+          </label>
           <input
             id="confirm"
             type="password"
