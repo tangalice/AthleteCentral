@@ -250,7 +250,7 @@ export default function Messages() {
                     textAlign: m.senderId === user.uid ? "right" : "left",
                   }}
                 >
-                  {/* ✅ 显示名字 */}
+                  {/* 显示名字 */}
                   {m.senderId !== user.uid && (
                     <div style={{ fontSize: 12, color: "#555", marginBottom: 2 }}>
                       {userNameMap[m.senderId] || m.senderName || "Unknown"}
