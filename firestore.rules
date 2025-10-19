@@ -1,88 +1,76 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // === Helper Functions ===
+
+    /* ========== Helpers ========== */
     function isAuthed() {
       return request.auth != null;
     }
-    
     function isVerifiedUser() {
-      return isAuthed() && 
-             request.auth.token.email_verified == true;
+      return isAuthed() && request.auth.token.email_verified == true;
     }
-
     function isOwner(userId) {
       return isAuthed() && request.auth.uid == userId;
     }
-
+    function isCoach(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role == "coach";
+    }
     function isParticipant(participants) {
       return isAuthed() && request.auth.uid in participants;
     }
 
-    // === USERS COLLECTION ===
+    /* ========== Users (profile) ========== */
+    match /users/{userId} {
+      allow read, create, update, delete: if isOwner(userId);
 
-		// Everyone can read their own user document — needed for role checks
-		match /users/{requesterId} {
-  		allow read: if request.auth != null && request.auth.uid == requesterId;
-		}
-
-		// Athlete & Coach logic
-		match /users/{userId} {
-
-      // --- Base user document (profile only) ---
-      // allow read: if isOwner(userId) ||
-                  // (isVerifiedUser() &&
-                  // get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "coach");
-                  
-    	// Everyone can see list of users when creating chat
       allow read: if isVerifiedUser();
-      allow create, update, delete: if isOwner(userId);
 
-      // --- Goals Subcollection ---
+      /* ---- Goals subcollection ---- */
       match /goalsList/{goalId} {
-          allow read, write: if isOwner(userId);
-          allow create: if isVerifiedUser() &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "coach";
+        allow read, write: if isOwner(userId);
+        allow create: if isVerifiedUser() && isCoach(request.auth.uid);
       }
 
-      // --- Feedback Subcollection ---
+      /* ---- Feedback subcollection ---- */
       match /feedbackList/{feedbackId} {
-          allow read: if isOwner(userId);
-          allow create: if isVerifiedUser() &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "coach";
+        allow read: if isOwner(userId);
+        allow create: if isVerifiedUser() && isCoach(request.auth.uid);
       }
-		}
 
+      /* ---- Sessions subcollection () ----*/
+      match /sessions/{sessionId} {
+        allow read: if isOwner(userId);
 
-    // === CHATS COLLECTION ===
+        allow create: if isOwner(userId) &&
+                      request.resource.data.userId == userId;
+
+        allow update, delete: if isOwner(userId);
+      }
+    }
+
+    /* ========== Chats ========== */
     match /chats/{chatId} {
       allow read: if isVerifiedUser() && isParticipant(resource.data.participants);
-      allow create: if isVerifiedUser() && 
-                       isParticipant(request.resource.data.participants) &&
-                       request.resource.data.participants.size() >= 2;
-      allow update: if isVerifiedUser() && isParticipant(resource.data.participants);
-      allow delete: if isVerifiedUser() && isParticipant(resource.data.participants);
+
+      allow create: if isVerifiedUser() &&
+                    isParticipant(request.resource.data.participants) &&
+                    request.resource.data.participants.size() >= 2;
+
+      allow update, delete: if isVerifiedUser() && isParticipant(resource.data.participants);
     }
 
-    // === MESSAGES COLLECTION ===
+    /* ========== Messages ========== */
     match /messages/{messageId} {
       allow read: if isVerifiedUser();
-      allow create: if isVerifiedUser() && 
-                       request.auth.uid == request.resource.data.senderId &&
-                       request.resource.data.timestamp != null;
-      allow update: if isVerifiedUser() && 
-                       request.auth.uid == resource.data.senderId;
-      allow delete: if isVerifiedUser() && 
-                       request.auth.uid == resource.data.senderId;
-    }
 
-    // === SESSIONS COLLECTION ===
-    match /sessions/{sessionId} {
-      allow read, write: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
-    }
+      allow create: if isVerifiedUser() &&
+                    request.auth.uid == request.resource.data.senderId &&
+                    request.resource.data.timestamp != null;
 
+      allow update, delete: if isVerifiedUser() &&
+                            request.auth.uid == resource.data.senderId;
+    }
+    
     // === TEAMS COLLECTION ===
     match /teams/{teamId} {
       // Allow read if user is authenticated (simplified for team joining functionality)
@@ -100,15 +88,17 @@ service cloud.firestore {
       allow delete: if isVerifiedUser() && resource.data.createdBy == request.auth.uid;
     }
 
-    // === PUBLIC DATA ===
+    /* ========== Public () ========== */
     match /public/{document=**} {
       allow read: if true;
       allow write: if false;
     }
 
-    // === ADMIN ONLY ===
+    /* ========== Admin () ========== */
     match /admin/{document=**} {
       allow read, write: if false;
     }
+
+    
   }
 }
