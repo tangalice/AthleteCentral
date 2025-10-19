@@ -140,7 +140,7 @@ export default function Teams() {
     }
   };
 
-  // Join team by code (athlete only)
+  // Join team by code (both coaches and athletes)
   const joinTeamByCode = async () => {
     if (!joinCode.trim()) {
       setMessage("Please enter a join code");
@@ -169,11 +169,19 @@ export default function Teams() {
         return;
       }
 
-      // Add user to team
-      await updateDoc(doc(db, "teams", teamDoc.id), {
-        members: arrayUnion(user.uid),
-        athletes: arrayUnion(user.uid)
-      });
+      // Add user to team based on their role
+      const updateData = {
+        members: arrayUnion(user.uid)
+      };
+
+      // Add to appropriate role array
+      if (userRole === "coach") {
+        updateData.coaches = arrayUnion(user.uid);
+      } else if (userRole === "athlete") {
+        updateData.athletes = arrayUnion(user.uid);
+      }
+
+      await updateDoc(doc(db, "teams", teamDoc.id), updateData);
 
       setMessage("Successfully joined team!");
       setJoinCode("");
@@ -278,6 +286,69 @@ export default function Teams() {
     }));
   };
 
+  // Create team chat with all members
+  const createTeamChat = async (team) => {
+    if (!team.members || team.members.length === 0) {
+      setMessage("No members in this team to message");
+      return;
+    }
+
+    try {
+      // Check if a team chat already exists
+      const existingChatsQuery = query(
+        collection(db, 'chats'),
+        where('participants', 'array-contains', user.uid)
+      );
+      const existingChats = await getDocs(existingChatsQuery);
+      
+      // Look for existing team chat with same participants
+      const existingTeamChat = existingChats.docs.find(doc => {
+        const chatData = doc.data();
+        const chatParticipants = chatData.participants || [];
+        const teamMembers = team.members || [];
+        
+        // Check if participants match (same length and all members included)
+        if (chatParticipants.length !== teamMembers.length) return false;
+        
+        return teamMembers.every(memberId => chatParticipants.includes(memberId));
+      });
+
+      if (existingTeamChat) {
+        // Navigate to existing team chat
+        window.location.href = `/messages?chat=${existingTeamChat.id}`;
+        return;
+      }
+
+      // Create new team chat
+      const participants = team.members || [];
+      const teamChatData = {
+        name: `${team.name} Team Chat`,
+        participants: participants,
+        createdBy: user.uid,
+        createdAt: new Date(),
+        lastMessageTime: new Date(),
+        lastMessage: '',
+        unreadCounts: participants.reduce((acc, id) => { acc[id] = 0; return acc; }, {}),
+        readBy: { [user.uid]: new Date() },
+        isTeamChat: true,
+        teamId: team.id
+      };
+
+      const docRef = await addDoc(collection(db, 'chats'), teamChatData);
+      
+      setMessage("Team chat created successfully!");
+      
+      // Navigate to the new chat
+      setTimeout(() => {
+        window.location.href = `/messages?chat=${docRef.id}`;
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error creating team chat:', error);
+      setMessage(`Error creating team chat: ${error.message}`);
+    }
+  };
+
   // Toggle user selection for team creation
   const toggleUserSelection = (userData) => {
     setNewTeam(prev => ({
@@ -303,7 +374,7 @@ export default function Teams() {
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
         <h1 style={{ marginBottom: 8 }}>Teams</h1>
         <p className="text-muted" style={{ marginBottom: 24 }}>
-          {isCoach ? "Manage your teams and create new ones" : "Join teams and view your current teams"}
+          {isCoach ? "Manage your teams, create new ones, and join other teams" : "Join teams and view your current teams"}
         </p>
 
         {/* Coach Actions */}
@@ -320,19 +391,17 @@ export default function Teams() {
           </div>
         )}
 
-        {/* Athlete Actions */}
-        {!isCoach && (
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => setShowJoinTeam(true)}
-              >
-                Join Team by Code
-              </button>
-            </div>
+        {/* Join Team Actions (Both Coaches and Athletes) */}
+        <div className="card" style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowJoinTeam(true)}
+            >
+              Join Team by Code
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Create Team Modal */}
         {showCreateTeam && (
@@ -551,13 +620,22 @@ export default function Teams() {
                         {team.createdBy === user.uid && <span className="text-primary">(You created this team)</span>}
                       </div>
                     </div>
-                    <button
-                      className="btn btn-outline text-danger"
-                      onClick={() => leaveTeam(team.id)}
-                      style={{ marginLeft: 16 }}
-                    >
-                      Leave
-                    </button>
+                    <div style={{ display: "flex", gap: 8, marginLeft: 16 }}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => createTeamChat(team)}
+                        style={{ fontSize: 14, padding: "6px 12px" }}
+                      >
+                        Send Message to Team
+                      </button>
+                      <button
+                        className="btn btn-outline text-danger"
+                        onClick={() => leaveTeam(team.id)}
+                        style={{ fontSize: 14, padding: "6px 12px" }}
+                      >
+                        Leave
+                      </button>
+                    </div>
                   </div>
 
                   {/* Team Members Management (Coach only) */}
