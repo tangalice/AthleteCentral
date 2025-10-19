@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { auth, db } from "../../firebase";
 import { updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { GRADES, SPORTS, EXPERIENCE_LEVELS } from "../../constants/constants";
+import { GRADES, SPORTS, EXPERIENCE_LEVELS, TWILIO_INFO } from "../../constants/constants";
 
 export default function EditProfile({ user }) {
   const navigate = useNavigate();
@@ -12,7 +12,7 @@ export default function EditProfile({ user }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-
+  
   // Get user role to determine which fields to show
   const userRole = user?.role;
   const isCoach = userRole === "coach";
@@ -28,6 +28,8 @@ export default function EditProfile({ user }) {
     experience: "",
     sportDetails: "",
     goals: "",
+    textNotifications: false,
+    phoneNumber: "",
   });
 
   // fetch profile on mount
@@ -54,6 +56,8 @@ export default function EditProfile({ user }) {
           experience: d.experience ?? "",
           sportDetails: d.sportDetails ?? "",
           goals: d.goals ?? "",
+          textNotifications: d.textNotifications ?? false,
+          phoneNumber: d.phoneNumber ?? "",
         });
       } catch (e) {
         setMessage(`Error loading profile: ${e.message}`);
@@ -73,7 +77,7 @@ export default function EditProfile({ user }) {
       if (profileData.name) {
         await updateProfile(auth.currentUser, { displayName: profileData.name });
       }
-
+      
       // upsert to Firestore
       await setDoc(
         doc(db, "users", uid),
@@ -88,6 +92,8 @@ export default function EditProfile({ user }) {
           experience: profileData.experience,
           sportDetails: profileData.sportDetails,
           goals: profileData.goals,
+          textNotifications: profileData.textNotifications,
+          phoneNumber: profileData.phoneNumber,
           updatedAt: serverTimestamp(),
         },
         { merge: true }

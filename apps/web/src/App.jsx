@@ -29,7 +29,10 @@ import SuggestGoals from "./components/SuggestGoals";
 import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
 import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
 import CoachFeedbackPage from "./components/CoachFeedbackPage";
-
+import Results from './Billa_UI_Pages/Results';
+import EnterResults from './Billa_UI_Pages/EnterResults';
+import ViewResults from './Billa_UI_Pages/ViewResults';
+import CoachGoals from './Billa_UI_Pages/CoachGoals';
 /* ---------------- Protected wrapper ---------------- */
 function ProtectedRoute({ children, user, requireVerified = true }) {
   if (!user) return <Navigate to="/login" replace />;
@@ -48,7 +51,9 @@ function AppLayout({ user, userRole, onLogout }) {
              root === "profile"  ? "profile"  :
              root === "messages" ? "messages" : 
              root === "teams"    ? "teams"    :
+             root === "results"  ? "results"  :
              root === "goals"    ? "goals"    :
+             root === "view-athlete-goals" ? "view-athlete-goals" :
              root === "coach-feedback" ? "coach-feedback" :
              root === "athlete-feedback" ? "athlete-feedback" :
              root === "suggest-goals" ? "suggest-goals" :
@@ -277,6 +282,15 @@ export default function App() {
                      </ProtectedRoute>
                    ),
                  },
+                 {
+                  path: "results",
+                  element: (
+                    <ProtectedRoute user={user}>
+                      <Results user={mergedUser} userRole={userRole} />
+                    </ProtectedRoute>
+                  ),
+                },
+                
 
         {
           path: "goals",
@@ -284,6 +298,14 @@ export default function App() {
             <ProtectedRoute user={user}>
               <Goals user={user} />
              </ProtectedRoute>
+          ),
+        },
+        {
+          path: "view-athlete-goals",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <CoachGoals user={mergedUser} /> : <Navigate to="/goals" replace />}
+            </ProtectedRoute>
           ),
         },
 

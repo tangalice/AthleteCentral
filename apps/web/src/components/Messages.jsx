@@ -1,5 +1,5 @@
-// src/components/Messages.jsx
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   collection,
   query,
@@ -20,6 +20,7 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   const [user, authLoading] = useAuthState(auth);
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
+  const [searchParams] = useSearchParams();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [newChatName, setNewChatName] = useState('');
@@ -112,6 +113,18 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     });
     return () => unsubscribe();
   }, [user]);
+
+  // Handle URL parameter to open specific chat
+  useEffect(() => {
+    const chatId = searchParams.get('chat');
+    if (chatId && chats.length > 0) {
+      const chat = chats.find(c => c.id === chatId);
+      if (chat) {
+        setSelectedChat(chat);
+        markChatAsRead(chatId);
+      }
+    }
+  }, [searchParams, chats]);
 
   // Load messages and participants for selected chat
   useEffect(() => {

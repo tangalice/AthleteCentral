@@ -2,11 +2,14 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { auth, db } from "../../firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+//import twilio from "twilio";
+//import { TWILIO_INFO } from "../../constants/constants";
 
 export default function Notifications() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  //const client = Twilio(TWILIO_INFO.ACCOUNT_SID, TWILIO_INFO.AUTH_TOKEN);
   
   const [notificationSettings, setNotificationSettings] = useState({
     textNotifications: false,
@@ -46,6 +49,22 @@ export default function Notifications() {
     
     setSaving(true);
     setMessage("");
+
+    if (notificationSettings.textNotifications && (notificationSettings.phoneNumber.trim() === "" )) {
+      throw new Error("Phone number is required to enable text notifications.");
+    }
+
+    const snap = await getDoc(doc(db, "users", auth.currentUser.uid));
+    const d = snap.exists() ? snap.data() : {};
+    if (notificationSettings.textNotifications && (d.textNotifications === false || d.textNotifications === undefined) && notificationSettings.phoneNumber.trim() !== "") {
+      // Just enabled text notifications, show alert
+      setMessage("You have enabled text notifications. A test message will be sent to your phone shortly. If you do not receive it, please ensure you have entered the correct phone number.");
+      /*const message = await client.messages.create({
+        body: "You have successfully enabled text notifications for AthleteHub",
+        from: TWILIO_INFO.FROM_PHONE,
+        to: notificationSettings.phoneNumber,
+      });*/
+    }
 
     try {
       await setDoc(
