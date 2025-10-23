@@ -35,6 +35,8 @@ import Teams from "./components/Teams";
 import TopBar from "./components/TopBar";
 import Goals from "./components/Goals";
 import SuggestGoals from "./components/SuggestGoals";
+
+import Calendar from "./components/Calendar";
 import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
 import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
 import CoachFeedbackPage from "./components/CoachFeedbackPage";
@@ -44,6 +46,8 @@ import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
 import CoachGoals from './Billa_UI_Pages/CoachGoals';
 import AthleteToolsPage from "./pages/AthleteToolsPage";
+
+import HealthStatusPage from "./pages/HealthStatusPage";
 
 /* ---------------- Protected wrapper ---------------- */
 
@@ -494,22 +498,38 @@ export default function App() {
           ),
         },
 
-                 {
-                   path: "teams",
-                   element: (
-                     <ProtectedRoute user={user}>
-                       <Teams />
-                     </ProtectedRoute>
-                   ),
-                 },
-                 {
-                  path: "results",
-                  element: (
-                    <ProtectedRoute user={user}>
-                      <Results user={mergedUser} userRole={userRole} />
-                    </ProtectedRoute>
-                  ),
-                },
+        {
+          path: "teams",
+          element: (
+            <ProtectedRoute user={user}>
+              <Teams />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "calendar",
+          element: (
+            <ProtectedRoute user={user}>
+              <Calendar userRole={userRole} user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+        path: "health-status",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? <HealthStatusPage /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+        },
+        {
+        path: "results",
+        element: (
+          <ProtectedRoute user={user}>
+            <Results user={mergedUser} userRole={userRole} />
+          </ProtectedRoute>
+        ),
+        },
                 
 
 
@@ -591,3 +611,4 @@ export default function App() {
 
   return <RouterProvider router={router} />;
 }
+

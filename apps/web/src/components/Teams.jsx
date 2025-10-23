@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
 import { collection, query, where, getDocs, addDoc, doc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from "firebase/firestore";
 
+import { setDoc } from "firebase/firestore";
+
+
 export default function Teams() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
@@ -129,8 +132,24 @@ export default function Teams() {
         athletes: newTeam.selectedUsers.map(u => u.id)
       };
 
-      await addDoc(collection(db, "teams"), teamData);
-      
+      //  
+      const docRef = await addDoc(collection(db, "teams"), teamData);
+
+      //   athletes 
+      for (const athlete of newTeam.selectedUsers) {
+        try {
+          const athleteRef = doc(db, "teams", docRef.id, "athletes", athlete.id);
+          await setDoc(athleteRef, {
+            name: athlete.displayName || athlete.email || "Unnamed Athlete",
+            email: athlete.email || "",
+            healthStatus: "active", //  active
+            createdAt: new Date(),
+          });
+        } catch (error) {
+          console.error(`Failed to create athlete doc for ${athlete.id}:`, error);
+        }
+      }
+
       setMessage("Team created successfully!");
       setShowCreateTeam(false);
       setNewTeam({ name: "", description: "", joinCode: "", selectedUsers: [] });
@@ -182,6 +201,23 @@ export default function Teams() {
       }
 
       await updateDoc(doc(db, "teams", teamDoc.id), updateData);
+
+      try {
+        const athleteRef = doc(db, "teams", teamDoc.id, "athletes", user.uid);
+        const userSnap = await getDoc(doc(db, "users", user.uid));
+        const userData = userSnap.exists() ? userSnap.data() : {};
+      
+        await setDoc(athleteRef, {
+          name: userData.displayName || user.displayName || "Unnamed Athlete",
+          email: user.email,
+          healthStatus: "active",
+          createdAt: new Date(),
+        }, { merge: true });
+      
+        console.log("✅ Athlete subdocument created for", user.uid);
+      } catch (err) {
+        console.error("❌ Failed to create athlete document:", err);
+      }
 
       setMessage("Successfully joined team!");
       setJoinCode("");
@@ -628,6 +664,17 @@ export default function Teams() {
                       >
                         Send Message to Team
                       </button>
+
+                      {isCoach && (
+                        <button
+                        className="btn btn-outline"
+                        onClick={() => window.location.href = `/health-status?teamId=${team.id}`}
+                        style={{ fontSize: 14, padding: "6px 12px" }}
+                      >
+                        Manage Health
+                      </button>
+                      )}
+
                       <button
                         className="btn btn-outline text-danger"
                         onClick={() => leaveTeam(team.id)}

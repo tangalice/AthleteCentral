@@ -2,7 +2,8 @@
 import { useLoaderData, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { auth, db } from "../firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+
+import { collection, query, where, getDocs, doc, onSnapshot, orderBy, limit } from "firebase/firestore";
 
 export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const data = useLoaderData();
@@ -10,24 +11,206 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const displayName = data?.displayName || user?.email || "";
   const [inTeam, setInTeam] = useState(true);
 
+  const [healthStatus, setHealthStatus] = useState("loading");
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [teamId, setTeamId] = useState(null);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+
+  // Fetch team and subscribe to health status (athlete only)
+  useEffect(() => {
+    if (userRole !== "athlete" || !auth.currentUser) return;
+
+    const fetchTeamAndListen = async () => {
+      try {
+        const teamsQuery = query(
+          collection(db, "teams"),
+          where("athletes", "array-contains", auth.currentUser.uid)
+        );
+        const snapshot = await getDocs(teamsQuery);
+
+        if (snapshot.empty) {
+          setHealthStatus("no team");
+          return;
+        }
+
+        const teamDoc = snapshot.docs[0];
+        const teamId = teamDoc.id;
+
+        const athleteRef = doc(db, "teams", teamId, "athletes", auth.currentUser.uid);
+        const unsub = onSnapshot(athleteRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setHealthStatus(data.healthStatus || "Active");
+          } else {
+            setHealthStatus("Active");
+          }
+        });
+
+        return () => unsub();
+      } catch (error) {
+        console.error("Error listening to health status:", error);
+        setHealthStatus("loading fail");
+      }
+    };
+
+    fetchTeamAndListen();
+  }, [userRole]);
+
+  // Check team membership and get team ID
   useEffect(() => {
     const checkTeamMembership = async () => {
       if (!auth.currentUser) return;
       try {
+        // Check for team membership based on role
         const q = query(
           collection(db, "teams"),
-          where("members", "array-contains", auth.currentUser.uid)
+          where(
+            userRole === "coach" ? "coaches" : "athletes",
+            "array-contains",
+            auth.currentUser.uid
+          )
         );
         const snap = await getDocs(q);
-        setInTeam(!snap.empty);
+        
+        if (!snap.empty) {
+          const teamDoc = snap.docs[0];
+          setTeamId(teamDoc.id);
+          setInTeam(true);
+        } else {
+          // Fallback check for 'members' field
+          const membersQuery = query(
+            collection(db, "teams"),
+            where("members", "array-contains", auth.currentUser.uid)
+          );
+          const membersSnap = await getDocs(membersQuery);
+          
+          if (!membersSnap.empty) {
+            const teamDoc = membersSnap.docs[0];
+            setTeamId(teamDoc.id);
+            setInTeam(true);
+          } else {
+            setInTeam(false);
+          }
+        }
       } catch (e) {
         console.error("Error checking team membership:", e);
         setInTeam(true);
       }
     };
     checkTeamMembership();
-  }, []);
+  }, [userRole]);
 
+  // Subscribe to upcoming events (next 7 days)
+  useEffect(() => {
+    if (!teamId) {
+      setLoadingEvents(false);
+      return;
+    }
+
+    const now = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
+    // Query for events in the next 7 days
+    const eventsQuery = query(
+      collection(db, "teams", teamId, "events"),
+      orderBy("datetime", "asc")
+    );
+
+    const unsubscribe = onSnapshot(
+      eventsQuery,
+      (snapshot) => {
+        const events = [];
+        snapshot.docs.forEach((doc) => {
+          const eventData = doc.data();
+          const eventDate = eventData.datetime?.toDate();
+          
+          // Filter for events in the next 7 days
+          if (eventDate && eventDate >= now && eventDate <= sevenDaysFromNow) {
+            events.push({
+              id: doc.id,
+              ...eventData,
+              datetime: eventDate,
+            });
+          }
+        });
+        
+        setUpcomingEvents(events);
+        setLoadingEvents(false);
+      },
+      (error) => {
+        console.error("Error fetching events:", error);
+        setLoadingEvents(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [teamId]);
+
+  // Format date for event display
+  const formatEventDate = (date) => {
+    if (!date) return "";
+    
+    const now = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Check if today
+    if (date.toDateString() === now.toDateString()) {
+      return `Today at ${date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })}`;
+    }
+    
+    // Check if tomorrow
+    if (date.toDateString() === tomorrow.toDateString()) {
+      return `Tomorrow at ${date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })}`;
+    }
+    
+    // Other days
+    return date.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  // Get event type icon
+  const getEventTypeIcon = (type) => {
+    switch (type) {
+      case "practice":
+        return "🏃";
+      case "game":
+        return "🏆";
+      case "meeting":
+        return "📋";
+      default:
+        return "📅";
+    }
+  };
+
+  // Get event type color
+  const getEventTypeColor = (type) => {
+    switch (type) {
+      case "practice":
+        return "#10b981";
+      case "game":
+        return "#ef4444";
+      case "meeting":
+        return "#3b82f6";
+      default:
+        return "#6b7280";
+    }
+  };
   // --- Color tokens ---
   const brand = "var(--brand-primary)";
   const brandTint = "var(--brand-primary-50)";
@@ -92,6 +275,24 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
           Dashboard
         </p>
 
+        {userRole === "athlete" && (
+          <p
+            style={{
+              fontSize: 16,
+              marginBottom: 12,
+              color:
+                healthStatus === "injured"
+                  ? "#dc2626" 
+                  : healthStatus === "unavailable"
+                  ? "#d97706" 
+                  : "#047857",
+            }}
+          >
+            Health Status: 
+            <strong> {healthStatus}</strong>
+          </p>
+        )}
+
         <div
           style={{
             height: 4,
@@ -126,6 +327,165 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
             >
               Go to Teams Page
             </button>
+          </div>
+        )}
+
+        {/* ---- Upcoming Events Reminder Section ---- */}
+        {inTeam && (
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 1000,
+              marginBottom: 32,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 16,
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: 20,
+                  fontWeight: 800,
+                  color: ink900,
+                  margin: 0,
+                }}
+              >
+                📅 Upcoming Events (Next 7 Days)
+              </h3>
+              <button
+                className="btn btn-sm btn-outline"
+                onClick={() => navigate("/calendar")}
+                style={{
+                  fontSize: 14,
+                  padding: "6px 12px",
+                  borderColor: brand,
+                  color: brand,
+                }}
+              >
+                View Full Calendar →
+              </button>
+            </div>
+
+            {loadingEvents ? (
+              <div className="card" style={{ padding: 20, textAlign: "center" }}>
+                <p className="text-muted">Loading events...</p>
+              </div>
+            ) : upcomingEvents.length === 0 ? (
+              <div
+                className="card"
+                style={{
+                  padding: 24,
+                  background: "#f9fafb",
+                  borderStyle: "dashed",
+                  textAlign: "center",
+                }}
+              >
+                <p className="text-muted" style={{ margin: 0 }}>
+                  No upcoming events in the next 7 days
+                </p>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gap: 12,
+                }}
+              >
+                {upcomingEvents.slice(0, 5).map((event) => (
+                  <div
+                    key={event.id}
+                    className="card"
+                    style={{
+                      padding: 16,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      borderLeft: `4px solid ${getEventTypeColor(event.type)}`,
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                    }}
+                    onClick={() => navigate("/calendar")}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateX(4px)";
+                      e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateX(0)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                      <span style={{ fontSize: 24 }}>
+                        {getEventTypeIcon(event.type)}
+                      </span>
+                      <div>
+                        <h4
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 700,
+                            color: ink900,
+                            margin: 0,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {event.title}
+                        </h4>
+                        <p
+                          style={{
+                            fontSize: 14,
+                            color: "#6b7280",
+                            margin: 0,
+                          }}
+                        >
+                          {formatEventDate(event.datetime)}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: "4px 8px",
+                        background: getEventTypeColor(event.type) + "20",
+                        color: getEventTypeColor(event.type),
+                        borderRadius: 4,
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {event.type}
+                    </span>
+                  </div>
+                ))}
+                {upcomingEvents.length > 5 && (
+                  <div
+                    className="card"
+                    style={{
+                      padding: 12,
+                      textAlign: "center",
+                      background: "#f9fafb",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => navigate("/calendar")}
+                  >
+                    <p
+                      style={{
+                        margin: 0,
+                        color: brand,
+                        fontWeight: 600,
+                        fontSize: 14,
+                      }}
+                    >
+                      +{upcomingEvents.length - 5} more events →
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -169,6 +529,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
             style={{ ...cardBase }}
             onMouseEnter={onHover}
             onMouseLeave={offHover}
+            onClick={() => navigate("/messages")}
           >
             <h3 style={{ marginBottom: 8, color: ink900 }}>Messages</h3>
             <p
@@ -190,6 +551,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
             style={{ ...cardBase }}
             onMouseEnter={onHover}
             onMouseLeave={offHover}
+            onClick={() => navigate("/profile")}
           >
             <h3 style={{ marginBottom: 8, color: ink900 }}>Profile</h3>
             <p
@@ -249,3 +611,4 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     </div>
   );
 }
+

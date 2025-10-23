@@ -18,6 +18,18 @@ service cloud.firestore {
     function isParticipant(participants) {
       return isAuthed() && request.auth.uid in participants;
     }
+    // New helper functions for teams
+    function isTeamMember(teamId) {
+      return isVerifiedUser() && (
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members ||
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.athletes ||
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches
+      );
+    }
+    function isTeamCoach(teamId) {
+      return isVerifiedUser() && 
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches;
+    }
 
     /* ========== Users (profile) ========== */
     match /users/{userId} {
@@ -86,6 +98,36 @@ service cloud.firestore {
       
       // Allow delete only if user created the team
       allow delete: if isVerifiedUser() && resource.data.createdBy == request.auth.uid;
+
+      /* ========== Team Events Subcollection ========== */
+      match /events/{eventId} {
+        // Allow read for all team members (athletes and coaches)
+        allow read: if isTeamMember(teamId);
+        
+        // Only coaches can create events
+        allow create: if isTeamCoach(teamId) &&
+                        request.resource.data.createdBy == request.auth.uid &&
+                        request.resource.data.datetime != null &&
+                        request.resource.data.title != null;
+        
+        // Only the coach who created the event can update it
+        allow update: if isTeamCoach(teamId) &&
+                        resource.data.createdBy == request.auth.uid;
+        
+        // Only the coach who created the event can delete it
+        allow delete: if isTeamCoach(teamId) &&
+                        resource.data.createdBy == request.auth.uid;
+      }
+
+      /* ========== Team Athletes Subcollection (for health status) ========== */
+      match /athletes/{athleteId} {
+        // Allow read for team members
+        allow read: if isTeamMember(teamId);
+        
+        // Allow athletes to update their own health status
+        allow write: if isVerifiedUser() && 
+                       (request.auth.uid == athleteId || isTeamCoach(teamId));
+      }
     }
 
     /* ========== Public () ========== */
