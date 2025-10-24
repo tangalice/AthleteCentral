@@ -14,11 +14,11 @@ export default function AthleteFeedbackPage({ user }) {
   const [filter, setFilter] = useState({
     Practice: true,
     Competition: true,
-    Acknowledged: true, // 🟢 added this filter
+    Acknowledged: true,
   });
   const [loading, setLoading] = useState(true);
 
-  // 🔄 Real-time listener for athlete's feedbackList
+  // Real-time listener for athlete's feedbackList
   useEffect(() => {
     if (!user) return;
 
@@ -36,13 +36,13 @@ export default function AthleteFeedbackPage({ user }) {
     return () => unsub();
   }, [user]);
 
-  // 🧩 Acknowledge feedback handler
+  // Acknowledge feedback handler
   const handleAcknowledge = async (id) => {
     try {
       const ref = doc(db, "users", user.uid, "feedbackList", id);
       await updateDoc(ref, {
         acknowledged: true,
-        category: "acknowledged", // 🟢 move to new category
+        category: "acknowledged", // move to new category
         acknowledgedAt: new Date(),
       });
     } catch (err) {
@@ -50,7 +50,7 @@ export default function AthleteFeedbackPage({ user }) {
     }
   };
 
-  // 🧮 Filter based on checkbox selection
+  // Filter based on checkbox selection
   const filteredFeedback = feedback.filter((f) => {
     const categoryName =
       f.category.charAt(0).toUpperCase() + f.category.slice(1);
@@ -64,7 +64,7 @@ export default function AthleteFeedbackPage({ user }) {
           My Feedback
         </h2>
 
-        {/* 🧭 Filter Buttons */}
+        {/* Filter Buttons */}
         <div
           style={{
             display: "flex",
@@ -96,7 +96,7 @@ export default function AthleteFeedbackPage({ user }) {
           ))}
         </div>
 
-        {/* 📋 Feedback List */}
+        {/* Feedback List */}
         {loading ? (
           <p>Loading feedback...</p>
         ) : filteredFeedback.length === 0 ? (
@@ -149,7 +149,7 @@ export default function AthleteFeedbackPage({ user }) {
                   )}
                 </div>
 
-                {/* ✅ Button or Acknowledged Label */}
+                {/* Button or Acknowledged Label */}
                 <div style={{ marginLeft: 10 }}>
                   {item.category === "acknowledged" ? (
                     <span
