@@ -1,0 +1,146 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ========== Helpers ========== */
+    function isAuthed() {
+      return request.auth != null;
+    }
+    function isVerifiedUser() {
+      return isAuthed() && request.auth.token.email_verified == true;
+    }
+    function isOwner(userId) {
+      return isAuthed() && request.auth.uid == userId;
+    }
+    function isCoach(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role == "coach";
+    }
+    function isParticipant(participants) {
+      return isAuthed() && request.auth.uid in participants;
+    }
+    // New helper functions for teams
+    function isTeamMember(teamId) {
+      return isVerifiedUser() && (
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members ||
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.athletes ||
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches
+      );
+    }
+    function isTeamCoach(teamId) {
+      return isVerifiedUser() && 
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches;
+    }
+
+    /* ========== Users (profile) ========== */
+    match /users/{userId} {
+      allow read, create, update, delete: if isOwner(userId);
+
+      allow read: if isVerifiedUser();
+
+      /* ---- Goals subcollection ---- */
+      match /goalsList/{goalId} {
+        allow read, write: if isOwner(userId);
+        allow create: if isVerifiedUser() && isCoach(request.auth.uid);
+      }
+
+      /* ---- Feedback subcollection ---- */
+      match /feedbackList/{feedbackId} {
+        allow read: if isOwner(userId);
+        allow create: if isVerifiedUser() && isCoach(request.auth.uid);
+      }
+
+      /* ---- Sessions subcollection () ----*/
+      match /sessions/{sessionId} {
+        allow read: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                      request.resource.data.userId == userId;
+
+        allow update, delete: if isOwner(userId);
+      }
+    }
+
+    /* ========== Chats ========== */
+    match /chats/{chatId} {
+      allow read: if isVerifiedUser() && isParticipant(resource.data.participants);
+
+      allow create: if isVerifiedUser() &&
+                    isParticipant(request.resource.data.participants) &&
+                    request.resource.data.participants.size() >= 2;
+
+      allow update, delete: if isVerifiedUser() && isParticipant(resource.data.participants);
+    }
+
+    /* ========== Messages ========== */
+    match /messages/{messageId} {
+      allow read: if isVerifiedUser();
+
+      allow create: if isVerifiedUser() &&
+                    request.auth.uid == request.resource.data.senderId &&
+                    request.resource.data.timestamp != null;
+
+      allow update, delete: if isVerifiedUser() &&
+                            request.auth.uid == resource.data.senderId;
+    }
+    
+    // === TEAMS COLLECTION ===
+    match /teams/{teamId} {
+      // Allow read if user is authenticated (simplified for team joining functionality)
+      allow read: if isVerifiedUser();
+      
+      // Allow create if user is authenticated and is in the members list
+      allow create: if isVerifiedUser() && 
+                       request.auth.uid in request.resource.data.members &&
+                       request.resource.data.createdBy == request.auth.uid;
+      
+      // Allow update if user is authenticated (simplified for team joining)
+      allow update: if isVerifiedUser();
+      
+      // Allow delete only if user created the team
+      allow delete: if isVerifiedUser() && resource.data.createdBy == request.auth.uid;
+
+      /* ========== Team Events Subcollection ========== */
+      match /events/{eventId} {
+        // Allow read for all team members (athletes and coaches)
+        allow read: if isTeamMember(teamId);
+        
+        // Only coaches can create events
+        allow create: if isTeamCoach(teamId) &&
+                        request.resource.data.createdBy == request.auth.uid &&
+                        request.resource.data.datetime != null &&
+                        request.resource.data.title != null;
+        
+        // Only the coach who created the event can update it
+        allow update: if isTeamCoach(teamId) &&
+                        resource.data.createdBy == request.auth.uid;
+        
+        // Only the coach who created the event can delete it
+        allow delete: if isTeamCoach(teamId) &&
+                        resource.data.createdBy == request.auth.uid;
+      }
+
+      /* ========== Team Athletes Subcollection (for health status) ========== */
+      match /athletes/{athleteId} {
+        // Allow read for team members
+        allow read: if isTeamMember(teamId);
+        
+        // Allow athletes to update their own health status
+        allow write: if isVerifiedUser() && 
+                       (request.auth.uid == athleteId || isTeamCoach(teamId));
+      }
+    }
+
+    /* ========== Public () ========== */
+    match /public/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    /* ========== Admin () ========== */
+    match /admin/{document=**} {
+      allow read, write: if false;
+    }
+
+    
+  }
+}
