@@ -73,12 +73,6 @@ export default function TopBar({
           <Link to="/teams" style={linkStyle(activeTab === "teams")}>
             Teams
           </Link>
-<<<<<<< HEAD
-=======
-          <Link to="/calendar" style={linkStyle(activeTab === "calendar")}>
-            Calendar
-          </Link>
->>>>>>> ad173ad (Added Calendar Creation Feature; merge with Jennie's work)
 
           {/* RESULTS TAB - Available to BOTH */}
           <Link to="/results" style={linkStyle(activeTab === "results")}>

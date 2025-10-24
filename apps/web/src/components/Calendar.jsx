@@ -151,6 +151,45 @@ export default function Calendar({ userRole, user }) {
       console.error("Error deleting event:", error);
     }
   };
+  // Edit event (coach only)
+const handleEditEvent = async (event) => {
+  const newTitle = prompt("Edit event title:", event.title);
+  if (newTitle === null) return; // user cancelled
+
+  const newDate = prompt(
+    "Edit event date (YYYY-MM-DD):",
+    event.datetime.toISOString().split("T")[0]
+  );
+  if (!newDate) return;
+
+  const newTime = prompt(
+    "Edit event time (HH:MM):",
+    event.datetime.toTimeString().slice(0, 5)
+  );
+  if (!newTime) return;
+
+  const newDescription = prompt(
+    "Edit event description:",
+    event.description || ""
+  );
+
+  try {
+    const eventRef = doc(db, "teams", teamId, "events", event.id);
+    const newDatetime = new Date(`${newDate}T${newTime}`);
+
+    await updateDoc(eventRef, {
+      title: newTitle.trim(),
+      description: newDescription.trim(),
+      datetime: newDatetime,
+    });
+
+    alert("Event updated successfully!");
+  } catch (error) {
+    console.error("Error updating event:", error);
+    alert("Failed to update event.");
+  }
+};
+
 
   // Format date for display
   const formatEventDate = (date) => {
@@ -445,129 +484,117 @@ export default function Calendar({ userRole, user }) {
           </div>
         )}
 
-        {/* Upcoming Events */}
-        <div>
-          <h3
+        {upcomingEvents.map((event) => (
+          <div
+            key={event.id}
+            className="card"
             style={{
-              fontSize: 22,
-              fontWeight: 700,
-              marginBottom: 20,
-              color: "#111827",
+              padding: 20,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "start",
+              borderLeft: `4px solid ${getEventTypeColor(event.type)}`,
             }}
           >
-            Upcoming Events
-          </h3>
-
-          {upcomingEvents.length === 0 ? (
-            <div
-              className="card"
-              style={{
-                padding: 40,
-                textAlign: "center",
-                background: "#f9fafb",
-              }}
-            >
-              <p className="text-muted" style={{ fontSize: 16 }}>
-                No upcoming events scheduled
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: 16 }}>
-              {upcomingEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="card"
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 8,
+                }}
+              >
+                <h4
                   style={{
-                    padding: 20,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "start",
-                    borderLeft: `4px solid ${getEventTypeColor(event.type)}`,
+                    fontSize: 18,
+                    fontWeight: 700,
+                    color: "#111827",
+                    margin: 0,
                   }}
                 >
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <h4
-                        style={{
-                          fontSize: 18,
-                          fontWeight: 700,
-                          color: "#111827",
-                          margin: 0,
-                        }}
-                      >
-                        {event.title}
-                      </h4>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          padding: "4px 8px",
-                          background: getEventTypeColor(event.type) + "20",
-                          color: getEventTypeColor(event.type),
-                          borderRadius: 4,
-                          fontWeight: 600,
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        {event.type}
-                      </span>
-                    </div>
-                    <p
-                      style={{
-                        fontSize: 15,
-                        color: "#4b5563",
-                        marginBottom: 4,
-                      }}
-                    >
-                      📅 {formatEventDate(event.datetime)}
-                    </p>
-                    {event.description && (
-                      <p
-                        style={{
-                          fontSize: 14,
-                          color: "#6b7280",
-                          marginTop: 8,
-                        }}
-                      >
-                        {event.description}
-                      </p>
-                    )}
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: "#9ca3af",
-                        marginTop: 8,
-                      }}
-                    >
-                      Created by {event.createdByName}
-                    </p>
-                  </div>
+                  {event.title}
+                </h4>
+                <span
+                  style={{
+                    fontSize: 12,
+                    padding: "4px 8px",
+                    background: getEventTypeColor(event.type) + "20",
+                    color: getEventTypeColor(event.type),
+                    borderRadius: 4,
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {event.type}
+                </span>
+              </div>
 
-                  {userRole === "coach" && (
-                    <button
-                      className="btn btn-sm btn-outline"
-                      onClick={() => handleDeleteEvent(event.id)}
-                      style={{
-                        color: "#ef4444",
-                        borderColor: "#ef4444",
-                        padding: "6px 12px",
-                        fontSize: 14,
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              ))}
+              <p
+                style={{
+                  fontSize: 15,
+                  color: "#4b5563",
+                  marginBottom: 4,
+                }}
+              >
+                📅 {formatEventDate(event.datetime)}
+              </p>
+
+              {event.description && (
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: "#6b7280",
+                    marginTop: 8,
+                  }}
+                >
+                  {event.description}
+                </p>
+              )}
+
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "#9ca3af",
+                  marginTop: 8,
+                }}
+              >
+                Created by {event.createdByName}
+              </p>
             </div>
-          )}
-        </div>
+
+            {userRole === "coach" && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn btn-sm btn-outline"
+                  onClick={() => handleEditEvent(event)}
+                  style={{
+                    color: "#3b82f6",
+                    borderColor: "#3b82f6",
+                    padding: "6px 12px",
+                    fontSize: 14,
+                  }}
+                >
+                  Edit
+                </button>
+
+                <button
+                  className="btn btn-sm btn-outline"
+                  onClick={() => handleDeleteEvent(event.id)}
+                  style={{
+                    color: "#ef4444",
+                    borderColor: "#ef4444",
+                    padding: "6px 12px",
+                    fontSize: 14,
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+
 
         {/* Past Events Section (optional) */}
         {events.filter((e) => e.datetime < new Date()).length > 0 && (

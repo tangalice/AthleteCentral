@@ -359,7 +359,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
               </h3>
               <button
                 className="btn btn-sm btn-outline"
-                onClick={() => navigate("/calendar")}
+                onClick={() => navigate(userRole === "coach" ? "/calendar" : "/schedule")}
                 style={{
                   fontSize: 14,
                   padding: "6px 12px",
@@ -367,7 +367,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
                   color: brand,
                 }}
               >
-                View Full Calendar →
+                View Full {userRole === "coach" ? "Calendar" : "Schedule"} →
               </button>
             </div>
 
@@ -409,7 +409,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
                       cursor: "pointer",
                       transition: "all 0.2s ease",
                     }}
-                    onClick={() => navigate("/calendar")}
+                    onClick={() => navigate(userRole === "coach" ? "/calendar" : "/schedule")}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.transform = "translateX(4px)";
                       e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
