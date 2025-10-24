@@ -46,7 +46,7 @@ import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
 import CoachGoals from './Billa_UI_Pages/CoachGoals';
 import AthleteToolsPage from "./pages/AthleteToolsPage";
-import Schedule from "./components/Schedule";
+
 import HealthStatusPage from "./pages/HealthStatusPage";
 
 /* ---------------- Protected wrapper ---------------- */
@@ -511,18 +511,6 @@ export default function App() {
           element: (
             <ProtectedRoute user={user}>
               <Calendar userRole={userRole} user={mergedUser} />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "schedule",
-          element: (
-            <ProtectedRoute user={user}>
-              {userRole === "athlete" ? (
-                <Schedule userRole={userRole} user={mergedUser} />
-              ) : (
-                <Navigate to="/dashboard" replace />
-              )}
             </ProtectedRoute>
           ),
         },
