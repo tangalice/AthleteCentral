@@ -7,3 +7,5 @@ build/
 .firebase/
 .firebase/ # if present
 coverage/
+Icon
+.DS_Store
