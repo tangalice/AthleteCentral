@@ -15,6 +15,15 @@ export default function Notifications() {
     textNotifications: false,
     phoneNumber: "",
     emailNotifications: true, // Default to true since they have an email account
+    // Notification preferences
+    unreadMessages: true,
+    incompleteProfile: true,
+    addToTeam: true,
+    upcomingEvent: true,
+    predictionReady: true,
+    newPerformanceResult: true,
+    coachSuggestedGoals: true,
+    coachAddedFeedback: true,
   });
 
   // Fetch notification settings on mount
@@ -31,6 +40,15 @@ export default function Notifications() {
             textNotifications: userData.textNotifications ?? false,
             phoneNumber: userData.phoneNumber ?? "",
             emailNotifications: userData.emailNotifications ?? true,
+            // Notification preferences
+            unreadMessages: userData.unreadMessages ?? true,
+            incompleteProfile: userData.incompleteProfile ?? true,
+            addToTeam: userData.addToTeam ?? true,
+            upcomingEvent: userData.upcomingEvent ?? true,
+            predictionReady: userData.predictionReady ?? true,
+            newPerformanceResult: userData.newPerformanceResult ?? true,
+            coachSuggestedGoals: userData.coachSuggestedGoals ?? true,
+            coachAddedFeedback: userData.coachAddedFeedback ?? true,
           });
         }
       } catch (error) {
@@ -73,6 +91,15 @@ export default function Notifications() {
           textNotifications: notificationSettings.textNotifications,
           phoneNumber: notificationSettings.phoneNumber,
           emailNotifications: notificationSettings.emailNotifications,
+          // Notification preferences
+          unreadMessages: notificationSettings.unreadMessages,
+          incompleteProfile: notificationSettings.incompleteProfile,
+          addToTeam: notificationSettings.addToTeam,
+          upcomingEvent: notificationSettings.upcomingEvent,
+          predictionReady: notificationSettings.predictionReady,
+          newPerformanceResult: notificationSettings.newPerformanceResult,
+          coachSuggestedGoals: notificationSettings.coachSuggestedGoals,
+          coachAddedFeedback: notificationSettings.coachAddedFeedback,
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -215,6 +242,110 @@ export default function Notifications() {
           <p className="text-muted" style={{ fontSize: 14, marginBottom: 16 }}>
             Receive email notifications for important updates and messages at {auth.currentUser?.email}.
           </p>
+        </div>
+
+        {/* Divider */}
+        <div style={{ borderTop: "1px solid var(--border)", margin: "24px 0" }} />
+
+        {/* Notification Preferences */}
+        <div className="form-group">
+          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: "#111827" }}>
+            Notification Preferences
+          </h3>
+          <p className="text-muted" style={{ fontSize: 14, marginBottom: 20 }}>
+            Choose what types of notifications you'd like to receive.
+          </p>
+
+          {/* Notification preference items */}
+          {[
+            {
+              key: 'unreadMessages',
+              label: 'Unread Messages',
+              description: 'Get notified when you receive new messages'
+            },
+            {
+              key: 'incompleteProfile',
+              label: 'Incomplete Profile',
+              description: 'Reminders to complete your profile information'
+            },
+            {
+              key: 'addToTeam',
+              label: 'Added to Team',
+              description: 'Notifications when you\'re added to a team'
+            },
+            {
+              key: 'upcomingEvent',
+              label: 'Upcoming Event in Schedule',
+              description: 'Reminders about upcoming events in your schedule'
+            },
+            {
+              key: 'predictionReady',
+              label: 'Prediction Ready',
+              description: 'When performance predictions are available'
+            },
+            {
+              key: 'newPerformanceResult',
+              label: 'New Performance Result',
+              description: 'When new performance results are recorded'
+            },
+            {
+              key: 'coachSuggestedGoals',
+              label: 'Coach Suggested Goals',
+              description: 'When your coach suggests new goals for you'
+            },
+            {
+              key: 'coachAddedFeedback',
+              label: 'Coach Added Feedback',
+              description: 'When your coach provides feedback on your performance'
+            }
+          ].map((item) => (
+            <div key={item.key} style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "space-between", 
+              padding: "12px 0",
+              borderBottom: "1px solid #f3f4f6"
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, color: "#111827", marginBottom: 2 }}>
+                  {item.label}
+                </div>
+                <div className="text-muted" style={{ fontSize: 14 }}>
+                  {item.description}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggle(item.key)}
+                style={{
+                  width: 50,
+                  height: 28,
+                  borderRadius: 14,
+                  border: "none",
+                  background: notificationSettings[item.key] ? "#10b981" : "#d1d5db",
+                  position: "relative",
+                  cursor: "pointer",
+                  transition: "background-color 0.2s ease",
+                  marginLeft: 16,
+                }}
+                aria-label={`${notificationSettings[item.key] ? 'Disable' : 'Enable'} ${item.label.toLowerCase()} notifications`}
+              >
+                <div
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: "50%",
+                    background: "#fff",
+                    position: "absolute",
+                    top: 2,
+                    left: notificationSettings[item.key] ? 24 : 2,
+                    transition: "left 0.2s ease",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                  }}
+                />
+              </button>
+            </div>
+          ))}
         </div>
 
         <button 
