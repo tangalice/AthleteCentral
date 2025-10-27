@@ -35,6 +35,7 @@ import Teams from "./components/Teams";
 import TopBar from "./components/TopBar";
 import Goals from "./components/Goals";
 import SuggestGoals from "./components/SuggestGoals";
+import Calendar from "./components/Calendar";
 import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
 import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
 import CoachFeedbackPage from "./components/CoachFeedbackPage";
@@ -43,6 +44,9 @@ import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
 import CoachGoals from './Billa_UI_Pages/CoachGoals';
+import AthleteToolsPage from "./pages/AthleteToolsPage";
+import Schedule from "./components/Schedule";
+import HealthStatusPage from "./pages/HealthStatusPage";
 /* ---------------- Protected wrapper ---------------- */
 
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -295,6 +299,9 @@ export default function App() {
     if (signingOutRef.current) return;
     signingOutRef.current = true;
     try {
+      // Save track mode before logout
+      const savedMode = localStorage.getItem("trackMode");
+      
       const sessionId =
         SessionsService.getCurrentSessionId?.() ||
         localStorage.getItem("currentSessionId");
@@ -310,6 +317,11 @@ export default function App() {
       await firebaseSignOut(auth);
       setUser(null);
       setUserRole(null);
+      
+      // Restore track mode after logout
+      if (savedMode) {
+        localStorage.setItem("trackMode", savedMode);
+      }
     } catch (e) {
       console.error("Error signing out:", e);
     } finally {
@@ -432,6 +444,18 @@ export default function App() {
           ),
         },
         {
+          path: "athlete-tools",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? (
+                <AthleteToolsPage />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
           path: "athlete-dashboard",
           loader: dashboardLoader,
           element: (
@@ -468,22 +492,50 @@ export default function App() {
           ),
         },
 
-                 {
-                   path: "teams",
-                   element: (
-                     <ProtectedRoute user={user}>
-                       <Teams />
-                     </ProtectedRoute>
-                   ),
-                 },
-                 {
-                  path: "results",
-                  element: (
-                    <ProtectedRoute user={user}>
-                      <Results user={mergedUser} userRole={userRole} />
-                    </ProtectedRoute>
-                  ),
-                },
+        {
+          path: "teams",
+          element: (
+            <ProtectedRoute user={user}>
+              <Teams />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "calendar",
+          element: (
+            <ProtectedRoute user={user}>
+              <Calendar userRole={userRole} user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "schedule",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? (
+                <Schedule userRole={userRole} user={mergedUser} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "health-status",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <HealthStatusPage /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "results",
+          element: (
+            <ProtectedRoute user={user}>
+              <Results user={mergedUser} userRole={userRole} />
+            </ProtectedRoute>
+          ),
+        },
                 
 
 
