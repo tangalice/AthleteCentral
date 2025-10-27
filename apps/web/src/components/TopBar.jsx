@@ -93,6 +93,11 @@ export default function TopBar({
             </Link>
           )}
 
+          {/* ACTIVITY TAB - Available to BOTH */}
+          <Link to="/activity" style={linkStyle(activeTab === "activity")}>
+            Activity
+          </Link>
+
           {/* ATHLETE TOOLS TAB - Athlete only */}
           {user?.role === "athlete" && (
             <Link to="/athlete-tools" style={linkStyle(activeTab === "athlete-tools")}>

@@ -47,6 +47,7 @@ import CoachGoals from './Billa_UI_Pages/CoachGoals';
 import AthleteToolsPage from "./pages/AthleteToolsPage";
 import Schedule from "./components/Schedule";
 import HealthStatusPage from "./pages/HealthStatusPage";
+import Activity from "./components/Activity";
 /* ---------------- Protected wrapper ---------------- */
 
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -172,6 +173,7 @@ function AppLayout({ user, userRole, onLogout }) {
              root === "calendar" ? "calendar" :
              root === "schedule" ? "schedule" :
              root === "health-status" ? "health-status" :
+             root === "activity" ? "activity" :
              root === "athlete-tools" ? "athlete-tools" :
              root === "results"  ? "results"  :
              root === "goals"    ? "goals"    :
@@ -528,6 +530,14 @@ export default function App() {
           element: (
             <ProtectedRoute user={user}>
               {userRole === "coach" ? <HealthStatusPage /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "activity",
+          element: (
+            <ProtectedRoute user={user}>
+              <Activity userRole={userRole} user={mergedUser} />
             </ProtectedRoute>
           ),
         },
