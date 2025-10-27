@@ -74,6 +74,32 @@ export default function TopBar({
             Teams
           </Link>
 
+          {/* CALENDAR TAB - Available to BOTH */}
+          <Link to="/calendar" style={linkStyle(activeTab === "calendar")}>
+            Calendar
+          </Link>
+
+          {/* SCHEDULE TAB - Athlete only */}
+          {user?.role === "athlete" && (
+            <Link to="/schedule" style={linkStyle(activeTab === "schedule")}>
+              Schedule
+            </Link>
+          )}
+
+          {/* HEALTH STATUS TAB - Coach only */}
+          {user?.role === "coach" && (
+            <Link to="/health-status" style={linkStyle(activeTab === "health-status")}>
+              Health Status
+            </Link>
+          )}
+
+          {/* ATHLETE TOOLS TAB - Athlete only */}
+          {user?.role === "athlete" && (
+            <Link to="/athlete-tools" style={linkStyle(activeTab === "athlete-tools")}>
+              Tools
+            </Link>
+          )}
+
           {/* RESULTS TAB - Available to BOTH */}
           <Link to="/results" style={linkStyle(activeTab === "results")}>
             Results

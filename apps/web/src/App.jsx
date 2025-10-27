@@ -169,6 +169,10 @@ function AppLayout({ user, userRole, onLogout }) {
              root === "profile"  ? "profile"  :
              root === "messages" ? "messages" : 
              root === "teams"    ? "teams"    :
+             root === "calendar" ? "calendar" :
+             root === "schedule" ? "schedule" :
+             root === "health-status" ? "health-status" :
+             root === "athlete-tools" ? "athlete-tools" :
              root === "results"  ? "results"  :
              root === "goals"    ? "goals"    :
              root === "view-athlete-goals" ? "view-athlete-goals" :
@@ -176,7 +180,6 @@ function AppLayout({ user, userRole, onLogout }) {
              root === "athlete-feedback" ? "athlete-feedback" :
              root === "suggest-goals" ? "suggest-goals" :
              "dashboard";
-origin/feat/SessionManagement
 
   return (
     <div
