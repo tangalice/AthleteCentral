@@ -11,7 +11,8 @@ import {
   doc,
   getDocs,
   serverTimestamp,
-  increment
+  increment,
+  deleteField
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
@@ -26,6 +27,7 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   const [newChatName, setNewChatName] = useState('');
   const [showNewChat, setShowNewChat] = useState(false);
   const [showChatDetails, setShowChatDetails] = useState(false);
+  const [showAddMembers, setShowAddMembers] = useState(false);
   const [loading, setLoading] = useState(false);
   
   // New states for user management
@@ -251,6 +253,72 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
       await deleteDoc(doc(db, 'chats', selectedChat.id));
       setSelectedChat(null);
       setShowChatDetails(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const leaveChat = async () => {
+    if (!selectedChat || !user) return;
+    if (!window.confirm('Are you sure you want to leave this chat?')) return;
+    setLoading(true);
+    try {
+      const chatRef = doc(db, 'chats', selectedChat.id);
+      const updatedParticipants = selectedChat.participants.filter(id => id !== user.uid);
+      
+      // Remove user from unreadCounts and readBy
+      const updates = {
+        participants: updatedParticipants,
+        [`unreadCounts.${user.uid}`]: deleteField(),
+        [`readBy.${user.uid}`]: deleteField()
+      };
+      
+      await updateDoc(chatRef, updates);
+      setSelectedChat(null);
+      setShowChatDetails(false);
+    } catch (error) {
+      console.error('Error leaving chat:', error);
+      alert('Failed to leave chat. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addMembersToChat = async () => {
+    if (!selectedChat || selectedUsers.length === 0) return;
+    setLoading(true);
+    try {
+      const chatRef = doc(db, 'chats', selectedChat.id);
+      const newParticipants = [...selectedChat.participants, ...selectedUsers.map(u => u.id)];
+      
+      // Initialize unread counts for new members
+      const unreadUpdates = selectedUsers.reduce((acc, newUser) => {
+        acc[`unreadCounts.${newUser.id}`] = 0;
+        acc[`readBy.${newUser.id}`] = serverTimestamp();
+        return acc;
+      }, {});
+      
+      await updateDoc(chatRef, {
+        participants: newParticipants,
+        ...unreadUpdates
+      });
+      
+      // Update the selectedChat state immediately to reflect the new participants
+      setSelectedChat(prev => ({
+        ...prev,
+        participants: newParticipants
+      }));
+      
+      // Also update the chatUsers state to immediately show the new participants
+      const newChatUsers = [...chatUsers, ...selectedUsers];
+      setChatUsers(newChatUsers);
+      
+      setSelectedUsers([]);
+      setUserSearchTerm('');
+      setShowAddMembers(false);
+    } catch (error) {
+      console.error('Error adding members:', error);
+      alert('Failed to add members. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -720,12 +788,171 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button className="btn btn-outline" onClick={() => setShowChatDetails(false)}>
                 Close
               </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => setShowAddMembers(true)}
+                disabled={loading}
+              >
+                Add Members
+              </button>
+              <button 
+                className="btn btn-warning" 
+                onClick={leaveChat} 
+                disabled={loading}
+              >
+                {loading ? 'Leaving...' : 'Leave Chat'}
+              </button>
               <button className="btn btn-danger" onClick={deleteChat} disabled={loading}>
                 {loading ? 'Deleting...' : 'Delete Chat'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Members Modal */}
+      {showAddMembers && selectedChat && (
+        <div style={modalBackdrop}>
+          <div className="card" style={{...modalCard, maxWidth: 500, maxHeight: '90vh', overflowY: 'auto'}}>
+            <h3 style={{ marginTop: 0, marginBottom: 12, textAlign: 'center' }}>Add Members to Chat</h3>
+            
+            {/* User Selection */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Select Users to Add</label>
+              
+              {/* Search Bar */}
+              <input
+                type="text"
+                value={userSearchTerm}
+                onChange={(e) => setUserSearchTerm(e.target.value)}
+                placeholder="Search by name or email..."
+                className="form-control"
+                style={{ marginBottom: 12 }}
+              />
+              
+              <div style={{ 
+                maxHeight: 200, 
+                overflowY: 'auto', 
+                border: '1px solid var(--border)', 
+                borderRadius: 8,
+                padding: 8
+              }}>
+                {(() => {
+                  // Filter out users who are already in the chat
+                  const availableUsers = allUsers.filter(u => !selectedChat.participants.includes(u.id));
+                  const filteredAvailableUsers = availableUsers.filter(user => {
+                    const displayName = user.displayName || '';
+                    const email = user.email || '';
+                    const searchTerm = userSearchTerm.toLowerCase();
+                    
+                    return displayName.toLowerCase().includes(searchTerm) || 
+                           email.toLowerCase().includes(searchTerm);
+                  });
+
+                  return filteredAvailableUsers.length === 0 ? (
+                    <div className="text-muted" style={{ textAlign: 'center', padding: 20 }}>
+                      {availableUsers.length === 0 
+                        ? 'All users are already in this chat' 
+                        : 'No users match your search'}
+                    </div>
+                  ) : (
+                    filteredAvailableUsers.map((userOption) => (
+                      <div
+                        key={userOption.id}
+                        onClick={() => toggleUserSelection(userOption)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '8px 12px',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          backgroundColor: isUserSelected(userOption) ? 'var(--brand-primary-50)' : 'transparent',
+                          border: isUserSelected(userOption) ? '1px solid var(--brand-primary)' : '1px solid transparent',
+                          marginBottom: 4
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isUserSelected(userOption)}
+                          onChange={() => toggleUserSelection(userOption)}
+                          style={{ marginRight: 12 }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600 }}>
+                            {userOption.displayName || userOption.email}
+                          </div>
+                          <div className="text-muted" style={{ fontSize: 14 }}>
+                            {userOption.email}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Selected Users Summary */}
+            {selectedUsers.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Selected Users</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {selectedUsers.map((selectedUser) => (
+                    <span
+                      key={selectedUser.id}
+                      style={{
+                        backgroundColor: 'var(--brand-primary)',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: 4,
+                        fontSize: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      {selectedUser.displayName || selectedUser.email}
+                      <button
+                        onClick={() => toggleUserSelection(selectedUser)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          padding: 0,
+                          marginLeft: 4
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => { 
+                  setShowAddMembers(false); 
+                  setSelectedUsers([]); 
+                  setUserSearchTerm('');
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={addMembersToChat} 
+                disabled={selectedUsers.length === 0 || loading}
+              >
+                {loading ? 'Adding...' : `Add ${selectedUsers.length} Member${selectedUsers.length !== 1 ? 's' : ''}`}
               </button>
             </div>
           </div>
