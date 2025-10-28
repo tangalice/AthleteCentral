@@ -114,7 +114,7 @@ function ProtectedRoute({ children, user, requireVerified = true }) {
 }
 
 /* --------- Layout (TopBar + Outlet) + activity heartbeat ---------- */
-function AppLayout({ user, userRole, onLogout }) {
+function AppLayout({ user, userRole, onLogout, userSport }) {
   const { pathname } = useLocation();
   const activityTimerRef = useRef(null);
   const lastBeatRef = useRef(0);
@@ -195,8 +195,9 @@ function AppLayout({ user, userRole, onLogout }) {
         showNav={Boolean(user && user.emailVerified)}
         activeTab={activeTab}
         onLogout={onLogout}
-        user={user ? { ...user, role: userRole } : null}
+        user={user ? { ...user, role: userRole, sport: userSport } : null}
         userRole={userRole}
+        userSport={userSport}
       />
       <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 20px" }}>
         <Outlet />
@@ -209,6 +210,7 @@ function AppLayout({ user, userRole, onLogout }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [userSport, setUserSport] = useState(null);
   const [ready, setReady] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
@@ -227,6 +229,7 @@ export default function App() {
 
       setUser(u || null);
       setUserRole(null);
+      setUserSport(null);
       setReady(true);
 
       if (sessionUnsubRef.current) {
@@ -240,6 +243,7 @@ export default function App() {
             const snap = await getDoc(doc(db, "users", u.uid));
             if (!cancelled && snap.exists()) {
               setUserRole(snap.data().role || null);
+              setUserSport(snap.data().sport || null);
             }
           } catch (e) {
             console.error("Fetch role error:", e);
@@ -322,6 +326,7 @@ export default function App() {
       await firebaseSignOut(auth);
       setUser(null);
       setUserRole(null);
+      setUserSport(null);
       
       // Restore track mode after logout
       if (savedMode) {
@@ -545,7 +550,7 @@ export default function App() {
           path: "results",
           element: (
             <ProtectedRoute user={user}>
-              <Results user={mergedUser} userRole={userRole} />
+              <Results user={mergedUser} userRole={userRole} userSport={userSport} />
             </ProtectedRoute>
           ),
         },

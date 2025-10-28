@@ -30,8 +30,9 @@ export default function TopBar({
   showNav = false, 
   activeTab = "dashboard", 
   onLogout, 
-  user, 
-  userRole, 
+  user,
+  userRole,
+  userSport
 }) {
   const linkStyle = (isActive) => ({
     textDecoration: "none",
