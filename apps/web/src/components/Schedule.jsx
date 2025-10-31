@@ -7,7 +7,7 @@ export default function Schedule({ userRole }) {
   const [teamId, setTeamId] = useState(null);
   const [filter, setFilter] = useState("upcoming"); // upcoming | past | all
 
-  useEffect(() => {
+  useEffect(() => {z
     const fetchTeam = async () => {
       if (!auth.currentUser) return;
       const teamsQuery = query(

@@ -2,13 +2,17 @@
 import { useLoaderData, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { auth, db } from "../firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, onSnapshot, orderBy } from "firebase/firestore";
 
 export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const data = useLoaderData();
   const navigate = useNavigate();
   const displayName = data?.displayName || user?.email || "";
   const [inTeam, setInTeam] = useState(true);
+
+  const [teamId, setTeamId] = useState(null);
+  const [reminders, setReminders] = useState([]);
+
 
   useEffect(() => {
     const checkTeamMembership = async () => {
@@ -27,6 +31,48 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     };
     checkTeamMembership();
   }, []);
+  useEffect(() => {
+    const fetchTeam = async () => {
+      if (!auth.currentUser) return;
+      try {
+        const q = query(
+          collection(db, "teams"),
+          where("members", "array-contains", auth.currentUser.uid)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) setTeamId(snap.docs[0].id);
+      } catch (e) {
+        console.error("Error fetching team:", e);
+      }
+    };
+    fetchTeam();
+  }, []);
+  useEffect(() => {
+    if (!teamId) return;
+  
+    const now = new Date();
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  
+    const eventsQuery = query(
+      collection(db, "teams", teamId, "events"),
+      orderBy("datetime", "asc")
+    );
+  
+    const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
+      const upcoming = snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          datetime: doc.data().datetime?.toDate(),
+        }))
+        .filter((e) => e.datetime >= now && e.datetime <= nextWeek);
+  
+      setReminders(upcoming);
+    });
+  
+    return () => unsubscribe();
+  }, [teamId]);
+  
 
   // 
   const brand = "var(--brand-primary)";
@@ -76,6 +122,42 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
             marginBottom: 12,
           }}
         />
+        {/* 🔔 Reminder Section */}
+        <div style={{ width: "100%", maxWidth: 800, marginTop: 20, marginBottom: 24 }}>
+          <h3 style={{ fontSize: 20, fontWeight: 700, color: "#111827", marginBottom: 8 }}>
+            🔔 Upcoming Events (Next 7 Days)
+          </h3>
+          {reminders.length === 0 ? (
+            <p style={{ color: "#6b7280", fontSize: 15 }}>No upcoming events.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {reminders.map((event) => (
+                <div
+                  key={event.id}
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    padding: "10px 16px",
+                    background: "#f9fafb",
+                  }}
+                >
+                  <h4 style={{ margin: 0, color: "#111827", fontSize: 16, fontWeight: 700 }}>
+                    {event.title}
+                  </h4>
+                  <p style={{ color: "#4b5563", fontSize: 14, margin: "2px 0 0" }}>
+                    {event.datetime.toLocaleString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* notice */}
         {!inTeam && (
