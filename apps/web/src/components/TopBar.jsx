@@ -140,6 +140,9 @@ export default function TopBar({
               <Link to="/coach-feedback" style={linkStyle(activeTab === "coach-feedback")}>
                 Give Feedback
               </Link>
+              <Link to="/data-reports" style={linkStyle(activeTab === "data-reports")}>
+                Data Reports
+              </Link>
             </>
           )}
 

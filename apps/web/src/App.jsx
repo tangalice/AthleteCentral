@@ -48,6 +48,7 @@ import AthleteToolsPage from "./pages/AthleteToolsPage";
 import Schedule from "./components/Schedule";
 import HealthStatusPage from "./pages/HealthStatusPage";
 import Activity from "./components/Activity";
+import CoachDataReports from "./components/CoachDataReports";
 /* ---------------- Protected wrapper ---------------- */
 
 function ProtectedRoute({ children, user, requireVerified = true }) {
@@ -179,6 +180,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
              root === "goals"    ? "goals"    :
              root === "view-athlete-goals" ? "view-athlete-goals" :
              root === "coach-feedback" ? "coach-feedback" :
+             root === "data-reports" ? "data-reports" :
              root === "athlete-feedback" ? "athlete-feedback" :
              root === "suggest-goals" ? "suggest-goals" :
              "dashboard";
@@ -613,10 +615,22 @@ export default function App() {
           path: "coach-feedback",
           element: (
           <ProtectedRoute user={user}>
-          {userRole === "coach" ? <CoachFeedbackPage coach={user} /> : <Navigate to="/dashboard" replace />}
+            {userRole === "coach" ? <CoachFeedbackPage coach={user} /> : <Navigate to="/dashboard" replace />}
           </ProtectedRoute>
           ),
         },
+
+        {
+          path: "data-reports",
+          element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? 
+              <CoachDataReports coach={user} /> : <Navigate to="/dashboard" replace />
+                }
+          </ProtectedRoute>
+        ),
+        },
+
 
         // Keep other Settings sub-pages under /settings/*
 
