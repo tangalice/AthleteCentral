@@ -19,6 +19,8 @@ export default function Calendar({ userRole, user }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [teamId, setTeamId] = useState(null);
+  const [teams, setTeams] = useState([]); 
+
   const [formData, setFormData] = useState({
     title: "",
     date: "",
@@ -30,9 +32,9 @@ export default function Calendar({ userRole, user }) {
 
   // Fetch user's team
   useEffect(() => {
-    const fetchTeam = async () => {
+    const fetchTeams = async () => {
       if (!auth.currentUser) return;
-
+  
       try {
         const teamsQuery = query(
           collection(db, "teams"),
@@ -43,17 +45,21 @@ export default function Calendar({ userRole, user }) {
           )
         );
         const snapshot = await getDocs(teamsQuery);
-
+  
         if (!snapshot.empty) {
-          const team = snapshot.docs[0];
-          setTeamId(team.id);
+          const teamList = snapshot.docs.map(doc => ({
+            id: doc.id,
+            name: doc.data().name || "Unnamed Team",
+          }));
+          setTeams(teamList);
+          setTeamId(teamList[0].id); // 默认选择第一个
         }
       } catch (error) {
-        console.error("Error fetching team:", error);
+        console.error("Error fetching teams:", error);
       }
     };
-
-    fetchTeam();
+  
+    fetchTeams();
   }, [userRole]);
 
   // Subscribe to events
@@ -256,19 +262,45 @@ const handleEditEvent = async (event) => {
             </p>
           </div>
 
+          {/* 🔹Team selector + Create Event button */}
           {userRole === "coach" && (
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowCreateForm(!showCreateForm)}
-              style={{
-                background: "var(--brand-primary)",
-                border: "none",
-                padding: "12px 24px",
-                fontWeight: 600,
-              }}
-            >
-              {showCreateForm ? "Cancel" : "+ Create Event"}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              {/* */}
+              {teams.length > 1 && (
+                <div>
+                  <label style={{ fontWeight: 600, marginRight: 8 }}>Select Team:</label>
+                  <select
+                    value={teamId || ""}
+                    onChange={(e) => setTeamId(e.target.value)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      border: "1px solid #d1d5db",
+                    }}
+                  >
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* */}
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowCreateForm(!showCreateForm)}
+                style={{
+                  background: "var(--brand-primary)",
+                  border: "none",
+                  padding: "12px 24px",
+                  fontWeight: 600,
+                }}
+              >
+                {showCreateForm ? "Cancel" : "+ Create Event"}
+              </button>
+            </div>
           )}
         </div>
 

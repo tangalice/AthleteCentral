@@ -15,63 +15,130 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
 
 
   useEffect(() => {
+    if (!auth.currentUser || !userRole) {
+      console.log("⏸️ Waiting for auth.currentUser or userRole...");
+      return;
+    }
+  
     const checkTeamMembership = async () => {
-      if (!auth.currentUser) return;
       try {
+        console.log("🔍 Checking team membership for:", userRole, auth.currentUser.uid);
         const q = query(
           collection(db, "teams"),
-          where("members", "array-contains", auth.currentUser.uid)
+          where(
+            userRole === "coach" ? "coaches" : "members",
+            "array-contains",
+            auth.currentUser.uid
+          )
         );
         const snap = await getDocs(q);
+        console.log("📦 Team membership found:", !snap.empty);
         setInTeam(!snap.empty);
       } catch (e) {
         console.error("Error checking team membership:", e);
-        setInTeam(true); // 
+        setInTeam(true);
       }
     };
+  
     checkTeamMembership();
-  }, []);
-  useEffect(() => {
-    const fetchTeam = async () => {
-      if (!auth.currentUser) return;
-      try {
-        const q = query(
-          collection(db, "teams"),
-          where("members", "array-contains", auth.currentUser.uid)
-        );
-        const snap = await getDocs(q);
-        if (!snap.empty) setTeamId(snap.docs[0].id);
-      } catch (e) {
-        console.error("Error fetching team:", e);
+  
+    const interval = setInterval(() => {
+      if (auth.currentUser && userRole) {
+        checkTeamMembership();
+        clearInterval(interval);
       }
-    };
-    fetchTeam();
-  }, []);
-  useEffect(() => {
-    if (!teamId) return;
+    }, 1500);
   
-    const now = new Date();
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [userRole, auth.currentUser]);
   
-    const eventsQuery = query(
-      collection(db, "teams", teamId, "events"),
-      orderBy("datetime", "asc")
-    );
-  
-    const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
-      const upcoming = snapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          datetime: doc.data().datetime?.toDate(),
-        }))
-        .filter((e) => e.datetime >= now && e.datetime <= nextWeek);
-  
-      setReminders(upcoming);
+  // === ===
+useEffect(() => {
+  if (!auth.currentUser || !userRole) {
+    console.log("⏸️ Waiting for auth or userRole before fetching teams...");
+    return;
+  }
+
+  const fetchTeams = async () => {
+    try {
+      console.log("🔍 Fetching teams for:", userRole, auth.currentUser.uid);
+
+      const teamRefs = [];
+
+      const mainQ = query(
+        collection(db, "teams"),
+        where(userRole === "coach" ? "coaches" : "members", "array-contains", auth.currentUser.uid)
+      );
+      const mainSnap = await getDocs(mainQ);
+      mainSnap.forEach((doc) => teamRefs.push(doc.id));
+
+      if (userRole === "athlete") {
+        const altQ = query(
+          collection(db, "teams"),
+          where("athletes", "array-contains", auth.currentUser.uid)
+        );
+        const altSnap = await getDocs(altQ);
+        altSnap.forEach((doc) => {
+          if (!teamRefs.includes(doc.id)) teamRefs.push(doc.id);
+        });
+      }
+
+      if (teamRefs.length > 0) {
+        console.log("✅ Found teams:", teamRefs);
+        setTeamId(teamRefs); 
+      } else {
+        console.warn("⚠️ No teams found for user:", auth.currentUser.uid);
+        setTeamId([]);
+      }
+    } catch (e) {
+      console.error("Error fetching teams:", e);
+    }
+  };
+
+  fetchTeams();
+}, [userRole, auth.currentUser]);
+
+useEffect(() => {
+  if (!teamId || teamId.length === 0) {
+    console.warn("⏸️ No teamIds yet, skipping reminder listener");
+    return;
+  }
+
+  console.log("🎧 Listening for events in teams:", teamId);
+
+  const now = new Date();
+  const nextWeek = new Date();
+  nextWeek.setDate(now.getDate() + 7);
+
+  const unsubscribes = teamId.map((id) => {
+    const q = query(collection(db, "teams", id, "events"), orderBy("datetime", "asc"));
+    return onSnapshot(q, (snap) => {
+      const events = snap.docs.map((doc) => {
+        const data = doc.data();
+        const dt =
+          data.datetime?.toDate?.() ??
+          (data.datetime instanceof Date ? data.datetime : null);
+        return { id: doc.id, teamId: id, ...data, datetime: dt };
+      });
+
+      const upcoming = events.filter(
+        (e) =>
+          e.datetime &&
+          e.datetime.getTime() >= now.getTime() &&
+          e.datetime.getTime() <= nextWeek.getTime()
+      );
+
+      setReminders((prev) => {
+        const filteredPrev = prev.filter((p) => p.teamId !== id);
+        return [...filteredPrev, ...upcoming];
+      });
+
+      console.log(`✅ Team ${id} has ${upcoming.length} upcoming events`);
     });
-  
-    return () => unsubscribe();
-  }, [teamId]);
+  });
+
+  return () => unsubscribes.forEach((unsub) => unsub());
+}, [teamId]);
   
 
   // 
