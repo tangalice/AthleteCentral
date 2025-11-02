@@ -130,8 +130,10 @@ useEffect(() => {
 
       setReminders((prev) => {
         const filteredPrev = prev.filter((p) => p.teamId !== id);
-        return [...filteredPrev, ...upcoming];
-      });
+        const merged = [...filteredPrev, ...upcoming];
+        merged.sort((a, b) => a.datetime - b.datetime); 
+        return merged;
+      });;
 
       console.log(`✅ Team ${id} has ${upcoming.length} upcoming events`);
     });
