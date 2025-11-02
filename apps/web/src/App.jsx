@@ -51,12 +51,31 @@ import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
 /* ---------------- Protected wrapper ---------------- */
 
+// Helper to add timeout to promises
+function withTimeout(promise, timeoutMs = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
+
 function ProtectedRoute({ children, user, requireVerified = true }) {
   const [checking, setChecking] = useState(true);
   const [ok, setOk] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Safety timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) {
+        console.warn("ProtectedRoute: Session verification timeout, proceeding anyway");
+        setChecking(false);
+        setOk(true);
+      }
+    }, 10000); // 10 second timeout
 
     const run = async () => {
       if (!user) {
@@ -75,28 +94,32 @@ function ProtectedRoute({ children, user, requireVerified = true }) {
           SessionsService.getCurrentSessionId?.() ||
           localStorage.getItem("currentSessionId");
         if (!sessionId) {
-          await SessionsService.createSession(user.uid, user.email);
+          await withTimeout(SessionsService.createSession(user.uid, user.email), 8000);
           setOk(true);
         } else {
-          const isValid = await SessionsService.isSessionValid(sessionId);
+          const isValid = await withTimeout(SessionsService.isSessionValid(sessionId), 8000);
           if (!isValid) {
-            await SessionsService.createSession(user.uid, user.email);
+            await withTimeout(SessionsService.createSession(user.uid, user.email), 8000);
           } else {
-            await SessionsService.updateSessionActivity(sessionId);
+            await withTimeout(SessionsService.updateSessionActivity(sessionId), 8000);
           }
           setOk(true);
         }
       } catch (e) {
         console.warn("ProtectedRoute session bootstrap error:", e);
-        setOk(true); 
+        setOk(true); // Proceed anyway to avoid blocking the app
       } finally {
-        if (!cancelled) setChecking(false);
+        if (!cancelled) {
+          clearTimeout(timeoutId);
+          setChecking(false);
+        }
       }
     };
 
     run();
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
     };
   }, [user, requireVerified]);
 
