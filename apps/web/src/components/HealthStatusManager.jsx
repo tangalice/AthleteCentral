@@ -93,25 +93,40 @@ export default function HealthStatusManager({ teamId }) {
 
   const handleStatusChange = async (athleteId, newStatus) => {
     if (!teamId || !athleteId) return;
+    console.log("🟢 Updating health:", teamId, athleteId, newStatus);
+  
+    const ref = doc(db, "teams", teamId, "athletes", athleteId);
     setSavingIds((prev) => new Set(prev).add(athleteId));
+  
     try {
-      const ref = doc(db, "teams", teamId, "athletes", athleteId);
       await updateDoc(ref, {
         healthStatus: newStatus || null,
         updatedAt: new Date(),
       });
+      console.log("✅ updateDoc success");
     } catch (e) {
-      if (e.code === "not-found" || e.message.includes("No document")) {
-        const ref = doc(db, "teams", teamId, "athletes", athleteId);
-        await setDoc(ref, {
-          healthStatus: newStatus || null,
-          updatedAt: new Date(),
-        }, { merge: true });
-      } else {
-        console.error("updateDoc error:", e);
-        setError("Failed to update health status. Please try again.");
+      console.warn("⚠️ updateDoc failed, trying setDoc:", e);
+      try {
+        await setDoc(
+          ref,
+          {
+            healthStatus: newStatus || null,
+            updatedAt: new Date(),
+          },
+          { merge: true }
+        );
+        console.log("✅ setDoc success");
+      } catch (e2) {
+        console.error("❌ setDoc failed:", e2);
+        setError("Failed to save health status. Check console.");
       }
     } finally {
+      setAthletes((prev) =>
+        prev.map((a) =>
+          a.id === athleteId ? { ...a, healthStatus: newStatus || null } : a
+        )
+      );
+  
       setSavingIds((prev) => {
         const next = new Set(prev);
         next.delete(athleteId);

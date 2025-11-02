@@ -2,7 +2,7 @@
 import { useLoaderData, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { auth, db } from "../firebase";
-import { collection, query, where, getDocs, onSnapshot, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs, onSnapshot, orderBy, doc } from "firebase/firestore";
 
 export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const data = useLoaderData();
@@ -12,6 +12,41 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
 
   const [teamId, setTeamId] = useState(null);
   const [reminders, setReminders] = useState([]);
+  // 🩺 Athlete Health Status
+  const [healthStatus, setHealthStatus] = useState("Loading...");
+
+  useEffect(() => {
+    if (userRole !== "athlete" || !auth.currentUser) return;
+
+    const fetchAndListenHealth = async () => {
+      try {
+        const teamsQ = query(
+          collection(db, "teams"),
+          where("athletes", "array-contains", auth.currentUser.uid)
+        );
+        const snap = await getDocs(teamsQ);
+        if (snap.empty) {
+          setHealthStatus("No team found");
+          return;
+        }
+        const teamId = snap.docs[0].id;
+        const healthRef = doc(db, "teams", teamId, "athletes", auth.currentUser.uid);
+        const unsub = onSnapshot(healthRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setHealthStatus(data.healthStatus || "Unknown");
+          } else {
+            setHealthStatus("Not set");
+          }
+        });
+        return () => unsub();
+      } catch (err) {
+        console.error("Error loading health status:", err);
+        setHealthStatus("Error");
+      }
+    };
+    fetchAndListenHealth();
+  }, [userRole]);
 
 
   useEffect(() => {
@@ -181,6 +216,24 @@ useEffect(() => {
         <p className="text-muted" style={{ fontSize: 18, marginBottom: 16 }}>
           {userRole === "athlete" ? "Athlete" : userRole === "coach" ? "Coach" : "User"} Dashboard
         </p>
+        {userRole === "athlete" && (
+          <p style={{ fontSize: 16, marginBottom: 10 }}>
+            <strong>Health Status:</strong>{" "}
+            <span
+              style={{
+                color:
+                  healthStatus === "injured"
+                    ? "#dc2626"
+                    : healthStatus === "unavailable"
+                    ? "#f59e0b"
+                    : "#16a34a",
+              }}
+            >
+              {healthStatus}
+            </span>
+          </p>
+        )}
+
         <div
           style={{
             height: 4,
