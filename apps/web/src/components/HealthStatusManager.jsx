@@ -8,6 +8,7 @@ import {
   getDoc,
   query,
   orderBy,
+  setDoc,
 } from "firebase/firestore";
 
 export default function HealthStatusManager({ teamId }) {
