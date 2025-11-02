@@ -8,7 +8,9 @@ export default function EnterResults_swim({ user }) {
   const [formData, setFormData] = useState({
     athleteId: '',
     athleteName: '',
-    eventType: '',
+    courseType: '',
+    distance: '',
+    stroke: '',
     type: 'practice', // 'practice' or 'competition'
     time: '',
     date: '',
@@ -64,7 +66,7 @@ export default function EnterResults_swim({ user }) {
       setErrorMessage('Please select an athlete');
       return false;
     }
-    if (!formData.eventType) {
+    if (!formData.distance || !formData.stroke || !formData.courseType) {
       setErrorMessage('Please enter an event type');
       return false;
     }
@@ -94,7 +96,10 @@ export default function EnterResults_swim({ user }) {
       await addDoc(collection(db, 'users', formData.athleteId, 'performances'), {
         userId: formData.athleteId,
         athleteName: formData.athleteName,
-        eventType: formData.eventType,
+        eventType: formData.distance + '-' + formData.stroke + '-' + formData.courseType,
+        courseType: formData.courseType,
+        distance: formData.distance,
+        stroke: formData.stroke,
         type: formData.type,
         time: parseFloat(formData.time),
         date: Timestamp.fromDate(new Date(formData.date)),
@@ -111,7 +116,9 @@ export default function EnterResults_swim({ user }) {
       setFormData({
         athleteId: '',
         athleteName: '',
-        eventType: '',
+        courseType: '',
+        distance: '',
+        stroke: '',
         type: 'practice',
         time: '',
         date: '',
@@ -229,7 +236,7 @@ export default function EnterResults_swim({ user }) {
                 backgroundColor: 'white'
               }}
             >
-              <option value="">Select a swimmer...</option>
+              <option value="">Select an athlete...</option>
               {athletes.map(athlete => (
                 <option key={athlete.id} value={athlete.id}>
                   {athlete.name}
@@ -239,31 +246,85 @@ export default function EnterResults_swim({ user }) {
           </div>
 
           {/* Event Type */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ 
-              display: 'block', 
+          <label style={{ 
+              display: 'block',
               marginBottom: '6px', 
               fontWeight: 600, 
               fontSize: '14px',
               color: '#374151'
             }}>
-              Event *
-            </label>
-            <input 
-              type="text"
-              name="eventType"
-              value={formData.eventType}
+          Event *
+          </label>
+
+          <div style={{ marginBottom: '20px', display: 'flex' }}>
+            <select 
+              name="distance"
+              value={formData.distance}
               onChange={handleChange}
-              placeholder="e.g., 50 FR, 100 Backstroke, 2k Row"
               required
               style={{
-                width: '100%',
+                width: '30%',
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
-                fontSize: '14px'
+                fontSize: '14px',
+                backgroundColor: 'white'
               }}
-            />
+            >
+              <option value="">Select a distance...</option>
+                <option key="50" value="50">50</option>
+                <option key="100" value="100">100</option>
+                <option key="200" value="200">200</option>
+                <option key="400" value="400">400</option>
+                <option key="800" value="800">800</option>
+                <option key="1000" value="1000">1000</option>
+                <option key="1500" value="1500">1500</option>
+                <option key="1650" value="1650">1650</option>
+            </select>
+          
+          <select 
+              name="stroke"
+              value={formData.stroke}
+              onChange={handleChange}
+              required
+              style={{
+                width: '30%',
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: 'white'
+              }}
+            >
+              <option value="">Select a stroke...</option>
+                <option key="fr" value="fr">Freestyle</option>
+                <option key="bk" value="bk">Backstroke</option>
+                <option key="br" value="br">Breaststroke</option>
+                <option key="fl" value="fl">Butterfly</option>
+                <option key="im" value="im">Individual Medley</option>
+            </select>
+
+          {/* Course Type */}
+            <select 
+              name="courseType"
+              value={formData.courseType}
+              onChange={handleChange}
+              required
+              style={{
+                width: '40%',
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: 'white'
+              }}
+            >
+              <option value="">Select a course length...</option>
+                <option key="scy" value="scy">Short Course Yards (SCY)</option>
+                <option key="scm" value="scm">Short Course Meters (SCM)</option>
+                <option key="lcm" value="lcm">Long Course Meters (LCM)
+                </option>
+            </select>
           </div>
 
           {/* Time/Score */}
@@ -275,7 +336,7 @@ export default function EnterResults_swim({ user }) {
               fontSize: '14px',
               color: '#374151'
             }}>
-              Time/Score *
+              Time *
             </label>
             <input 
               type="text"
