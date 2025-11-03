@@ -49,6 +49,7 @@ import Schedule from "./components/Schedule";
 import HealthStatusPage from "./pages/HealthStatusPage";
 import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
+import HealthAndAvailability from "./pages/HealthAndAvailability";
 /* ---------------- Protected wrapper ---------------- */
 
 // Helper to add timeout to promises
@@ -206,6 +207,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
              root === "data-reports" ? "data-reports" :
              root === "athlete-feedback" ? "athlete-feedback" :
              root === "suggest-goals" ? "suggest-goals" :
+             root === "health-availability" ? "health-availability" :
              "dashboard";
 
   return (
@@ -653,7 +655,14 @@ export default function App() {
           </ProtectedRoute>
         ),
         },
-
+        {
+          path: "health-availability",
+          element: (
+            <ProtectedRoute user={user}>
+              <HealthAndAvailability />
+            </ProtectedRoute>
+          ),
+        },
 
         // Keep other Settings sub-pages under /settings/*
 

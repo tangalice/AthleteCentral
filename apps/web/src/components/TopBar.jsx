@@ -40,7 +40,8 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "view-athlete-goals" ||
     activeTab === "athlete-feedback" ||
     activeTab === "coach-feedback" ||
-    activeTab === "suggest-goals";
+    activeTab === "suggest-goals" ||
+    activeTab === "health-availability";
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -127,6 +128,9 @@ function DropdownMenu({ user, activeTab }) {
   } else if (user?.role === "coach") {
     menuItems.push({ path: "/coach-feedback", label: "Give Feedback", activeTab: "coach-feedback" });
   }
+  
+  // Health and Availability - Available to both
+  menuItems.push({ path: "/health-availability", label: "Health and Availability", activeTab: "health-availability" });
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", display: "flex", alignItems: "center" }}>
