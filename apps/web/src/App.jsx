@@ -45,7 +45,6 @@ import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
 import CoachGoals from './Billa_UI_Pages/CoachGoals';
 import AthleteToolsPage from "./pages/AthleteToolsPage";
-import Schedule from "./components/Schedule";
 import HealthStatusPage from "./pages/HealthStatusPage";
 import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
@@ -196,7 +195,6 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
              root === "messages" ? "messages" : 
              root === "teams"    ? "teams"    :
              root === "calendar" ? "calendar" :
-             root === "schedule" ? "schedule" :
              root === "health-status" ? "health-status" :
              root === "activity" ? "activity" :
              root === "athlete-tools" ? "athlete-tools" :
@@ -453,231 +451,211 @@ export default function App() {
   const mergedUser = user ? { ...user, role: userRole } : null;
 
   /* ---------------- Router ---------------- */
-  const router = createBrowserRouter([
-    // Public
-    { path: "/signup", element: user ? <Navigate to="/dashboard" replace /> : <SignUp /> },
-    {
-      path: "/login",
-      element: user && user.emailVerified ? <Navigate to="/dashboard" replace /> : <Login />,
-    },
-    { path: "/verify-email", element: <VerifyEmail /> },
+const router = createBrowserRouter([
+  // Public
+  { path: "/signup", element: user ? <Navigate to="/dashboard" replace /> : <SignUp /> },
+  {
+    path: "/login",
+    element: user && user.emailVerified ? <Navigate to="/dashboard" replace /> : <Login />,
+  },
+  { path: "/verify-email", element: <VerifyEmail /> },
 
-    // App layout + protected routes
-    {
-      path: "/",
-      element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} />,
-      children: [
-        {
-          index: true,
-          element: user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />,
-        },
-        {
-          path: "dashboard",
-          loader: dashboardLoader,
-          element: (
-            <ProtectedRoute user={user}>
-              <Dashboard userRole={userRole} user={user} unreadMessageCount={unreadMessageCount} />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "athlete-tools",
-          element: (
-            <ProtectedRoute user={user}>
-              {userRole === "athlete" ? (
-                <AthleteToolsPage />
-              ) : (
-                <Navigate to="/dashboard" replace />
-              )}
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "athlete-dashboard",
-          loader: dashboardLoader,
-          element: (
-            <ProtectedRoute user={user}>
-              <Dashboard userRole={userRole} user={user} />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "coach-dashboard",
-          loader: dashboardLoader,
-          element: (
-            <ProtectedRoute user={user}>
-              <Dashboard userRole={userRole} user={user} />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "profile",
-          loader: profileLoader,
-          element: (
-            <ProtectedRoute user={user}>
-              <Profile user={mergedUser} />
-            </ProtectedRoute>
-          ),
-        },
+  // App layout + protected routes
+  {
+    path: "/",
+    element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} />,
+    children: [
+      {
+        index: true,
+        element: user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />,
+      },
+      {
+        path: "dashboard",
+        loader: dashboardLoader,
+        element: (
+          <ProtectedRoute user={user}>
+            <Dashboard userRole={userRole} user={user} unreadMessageCount={unreadMessageCount} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "athlete-tools",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? (
+              <AthleteToolsPage />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "athlete-dashboard",
+        loader: dashboardLoader,
+        element: (
+          <ProtectedRoute user={user}>
+            <Dashboard userRole={userRole} user={user} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "coach-dashboard",
+        loader: dashboardLoader,
+        element: (
+          <ProtectedRoute user={user}>
+            <Dashboard userRole={userRole} user={user} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "profile",
+        loader: profileLoader,
+        element: (
+          <ProtectedRoute user={user}>
+            <Profile user={mergedUser} />
+          </ProtectedRoute>
+        ),
+      },
 
-        {
-          path: "messages",
-          element: (
-            <ProtectedRoute user={user}>
-              <Messages onUnreadCountChange={setUnreadMessageCount} />
-            </ProtectedRoute>
-          ),
-        },
+      {
+        path: "messages",
+        element: (
+          <ProtectedRoute user={user}>
+            <Messages onUnreadCountChange={setUnreadMessageCount} />
+          </ProtectedRoute>
+        ),
+      },
 
-        {
-          path: "teams",
-          element: (
-            <ProtectedRoute user={user}>
-              <Teams />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "calendar",
-          element: (
-            <ProtectedRoute user={user}>
-              <Calendar userRole={userRole} user={mergedUser} />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "schedule",
-          element: (
-            <ProtectedRoute user={user}>
-              {userRole === "athlete" ? (
-                <Schedule userRole={userRole} user={mergedUser} />
-              ) : (
-                <Navigate to="/dashboard" replace />
-              )}
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "health-status",
-          element: (
-            <ProtectedRoute user={user}>
-              {userRole === "coach" ? <HealthStatusPage /> : <Navigate to="/dashboard" replace />}
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "activity",
-          element: (
-            <ProtectedRoute user={user}>
-              <Activity userRole={userRole} user={mergedUser} />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "results",
-          element: (
-            <ProtectedRoute user={user}>
-              <Results user={mergedUser} userRole={userRole} userSport={userSport} />
-            </ProtectedRoute>
-          ),
-        },
-                
+      {
+        path: "teams",
+        element: (
+          <ProtectedRoute user={user}>
+            <Teams />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "calendar",
+        element: (
+          <ProtectedRoute user={user}>
+            <Calendar userRole={userRole} user={mergedUser} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "health-status",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? <HealthStatusPage /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "activity",
+        element: (
+          <ProtectedRoute user={user}>
+            <Activity userRole={userRole} user={mergedUser} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "results",
+        element: (
+          <ProtectedRoute user={user}>
+            <Results user={mergedUser} userRole={userRole} userSport={userSport} />
+          </ProtectedRoute>
+        ),
+      },
 
+      {
+        path: "goals",
+        element: (
+          <ProtectedRoute user={user}>
+            <Goals user={user} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "view-athlete-goals",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? <CoachGoals user={mergedUser} /> : <Navigate to="/goals" replace />}
+          </ProtectedRoute>
+        ),
+      },
 
-        {
-          path: "goals",
-          element: (
-            <ProtectedRoute user={user}>
-              <Goals user={user} />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "view-athlete-goals",
-          element: (
-            <ProtectedRoute user={user}>
-              {userRole === "coach" ? <CoachGoals user={mergedUser} /> : <Navigate to="/goals" replace />}
-            </ProtectedRoute>
-          ),
-        },
+      {
+        path: "athlete-feedback",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+      },
 
+      {
+        path: "practice-performances",
+        element: (
+          <ProtectedRoute user={user}>
+            <PracticePerformances />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "suggest-goals",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole=== "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+      },
 
-        {
-          path: "athlete-feedback",
-          element: (
-            <ProtectedRoute user={user}>
-              {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
-            </ProtectedRoute>
-          ),
-        },
-
-        {
-          path: "athlete-feedback",
-          element: (
-            <ProtectedRoute user={user}>
-              {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "practice-performances",
-          element: (
-            <ProtectedRoute user={user}>
-              <PracticePerformances />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "suggest-goals",
-          element: (
-            <ProtectedRoute user={user}>
-              {userRole=== "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
-            </ProtectedRoute>
-          ),
-        },
-
-        {
-          path: "coach-feedback",
-          element: (
+      {
+        path: "coach-feedback",
+        element: (
           <ProtectedRoute user={user}>
             {userRole === "coach" ? <CoachFeedbackPage coach={user} /> : <Navigate to="/dashboard" replace />}
           </ProtectedRoute>
-          ),
-        },
+        ),
+      },
 
-        {
-          path: "data-reports",
-          element: (
+      {
+        path: "data-reports",
+        element: (
           <ProtectedRoute user={user}>
-            {userRole === "coach" ? 
-              <CoachDataReports coach={user} /> : <Navigate to="/dashboard" replace />
-                }
+            {userRole === "coach" ? (
+              <CoachDataReports coach={user} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
           </ProtectedRoute>
         ),
-        },
-        {
-          path: "health-availability",
-          element: (
-            <ProtectedRoute user={user}>
-              <HealthAndAvailability />
-            </ProtectedRoute>
-          ),
-        },
+      },
 
-        // Keep other Settings sub-pages under /settings/*
+      {
+        path: "health-availability",
+        element: (
+          <ProtectedRoute user={user}>
+            <HealthAndAvailability />
+          </ProtectedRoute>
+        ),
+      },
 
-        {
-          path: "settings/*",
-          element: (
-            <ProtectedRoute user={user}>
-              <Settings user={mergedUser} />
-            </ProtectedRoute>
-          ),
-        },
-        { path: "*", element: <Navigate to="/" replace /> },
-      ],
-    },
-  ]);
+      // Keep other Settings sub-pages under /settings/*
+      {
+        path: "settings/*",
+        element: (
+          <ProtectedRoute user={user}>
+            <Settings user={mergedUser} />
+          </ProtectedRoute>
+        ),
+      },
+      { path: "*", element: <Navigate to="/" replace /> },
+    ],
+  },
+]);
+
 
   return <RouterProvider router={router} />;
 }

@@ -110,13 +110,8 @@ service cloud.firestore {
                         request.resource.data.datetime != null &&
                         request.resource.data.title != null;
         
-        // Only the coach who created the event can update it
-        allow update: if isTeamCoach(teamId) &&
-                        resource.data.createdBy == request.auth.uid;
-        
-        // Only the coach who created the event can delete it
-        allow delete: if isTeamCoach(teamId) &&
-                        resource.data.createdBy == request.auth.uid;
+        allow update: if isTeamCoach(teamId);
+        allow delete: if isTeamCoach(teamId);
       }
 
       /* ========== Team Athletes Subcollection (for health status) ========== */

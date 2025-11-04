@@ -246,13 +246,6 @@ export default function TopBar({
             Calendar
           </Link>
 
-          {/* SCHEDULE TAB - Athlete only */}
-          {user?.role === "athlete" && (
-            <Link to="/schedule" style={linkStyle(activeTab === "schedule")}>
-              Schedule
-            </Link>
-          )}
-
           {/* HEALTH STATUS TAB - Coach only */}
           {user?.role === "coach" && (
             <Link to="/health-status" style={linkStyle(activeTab === "health-status")}>

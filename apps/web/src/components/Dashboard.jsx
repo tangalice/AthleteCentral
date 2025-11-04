@@ -1,25 +1,63 @@
 // src/components/Dashboard.jsx
 import { useLoaderData, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, db } from "../firebase";
-import { collection, query, where, getDocs, onSnapshot, orderBy, doc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  doc,
+} from "firebase/firestore";
 
 export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const data = useLoaderData();
   const navigate = useNavigate();
   const displayName = data?.displayName || user?.email || "";
+
   const [inTeam, setInTeam] = useState(true);
 
-  const [teamId, setTeamId] = useState(null);
+  // teamsMeta: [{ id, coaches: string[] }]
+  const [teamsMeta, setTeamsMeta] = useState([]);
+
+  // 用稳定的派生值，避免把“对象引用变化”当作订阅重建条件
+  const teamIds = useMemo(
+    () => teamsMeta.map((t) => t.id).sort(),
+    [teamsMeta]
+  );
+  const teamIdsKey = useMemo(() => teamIds.join(","), [teamIds]);
+
+  // 把每个 team 的教练 id 列表做成稳定 key，用于 athlete 过滤
+  const coachKey = useMemo(
+    () =>
+      teamIds
+        .map((id) => {
+          const c = teamsMeta.find((t) => t.id === id)?.coaches || [];
+          return `${id}:${c.slice().sort().join("|")}`;
+        })
+        .join(";"),
+    [teamIds, teamsMeta]
+  );
+
+  // Upcoming events（接下来 7 天）
   const [reminders, setReminders] = useState([]);
-  // 🩺 Athlete Health Status
+
+  // Athlete 端健康状态（原有保留）
   const [healthStatus, setHealthStatus] = useState("Loading...");
 
+  // Athlete 端的“只看分配给我”
+  const [assignedOnly, setAssignedOnly] = useState(false);
+
+  // ========== Athlete health live updates ==========
   useEffect(() => {
     if (userRole !== "athlete" || !auth.currentUser) return;
 
-    const fetchAndListenHealth = async () => {
+    let unsub = null;
+    (async () => {
       try {
+        // 先找一个所在队伍（与原逻辑一致）
         const teamsQ = query(
           collection(db, "teams"),
           where("athletes", "array-contains", auth.currentUser.uid)
@@ -29,156 +67,161 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
           setHealthStatus("No team found");
           return;
         }
-        const teamId = snap.docs[0].id;
-        const healthRef = doc(db, "teams", teamId, "athletes", auth.currentUser.uid);
-        const unsub = onSnapshot(healthRef, (docSnap) => {
+        const tid = snap.docs[0].id;
+        const healthRef = doc(db, "teams", tid, "athletes", auth.currentUser.uid);
+        unsub = onSnapshot(healthRef, (docSnap) => {
           if (docSnap.exists()) {
-            const data = docSnap.data();
-            setHealthStatus(data.healthStatus || "Unknown");
+            const d = docSnap.data();
+            setHealthStatus(d.healthStatus || "Unknown");
           } else {
             setHealthStatus("Not set");
           }
         });
-        return () => unsub();
       } catch (err) {
         console.error("Error loading health status:", err);
         setHealthStatus("Error");
       }
-    };
-    fetchAndListenHealth();
+    })();
+
+    return () => unsub && unsub();
   }, [userRole]);
 
-
+  // ========== 检查是否在任何队伍中（用于 notice banner） ==========
   useEffect(() => {
-    if (!auth.currentUser || !userRole) {
-      console.log("⏸️ Waiting for auth.currentUser or userRole...");
-      return;
-    }
-  
+    if (!auth.currentUser || !userRole) return;
+
     const checkTeamMembership = async () => {
       try {
-        console.log("🔍 Checking team membership for:", userRole, auth.currentUser.uid);
-        const q = query(
+        const qTeams = query(
           collection(db, "teams"),
-          where(
-            userRole === "coach" ? "coaches" : "members",
-            "array-contains",
-            auth.currentUser.uid
-          )
+          where(userRole === "coach" ? "coaches" : "members", "array-contains", auth.currentUser.uid)
         );
-        const snap = await getDocs(q);
-        console.log("📦 Team membership found:", !snap.empty);
+        const snap = await getDocs(qTeams);
         setInTeam(!snap.empty);
       } catch (e) {
         console.error("Error checking team membership:", e);
         setInTeam(true);
       }
     };
-  
+
     checkTeamMembership();
-  
-    const interval = setInterval(() => {
-      if (auth.currentUser && userRole) {
-        checkTeamMembership();
-        clearInterval(interval);
-      }
-    }, 1500);
-  
-    return () => clearInterval(interval);
-  }, [userRole, auth.currentUser]);
-  
-  // === ===
-useEffect(() => {
-  if (!auth.currentUser || !userRole) {
-    console.log("⏸️ Waiting for auth or userRole before fetching teams...");
-    return;
-  }
+    const t = setTimeout(checkTeamMembership, 1500);
+    return () => clearTimeout(t);
+  }, [userRole]);
 
-  const fetchTeams = async () => {
-    try {
-      console.log("🔍 Fetching teams for:", userRole, auth.currentUser.uid);
+  // ========== 拉取“我所在队伍”的元信息（队伍 id + 教练 uid 列表） ==========
+  useEffect(() => {
+    if (!auth.currentUser || !userRole) return;
 
-      const teamRefs = [];
+    (async () => {
+      try {
+        const metas = [];
 
-      const mainQ = query(
-        collection(db, "teams"),
-        where(userRole === "coach" ? "coaches" : "members", "array-contains", auth.currentUser.uid)
-      );
-      const mainSnap = await getDocs(mainQ);
-      mainSnap.forEach((doc) => teamRefs.push(doc.id));
-
-      if (userRole === "athlete") {
-        const altQ = query(
+        // 基本归属（coach 用 coaches；athlete 用 members）
+        const baseQ = query(
           collection(db, "teams"),
-          where("athletes", "array-contains", auth.currentUser.uid)
+          where(userRole === "coach" ? "coaches" : "members", "array-contains", auth.currentUser.uid)
         );
-        const altSnap = await getDocs(altQ);
-        altSnap.forEach((doc) => {
-          if (!teamRefs.includes(doc.id)) teamRefs.push(doc.id);
+        const baseSnap = await getDocs(baseQ);
+        baseSnap.forEach((d) => {
+          const data = d.data() || {};
+          metas.push({ id: d.id, coaches: Array.isArray(data.coaches) ? data.coaches : [] });
         });
+
+        // Athlete 端补充按 athletes 查询（有的库用 athletes 存成员）
+        if (userRole === "athlete") {
+          const altQ = query(
+            collection(db, "teams"),
+            where("athletes", "array-contains", auth.currentUser.uid)
+          );
+          const altSnap = await getDocs(altQ);
+          altSnap.forEach((d) => {
+            if (!metas.find((m) => m.id === d.id)) {
+              const data = d.data() || {};
+              metas.push({ id: d.id, coaches: Array.isArray(data.coaches) ? data.coaches : [] });
+            }
+          });
+        }
+
+        setTeamsMeta(metas);
+      } catch (e) {
+        console.error("Error fetching teams meta:", e);
+        setTeamsMeta([]);
       }
+    })();
+  }, [userRole]);
 
-      if (teamRefs.length > 0) {
-        console.log("✅ Found teams:", teamRefs);
-        setTeamId(teamRefs); 
-      } else {
-        console.warn("⚠️ No teams found for user:", auth.currentUser.uid);
-        setTeamId([]);
-      }
-    } catch (e) {
-      console.error("Error fetching teams:", e);
-    }
-  };
+  // ========== 订阅事件（去抖重建 + 聚合更新） ==========
+  // 思路：
+  // 1) 只把 teamIdsKey / coachKey / userRole / assignedOnly 作为依赖，避免因 teamsMeta 引用变化而重建。
+  // 2) 使用 ref 聚合每个 team 的 upcoming 列表，任一 team 更新时只重排并 set 一次。
+  const eventsByTeamRef = useRef({}); // { [teamId]: Event[] }
 
-  fetchTeams();
-}, [userRole, auth.currentUser]);
+  useEffect(() => {
+    if (!teamIdsKey) return;
 
-useEffect(() => {
-  if (!teamId || teamId.length === 0) {
-    console.warn("⏸️ No teamIds yet, skipping reminder listener");
-    return;
-  }
+    const now = new Date();
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const myId = auth.currentUser?.uid;
 
-  console.log("🎧 Listening for events in teams:", teamId);
-
-  const now = new Date();
-  const nextWeek = new Date();
-  nextWeek.setDate(now.getDate() + 7);
-
-  const unsubscribes = teamId.map((id) => {
-    const q = query(collection(db, "teams", id, "events"), orderBy("datetime", "asc"));
-    return onSnapshot(q, (snap) => {
-      const events = snap.docs.map((doc) => {
-        const data = doc.data();
-        const dt =
-          data.datetime?.toDate?.() ??
-          (data.datetime instanceof Date ? data.datetime : null);
-        return { id: doc.id, teamId: id, ...data, datetime: dt };
-      });
-
-      const upcoming = events.filter(
-        (e) =>
-          e.datetime &&
-          e.datetime.getTime() >= now.getTime() &&
-          e.datetime.getTime() <= nextWeek.getTime()
-      );
-
-      setReminders((prev) => {
-        const filteredPrev = prev.filter((p) => p.teamId !== id);
-        const merged = [...filteredPrev, ...upcoming];
-        merged.sort((a, b) => a.datetime - b.datetime); 
-        return merged;
-      });;
-
-      console.log(`✅ Team ${id} has ${upcoming.length} upcoming events`);
+    // 构造 coach 映射（稳定来源：coachKey）
+    const coachMap = {};
+    coachKey.split(";").forEach((pair) => {
+      if (!pair) return;
+      const [id, coachesStr] = pair.split(":");
+      coachMap[id] = coachesStr ? coachesStr.split("|").filter(Boolean) : [];
     });
-  });
 
-  return () => unsubscribes.forEach((unsub) => unsub());
-}, [teamId]);
-  
+    // 订阅每个 team 的 events
+    const unsubs = teamIds.map((id) => {
+      const qRef = query(collection(db, "teams", id, "events"), orderBy("datetime", "asc"));
+      return onSnapshot(qRef, (snap) => {
+        const all = snap.docs.map((docSnap) => {
+          const data = docSnap.data();
+          const dt =
+            data?.datetime?.toDate?.() ??
+            (data.datetime instanceof Date ? data.datetime : null);
+        return { id: docSnap.id, teamId: id, ...data, datetime: dt };
+        });
 
-  // 
+        // 时间范围（未来 7 天）
+        let upcoming = all.filter(
+          (e) => e.datetime && e.datetime >= now && e.datetime <= nextWeek
+        );
+
+        if (userRole === "athlete") {
+          const coaches = coachMap[id] || [];
+          upcoming = upcoming.filter((e) => coaches.includes(e.createdBy));
+          if (assignedOnly && myId) {
+            upcoming = upcoming.filter(
+              (e) =>
+                Array.isArray(e.assignedMemberIds) &&
+                e.assignedMemberIds.includes(myId)
+            );
+          }
+        }
+
+        // 更新 ref 并聚合
+        eventsByTeamRef.current = {
+          ...eventsByTeamRef.current,
+          [id]: upcoming,
+        };
+
+        // 聚合所有 team 的 upcoming，统一排序后 set
+        const merged = Object.values(eventsByTeamRef.current).flat();
+        merged.sort((a, b) => a.datetime - b.datetime);
+        setReminders(merged);
+      });
+    });
+
+    return () => {
+      unsubs.forEach((u) => u());
+      eventsByTeamRef.current = {}; // 清空缓存，避免旧数据闪回
+    };
+    // 依赖用 key 而不是对象，减少不必要重建
+  }, [teamIdsKey, coachKey, userRole, assignedOnly]);
+
+  // ---- UI styles ----
   const brand = "var(--brand-primary)";
   const brandTint = "var(--brand-primary-50)";
   const ink900 = "#111827";
@@ -189,7 +232,8 @@ useEffect(() => {
     borderRadius: 12,
     padding: 20,
     background: "#fff",
-    transition: "background .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease",
+    transition:
+      "background .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease",
   };
 
   const onHover = (e) => {
@@ -209,12 +253,31 @@ useEffect(() => {
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minHeight: 300 }}>
-        <h2 style={{ fontSize: 28, marginBottom: 8, fontWeight: 800, color: ink900 }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          minHeight: 300,
+        }}
+      >
+        <h2
+          style={{
+            fontSize: 28,
+            marginBottom: 8,
+            fontWeight: 800,
+            color: ink900,
+          }}
+        >
           Welcome back, {displayName}!
         </h2>
         <p className="text-muted" style={{ fontSize: 18, marginBottom: 16 }}>
-          {userRole === "athlete" ? "Athlete" : userRole === "coach" ? "Coach" : "User"} Dashboard
+          {userRole === "athlete"
+            ? "Athlete"
+            : userRole === "coach"
+            ? "Coach"
+            : "User"}{" "}
+          Dashboard
         </p>
         {userRole === "athlete" && (
           <p style={{ fontSize: 16, marginBottom: 10 }}>
@@ -234,6 +297,27 @@ useEffect(() => {
           </p>
         )}
 
+        {/* Athlete: Assigned to me toggle */}
+        {userRole === "athlete" && (
+          <div style={{ marginTop: 6 }}>
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 14,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={assignedOnly}
+                onChange={(e) => setAssignedOnly(e.target.checked)}
+              />
+              Assigned to me
+            </label>
+          </div>
+        )}
+
         <div
           style={{
             height: 4,
@@ -244,9 +328,19 @@ useEffect(() => {
             marginBottom: 12,
           }}
         />
-        {/* 🔔 Reminder Section */}
-        <div style={{ width: "100%", maxWidth: 800, marginTop: 20, marginBottom: 24 }}>
-          <h3 style={{ fontSize: 20, fontWeight: 700, color: "#111827", marginBottom: 8 }}>
+
+        {/* 🔔 Upcoming Events (Next 7 Days) */}
+        <div
+          style={{ width: "100%", maxWidth: 800, marginTop: 20, marginBottom: 24 }}
+        >
+          <h3
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: "#111827",
+              marginBottom: 8,
+            }}
+          >
             🔔 Upcoming Events (Next 7 Days)
           </h3>
           {reminders.length === 0 ? (
@@ -255,7 +349,7 @@ useEffect(() => {
             <div style={{ display: "grid", gap: 10 }}>
               {reminders.map((event) => (
                 <div
-                  key={event.id}
+                  key={`${event.teamId}:${event.id}`}
                   style={{
                     border: "1px solid #e5e7eb",
                     borderRadius: 8,
@@ -263,10 +357,23 @@ useEffect(() => {
                     background: "#f9fafb",
                   }}
                 >
-                  <h4 style={{ margin: 0, color: "#111827", fontSize: 16, fontWeight: 700 }}>
+                  <h4
+                    style={{
+                      margin: 0,
+                      color: "#111827",
+                      fontSize: 16,
+                      fontWeight: 700,
+                    }}
+                  >
                     {event.title}
                   </h4>
-                  <p style={{ color: "#4b5563", fontSize: 14, margin: "2px 0 0" }}>
+                  <p
+                    style={{
+                      color: "#4b5563",
+                      fontSize: 14,
+                      margin: "2px 0 0",
+                    }}
+                  >
                     {event.datetime.toLocaleString("en-US", {
                       weekday: "short",
                       month: "short",
@@ -275,13 +382,25 @@ useEffect(() => {
                       minute: "2-digit",
                     })}
                   </p>
+                  {Array.isArray(event.assignedMemberIds) &&
+                    event.assignedMemberIds.length > 0 && (
+                      <p
+                        style={{
+                          color: "#6b7280",
+                          fontSize: 12,
+                          margin: "4px 0 0",
+                        }}
+                      >
+                        Assigned IDs: {event.assignedMemberIds.join(", ")}
+                      </p>
+                    )}
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* notice */}
+        {/* Not in team notice */}
         {!inTeam && (
           <div
             style={{
@@ -307,7 +426,7 @@ useEffect(() => {
           </div>
         )}
 
-        {/* calculate */}
+        {/* Summary cards */}
         <div
           style={{
             display: "grid",
@@ -325,7 +444,16 @@ useEffect(() => {
             onMouseLeave={offHover}
           >
             <h3 style={{ marginBottom: 8, color: ink900 }}>Training Sessions</h3>
-            <p style={{ fontSize: 36, fontWeight: 800, margin: "6px 0", color: brand }}>0</p>
+            <p
+              style={{
+                fontSize: 36,
+                fontWeight: 800,
+                margin: "6px 0",
+                color: brand,
+              }}
+            >
+              0
+            </p>
             <p className="text-muted">This Week</p>
           </div>
 
@@ -336,7 +464,16 @@ useEffect(() => {
             onMouseLeave={offHover}
           >
             <h3 style={{ marginBottom: 8, color: ink900 }}>Messages</h3>
-            <p style={{ fontSize: 36, fontWeight: 800, margin: "6px 0", color: unreadMessageCount > 0 ? "#ef4444" : brand }}>{unreadMessageCount}</p>
+            <p
+              style={{
+                fontSize: 36,
+                fontWeight: 800,
+                margin: "6px 0",
+                color: unreadMessageCount > 0 ? "#ef4444" : brand,
+              }}
+            >
+              {unreadMessageCount}
+            </p>
             <p className="text-muted">Unread</p>
           </div>
 
@@ -347,15 +484,35 @@ useEffect(() => {
             onMouseLeave={offHover}
           >
             <h3 style={{ marginBottom: 8, color: ink900 }}>Profile</h3>
-            <p style={{ fontSize: 36, fontWeight: 800, margin: "6px 0", color: statusColor }}>{statusMark}</p>
+            <p
+              style={{
+                fontSize: 36,
+                fontWeight: 800,
+                margin: "6px 0",
+                color: statusColor,
+              }}
+            >
+              {statusMark}
+            </p>
             <p className="text-muted">{statusText}</p>
           </div>
         </div>
 
         <div style={{ marginTop: 32, width: "100%", maxWidth: 1000 }}>
-          <h3 style={{ fontSize: 20, marginBottom: 12, color: ink900, fontWeight: 800 }}>Recent Activity</h3>
+          <h3
+            style={{
+              fontSize: 20,
+              marginBottom: 12,
+              color: ink900,
+              fontWeight: 800,
+            }}
+          >
+            Recent Activity
+          </h3>
           <div className="card" style={{ borderColor: "var(--border)" }}>
-            <p className="text-muted" style={{ textAlign: "center" }}>No recent activity to display</p>
+            <p className="text-muted" style={{ textAlign: "center" }}>
+              No recent activity to display
+            </p>
           </div>
         </div>
       </div>
