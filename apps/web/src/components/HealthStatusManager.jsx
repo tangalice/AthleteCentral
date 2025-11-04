@@ -6,10 +6,13 @@ import {
   onSnapshot,
   updateDoc,
   getDoc,
+  getDocs,
   query,
+  where,
   orderBy,
   setDoc,
 } from "firebase/firestore";
+
 import { serverTimestamp } from "firebase/firestore";
 
 
@@ -116,37 +119,31 @@ export default function HealthStatusManager({ teamId }) {
 
   const handleStatusChange = async (athleteId, newStatus) => {
     if (!teamId || !athleteId) return;
-    console.log("🟢 Updating health:", teamId, athleteId, newStatus);
   
-    const ref = doc(db, "teams", teamId, "athletes", athleteId);
+    console.log("🟢 Updating health:", teamId, athleteId, newStatus);
     setSavingIds((prev) => new Set(prev).add(athleteId));
   
     try {
-      await setDoc(
-        ref,
-        {
-          healthStatus: newStatus ?? null,
-          name:
-            athletes.find((x) => x.id === athleteId)?.name ||
-            "Unnamed",
-          email:
-            athletes.find((x) => x.id === athleteId)?.email ||
-            "",
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-      console.log("✅ setDoc(merge) success");
-    } catch (e) {
-      console.error("❌ setDoc failed:", e);
-      setError("Fail loading");
-    } finally {
-      setAthletes((prev) =>
-        prev.map((a) =>
-          a.id === athleteId ? { ...a, healthStatus: newStatus ?? null } : a
-        )
+      const teamsSnap = await getDocs(
+        query(collection(db, "teams"), where("athletes", "array-contains", athleteId))
       );
   
+      for (const t of teamsSnap.docs) {
+        const ref = doc(db, "teams", t.id, "athletes", athleteId);
+        await setDoc(
+          ref,
+          {
+            healthStatus: newStatus ?? null,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        console.log(`✅ Updated ${athleteId} in team ${t.id}`);
+      }
+    } catch (e) {
+      console.error("❌ Failed to sync athlete status:", e);
+      setError("Loading Fail");
+    } finally {
       setSavingIds((prev) => {
         const next = new Set(prev);
         next.delete(athleteId);
