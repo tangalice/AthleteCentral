@@ -1,8 +1,61 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 
-const testTypes = ['All', '2k', '20 min', '30 min', '6k'];
+// Sport-specific test types
+const getTestTypesBySport = (sport) => {
+  const sportLower = sport?.toLowerCase() || '';
+  
+  switch (sportLower) {
+    case 'rowing':
+      return ['All', '2k', '5k', '6k', '30min', '60min'];
+    case 'running':
+    case 'track':
+    case 'cross country':
+      return ['All', 'Mile', '5K', '10K', 'Half Marathon', 'Marathon'];
+    case 'swimming':
+      return ['All', '50 Free', '100 Free', '200 Free', '500 Free', '100 Fly', '200 IM'];
+    default:
+      return ['All', '2k', '5k', '6k', '30min', '60min']; // default to rowing
+  }
+};
 
-export default function GroupPerformance({ teamData = [] }) {
+// Get column configuration by sport
+const getColumnsBySport = (sport) => {
+  const sportLower = sport?.toLowerCase() || '';
+  
+  switch (sportLower) {
+    case 'rowing':
+      return {
+        splitLabel: 'Split (/500m)',
+        showWatts: true,
+        showSplit: true,
+      };
+    case 'running':
+    case 'track':
+    case 'cross country':
+      return {
+        splitLabel: 'Pace (/mile)',
+        showWatts: false,
+        showSplit: true,
+      };
+    case 'swimming':
+      return {
+        splitLabel: 'Pace (/100m)',
+        showWatts: false,
+        showSplit: true,
+      };
+    default:
+      return {
+        splitLabel: 'Split (/500m)',
+        showWatts: true,
+        showSplit: true,
+      };
+  }
+};
+
+export default function GroupPerformance({ teamData = [], userSport = 'rowing' }) {
+  const testTypes = useMemo(() => getTestTypesBySport(userSport), [userSport]);
+  const columns = useMemo(() => getColumnsBySport(userSport), [userSport]);
+  
   const [selectedTestType, setSelectedTestType] = useState('All');
   const [sortBy, setSortBy] = useState('time'); // 'time', 'name', 'watts'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
@@ -80,7 +133,7 @@ export default function GroupPerformance({ teamData = [] }) {
 
   const getSortIcon = (column) => {
     if (sortBy !== column) return '';
-    return sortOrder === 'asc' ? ' ^' : ' V';
+    return sortOrder === 'asc' ? ' ↑' : ' ↓';
   };
 
   // Calculate stats
@@ -96,6 +149,7 @@ export default function GroupPerformance({ teamData = [] }) {
         </h1>
         <p style={{ color: '#6b7280', fontSize: '15px' }}>
           View and compare team member test piece results
+          {userSport && <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>({userSport})</span>}
         </p>
       </div>
 
@@ -214,31 +268,35 @@ export default function GroupPerformance({ teamData = [] }) {
                 >
                   Time {getSortIcon('time')}
                 </th>
-                <th style={{ 
-                  padding: '16px 24px', 
-                  textAlign: 'left', 
-                  fontSize: '13px', 
-                  fontWeight: 600, 
-                  color: '#6b7280',
-                  borderBottom: '2px solid #e5e7eb'
-                }}>
-                  Split (/500m)
-                </th>
-                <th 
-                  onClick={() => handleSort('watts')}
-                  style={{ 
+                {columns.showSplit && (
+                  <th style={{ 
                     padding: '16px 24px', 
                     textAlign: 'left', 
                     fontSize: '13px', 
                     fontWeight: 600, 
                     color: '#6b7280',
-                    borderBottom: '2px solid #e5e7eb',
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  Watts {getSortIcon('watts')}
-                </th>
+                    borderBottom: '2px solid #e5e7eb'
+                  }}>
+                    {columns.splitLabel}
+                  </th>
+                )}
+                {columns.showWatts && (
+                  <th 
+                    onClick={() => handleSort('watts')}
+                    style={{ 
+                      padding: '16px 24px', 
+                      textAlign: 'left', 
+                      fontSize: '13px', 
+                      fontWeight: 600, 
+                      color: '#6b7280',
+                      borderBottom: '2px solid #e5e7eb',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                  >
+                    Watts {getSortIcon('watts')}
+                  </th>
+                )}
                 <th style={{ 
                   padding: '16px 24px', 
                   textAlign: 'left', 
@@ -254,7 +312,7 @@ export default function GroupPerformance({ teamData = [] }) {
             <tbody>
               {sortedData.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ 
+                  <td colSpan={columns.showWatts && columns.showSplit ? 7 : columns.showSplit ? 6 : 5} style={{ 
                     padding: '40px 24px', 
                     textAlign: 'center', 
                     color: '#9ca3af',
@@ -322,12 +380,16 @@ export default function GroupPerformance({ teamData = [] }) {
                       <td style={{ padding: '16px 24px', color: '#111827', fontFamily: 'monospace', fontSize: '15px', fontWeight: 600 }}>
                         {entry.time}
                       </td>
-                      <td style={{ padding: '16px 24px', color: '#6b7280', fontFamily: 'monospace', fontSize: '14px' }}>
-                        {entry.split}
-                      </td>
-                      <td style={{ padding: '16px 24px', color: '#6b7280', fontSize: '14px' }}>
-                        {entry.watts > 0 ? `${entry.watts}W` : '-'}
-                      </td>
+                      {columns.showSplit && (
+                        <td style={{ padding: '16px 24px', color: '#6b7280', fontFamily: 'monospace', fontSize: '14px' }}>
+                          {entry.split || '-'}
+                        </td>
+                      )}
+                      {columns.showWatts && (
+                        <td style={{ padding: '16px 24px', color: '#6b7280', fontSize: '14px' }}>
+                          {entry.watts > 0 ? `${entry.watts}W` : '-'}
+                        </td>
+                      )}
                       <td style={{ padding: '16px 24px', color: '#9ca3af', fontSize: '13px' }}>
                         {new Date(entry.date).toLocaleDateString()}
                       </td>

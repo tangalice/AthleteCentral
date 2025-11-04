@@ -41,7 +41,10 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "athlete-feedback" ||
     activeTab === "coach-feedback" ||
     activeTab === "suggest-goals" ||
-    activeTab === "health-availability";
+    activeTab === "health-availability" ||
+    activeTab === "group-performance" ||
+    activeTab === "individual-performance" ||
+    activeTab === "lineup-builder";
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -131,6 +134,17 @@ function DropdownMenu({ user, activeTab }) {
   
   // Health and Availability - Available to both
   menuItems.push({ path: "/health-availability", label: "Health and Availability", activeTab: "health-availability" });
+  
+  // Group Performance - Available to both
+  menuItems.push({ path: "/group-performance", label: "Group Performance", activeTab: "group-performance" });
+  
+  // Individual Performance - Available to both
+  menuItems.push({ path: "/individual-performance", label: "Individual Performance", activeTab: "individual-performance" });
+  
+  // Lineup Builder - Only for rowing users
+  if (user?.sport?.toLowerCase() === "rowing") {
+    menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
+  }
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", display: "flex", alignItems: "center" }}>

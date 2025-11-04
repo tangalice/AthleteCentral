@@ -49,6 +49,11 @@ import HealthStatusPage from "./pages/HealthStatusPage";
 import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
 import HealthAndAvailability from "./pages/HealthAndAvailability";
+
+import GroupPerformance from './Billa_UI_Pages/Rowing_Stories/GroupPerformance';
+import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
+import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
+
 /* ---------------- Protected wrapper ---------------- */
 
 // Helper to add timeout to promises
@@ -189,24 +194,27 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
   }, [user]);
 
   const root = (pathname.split("/")[1] || "").toLowerCase();
-           const activeTab =
-             root === "settings" ? "settings" :
-             root === "profile"  ? "profile"  :
-             root === "messages" ? "messages" : 
-             root === "teams"    ? "teams"    :
-             root === "calendar" ? "calendar" :
-             root === "health-status" ? "health-status" :
-             root === "activity" ? "activity" :
-             root === "athlete-tools" ? "athlete-tools" :
-             root === "results"  ? "results"  :
-             root === "goals"    ? "goals"    :
-             root === "view-athlete-goals" ? "view-athlete-goals" :
-             root === "coach-feedback" ? "coach-feedback" :
-             root === "data-reports" ? "data-reports" :
-             root === "athlete-feedback" ? "athlete-feedback" :
-             root === "suggest-goals" ? "suggest-goals" :
-             root === "health-availability" ? "health-availability" :
-             "dashboard";
+  const activeTab =
+    root === "settings" ? "settings" :
+    root === "profile"  ? "profile"  :
+    root === "messages" ? "messages" : 
+    root === "teams"    ? "teams"    :
+    root === "calendar" ? "calendar" :
+    root === "health-status" ? "health-status" :
+    root === "activity" ? "activity" :
+    root === "athlete-tools" ? "athlete-tools" :
+    root === "results"  ? "results"  :
+    root === "goals"    ? "goals"    :
+    root === "view-athlete-goals" ? "view-athlete-goals" :
+    root === "coach-feedback" ? "coach-feedback" :
+    root === "data-reports" ? "data-reports" :
+    root === "athlete-feedback" ? "athlete-feedback" :
+    root === "suggest-goals" ? "suggest-goals" :
+    root === "health-availability" ? "health-availability" :
+    root === "group-performance" ? "group-performance" :
+    root === "individual-performance" ? "individual-performance" :
+    root === "lineup-builder" ? "lineup-builder" :
+    "dashboard";
 
   return (
     <div
@@ -463,7 +471,7 @@ const router = createBrowserRouter([
   // App layout + protected routes
   {
     path: "/",
-    element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} />,
+    element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} userSport={userSport} />,
     children: [
       {
         index: true,
@@ -532,6 +540,22 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <Teams />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "group-performance",
+        element: (
+          <ProtectedRoute user={user}>
+            <GroupPerformance user={mergedUser} userRole={userRole} userSport={userSport} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "individual-performance",
+        element: (
+          <ProtectedRoute user={user}>
+            <IndividualPerformance user={mergedUser} userRole={userRole} userSport={userSport} />
           </ProtectedRoute>
         ),
       },
@@ -638,6 +662,36 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <HealthAndAvailability />
+          </ProtectedRoute>
+        ),
+      },
+
+      // NEW ROUTES - Group Performance, Individual Performance, Lineup Builder
+      {
+        path: "group-performance",
+        element: (
+          <ProtectedRoute user={user}>
+            <GroupPerformance user={mergedUser} userRole={userRole} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "individual-performance",
+        element: (
+          <ProtectedRoute user={user}>
+            <IndividualPerformance user={mergedUser} userRole={userRole} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "lineup-builder",
+        element: (
+          <ProtectedRoute user={user}>
+            {userSport?.toLowerCase() === "rowing" ? (
+              <LineupBuilder user={mergedUser} userRole={userRole} userSport={userSport} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
           </ProtectedRoute>
         ),
       },
