@@ -10,6 +10,8 @@ import {
   orderBy,
   setDoc,
 } from "firebase/firestore";
+import { serverTimestamp } from "firebase/firestore";
+
 
 export default function HealthStatusManager({ teamId }) {
   const [athletes, setAthletes] = useState([]);
@@ -46,46 +48,67 @@ export default function HealthStatusManager({ teamId }) {
     const unsub = onSnapshot(
       q,
       async (snap) => {
-        if (snap.empty) {
+        try {
           const teamSnap = await getDoc(teamRef);
-          if (teamSnap.exists()) {
-            const teamData = teamSnap.data();
-            if (Array.isArray(teamData.athletes)) {
-              const list = [];
-              for (const athleteId of teamData.athletes) {
-                try {
-                  const userSnap = await getDoc(doc(db, "users", athleteId));
-                  if (userSnap.exists()) {
-                    const u = userSnap.data();
-                    list.push({
-                      id: athleteId,
-                      name: u.displayName || u.name || u.email || "Unnamed",
-                      email: u.email || "",
-                      healthStatus: "active",
-                    });
-                  }
-                } catch (e) {
-                  console.warn("Error loading athlete", athleteId, e);
-                }
-              }
-              setAthletes(list);
-            } else {
-              setError("No athletes found for this team.");
-            }
-          } else {
+          if (!teamSnap.exists()) {
             setError("Team not found.");
+            setAthletes([]);
+            setLoading(false);
+            return;
           }
-        } else {
-          const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      
+          const teamData = teamSnap.data();
+          const athleteIds = Array.isArray(teamData.athletes) ? teamData.athletes : [];
+      
+          const subMap = new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
+      
+          const list = [];
+          for (const athleteId of athleteIds) {
+            let name = "Unnamed";
+            let email = "";
+            try {
+              const userSnap = await getDoc(doc(db, "users", athleteId));
+              if (userSnap.exists()) {
+                const u = userSnap.data();
+                name = u.displayName || u.name || u.email || "Unnamed";
+                email = u.email || "";
+              }
+            } catch (e) {
+              console.warn("Load user failed:", athleteId, e);
+            }
+      
+            // 
+            const sub = subMap.get(athleteId);
+            const healthStatus = sub?.healthStatus || "active";
+            list.push({ id: athleteId, name, email, healthStatus });
+      
+            if (!sub) {
+              try {
+                await setDoc(
+                  doc(db, "teams", teamId, "athletes", athleteId),
+                  {
+                    name,
+                    email,
+                    healthStatus,
+                    createdAt: serverTimestamp(),
+                  },
+                  { merge: true }
+                );
+              } catch (e) {
+                console.warn("Backfill athlete doc failed:", athleteId, e);
+              }
+            }
+          }
+      
+          list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
           setAthletes(list);
+          setLoading(false);
+        } catch (err) {
+          console.error("onSnapshot handler error:", err);
+          setError("Failed to load athletes.");
+          setLoading(false);
         }
-        setLoading(false);
-      },
-      (err) => {
-        console.error("onSnapshot error:", err);
-        setError("Failed to load athletes.");
-        setLoading(false);
-      }
+      }      
     );
 
     return () => unsub();
@@ -99,31 +122,28 @@ export default function HealthStatusManager({ teamId }) {
     setSavingIds((prev) => new Set(prev).add(athleteId));
   
     try {
-      await updateDoc(ref, {
-        healthStatus: newStatus || null,
-        updatedAt: new Date(),
-      });
-      console.log("✅ updateDoc success");
+      await setDoc(
+        ref,
+        {
+          healthStatus: newStatus ?? null,
+          name:
+            athletes.find((x) => x.id === athleteId)?.name ||
+            "Unnamed",
+          email:
+            athletes.find((x) => x.id === athleteId)?.email ||
+            "",
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      console.log("✅ setDoc(merge) success");
     } catch (e) {
-      console.warn("⚠️ updateDoc failed, trying setDoc:", e);
-      try {
-        await setDoc(
-          ref,
-          {
-            healthStatus: newStatus || null,
-            updatedAt: new Date(),
-          },
-          { merge: true }
-        );
-        console.log("✅ setDoc success");
-      } catch (e2) {
-        console.error("❌ setDoc failed:", e2);
-        setError("Failed to save health status. Check console.");
-      }
+      console.error("❌ setDoc failed:", e);
+      setError("Fail loading");
     } finally {
       setAthletes((prev) =>
         prev.map((a) =>
-          a.id === athleteId ? { ...a, healthStatus: newStatus || null } : a
+          a.id === athleteId ? { ...a, healthStatus: newStatus ?? null } : a
         )
       );
   
