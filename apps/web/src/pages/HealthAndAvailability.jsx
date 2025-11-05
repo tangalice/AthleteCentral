@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { auth, db } from "../firebase";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
 
 export default function HealthAndAvailability() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -15,69 +16,73 @@ export default function HealthAndAvailability() {
 
   useEffect(() => {
     let cancelled = false;
-
+    let unsubs = [];
+  
     const load = async () => {
       if (!auth.currentUser) return;
       setLoading(true);
       setError("");
+  
       try {
-        // Find all teams for this coach
         const teamsQ = query(
           collection(db, "teams"),
           where("coaches", "array-contains", auth.currentUser.uid)
         );
         const teamsSnap = await getDocs(teamsQ);
         const teamIds = teamsSnap.docs.map(d => d.id);
-
-        const athleteIdToStatus = new Map();
-
-        // Gather athlete subdocs from each team
-        for (const tId of teamIds) {
-          const subSnap = await getDocs(collection(db, "teams", tId, "athletes"));
-          subSnap.docs.forEach(sd => {
-            const d = sd.data() || {};
-            // Prefer more restrictive statuses if multiple teams conflict
-            const existing = athleteIdToStatus.get(sd.id);
-            const nextStatus = (d.healthStatus || "active");
-            if (!existing) {
-              athleteIdToStatus.set(sd.id, nextStatus);
-            } else {
-              // injured > unavailable > active
-              const rank = (s) => s === "injured" ? 2 : s === "unavailable" ? 1 : 0;
-              if (rank(nextStatus) > rank(existing)) athleteIdToStatus.set(sd.id, nextStatus);
-            }
-          });
-        }
-
-        // Load user profiles for display
-        const result = [];
-        for (const [athleteId, status] of athleteIdToStatus.entries()) {
-          try {
-            const userSnap = await getDoc(doc(db, "users", athleteId));
-            const u = userSnap.exists() ? (userSnap.data() || {}) : {};
-            const name = u.displayName || u.name || u.email || "Unnamed";
-            const email = u.email || "";
-            result.push({ id: athleteId, name, email, healthStatus: normalizeHealth(status) });
-          } catch (e) {
-            result.push({ id: athleteId, name: "Unnamed", email: "", healthStatus: normalizeHealth(status) });
-          }
-        }
-
-        if (!cancelled) {
-          result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-          setAthletes(result);
-        }
+  
+        const athleteMap = new Map();
+  
+        unsubs = teamIds.map(tId =>
+          onSnapshot(collection(db, "teams", tId, "athletes"), (snap) => {
+            snap.docs.forEach(sd => {
+              const d = sd.data() || {};
+              const existing = athleteMap.get(sd.id);
+              const nextStatus = (d.healthStatus || "active");
+              if (!existing) {
+                athleteMap.set(sd.id, nextStatus);
+              } else {
+                const rank = (s) => s === "injured" ? 2 : s === "unavailable" ? 1 : 0;
+                if (rank(nextStatus) > rank(existing)) athleteMap.set(sd.id, nextStatus);
+              }
+            });
+  
+            const updateList = async () => {
+              const result = [];
+              for (const [athleteId, status] of athleteMap.entries()) {
+                const userSnap = await getDoc(doc(db, "users", athleteId));
+                const u = userSnap.exists() ? (userSnap.data() || {}) : {};
+                const name = u.displayName || u.name || u.email || "Unnamed";
+                const email = u.email || "";
+                result.push({
+                  id: athleteId,
+                  name,
+                  email,
+                  healthStatus: normalizeHealth(status)
+                });
+              }
+              if (!cancelled) {
+                result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+                setAthletes(result);
+              }
+            };
+            updateList();
+          })
+        );
       } catch (e) {
         if (!cancelled) setError("Failed to load athletes.");
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
-
+  
     load();
-    return () => { cancelled = true; };
+  
+    return () => {
+      cancelled = true;
+      unsubs.forEach(unsub => unsub && unsub());
+    };
   }, []);
-
   // Helpers
   function normalizeHealth(status) {
     const s = String(status || "").toLowerCase();
