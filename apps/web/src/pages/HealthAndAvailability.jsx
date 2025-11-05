@@ -1,5 +1,7 @@
 // src/pages/HealthAndAvailability.jsx
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { auth, db } from "../firebase";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 
 export default function HealthAndAvailability() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -7,186 +9,191 @@ export default function HealthAndAvailability() {
   const todayStr = today.toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
-  // Mock data - will be replaced with backend connection later
-  // Using useMemo to generate dates dynamically
-  const mockAthletes = useMemo(() => {
-    const baseDate = new Date();
-    const getDateStr = (daysFromToday) => {
-      const date = new Date(baseDate);
-      date.setDate(baseDate.getDate() + daysFromToday);
-      return date.toISOString().split('T')[0];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [athletes, setAthletes] = useState([]); // {id, name, email, healthStatus}
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      if (!auth.currentUser) return;
+      setLoading(true);
+      setError("");
+      try {
+        // Find all teams for this coach
+        const teamsQ = query(
+          collection(db, "teams"),
+          where("coaches", "array-contains", auth.currentUser.uid)
+        );
+        const teamsSnap = await getDocs(teamsQ);
+        const teamIds = teamsSnap.docs.map(d => d.id);
+
+        const athleteIdToStatus = new Map();
+
+        // Gather athlete subdocs from each team
+        for (const tId of teamIds) {
+          const subSnap = await getDocs(collection(db, "teams", tId, "athletes"));
+          subSnap.docs.forEach(sd => {
+            const d = sd.data() || {};
+            // Prefer more restrictive statuses if multiple teams conflict
+            const existing = athleteIdToStatus.get(sd.id);
+            const nextStatus = (d.healthStatus || "active");
+            if (!existing) {
+              athleteIdToStatus.set(sd.id, nextStatus);
+            } else {
+              // injured > unavailable > active
+              const rank = (s) => s === "injured" ? 2 : s === "unavailable" ? 1 : 0;
+              if (rank(nextStatus) > rank(existing)) athleteIdToStatus.set(sd.id, nextStatus);
+            }
+          });
+        }
+
+        // Load user profiles for display
+        const result = [];
+        for (const [athleteId, status] of athleteIdToStatus.entries()) {
+          try {
+            const userSnap = await getDoc(doc(db, "users", athleteId));
+            const u = userSnap.exists() ? (userSnap.data() || {}) : {};
+            const name = u.displayName || u.name || u.email || "Unnamed";
+            const email = u.email || "";
+            result.push({ id: athleteId, name, email, healthStatus: normalizeHealth(status) });
+          } catch (e) {
+            result.push({ id: athleteId, name: "Unnamed", email: "", healthStatus: normalizeHealth(status) });
+          }
+        }
+
+        if (!cancelled) {
+          result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+          setAthletes(result);
+        }
+      } catch (e) {
+        if (!cancelled) setError("Failed to load athletes.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
-    
-    return [
-    {
-      id: "1",
-      name: "Alice Tang",
-      email: "alice@example.com",
-      healthStatus: "Healthy",
-      availability: {
-        [getDateStr(0)]: "Available",
-        [getDateStr(1)]: "Unavailable",
-        [getDateStr(2)]: "Available",
-        [getDateStr(3)]: "Available",
-        [getDateStr(4)]: "Partially Available",
-        [getDateStr(5)]: "Available",
-        [getDateStr(6)]: "Available",
-      }
-    },
-    {
-      id: "2",
-      name: "Jane Billa",
-      email: "jane@example.com",
-      healthStatus: "Injured",
-      availability: {
-        [getDateStr(0)]: "Unavailable",
-        [getDateStr(1)]: "Unavailable",
-        [getDateStr(2)]: "Unavailable",
-        [getDateStr(3)]: "Partially Available",
-        [getDateStr(4)]: "Partially Available",
-        [getDateStr(5)]: "Available",
-        [getDateStr(6)]: "Available",
-      }
-    },
-    {
-      id: "3",
-      name: "John Smith",
-      email: "john@example.com",
-      healthStatus: "Healthy",
-      availability: {
-        [getDateStr(0)]: "Available",
-        [getDateStr(1)]: "Available",
-        [getDateStr(2)]: "Available",
-        [getDateStr(3)]: "Available",
-        [getDateStr(4)]: "Unavailable",
-        [getDateStr(5)]: "Available",
-        [getDateStr(6)]: "Available",
-      }
-    },
-    {
-      id: "4",
-      name: "Emily Johnson",
-      email: "emily@example.com",
-      healthStatus: "Recovering",
-      availability: {
-        [getDateStr(0)]: "Partially Available",
-        [getDateStr(1)]: "Partially Available",
-        [getDateStr(2)]: "Available",
-        [getDateStr(3)]: "Available",
-        [getDateStr(4)]: "Available",
-        [getDateStr(5)]: "Available",
-        [getDateStr(6)]: "Available",
-      }
-    },
-    {
-      id: "5",
-      name: "Michael Chen",
-      email: "michael@example.com",
-      healthStatus: "Healthy",
-      availability: {
-        [getDateStr(0)]: "Available",
-        [getDateStr(1)]: "Unavailable",
-        [getDateStr(2)]: "Available",
-        [getDateStr(3)]: "Available",
-        [getDateStr(4)]: "Available",
-        [getDateStr(5)]: "Available",
-        [getDateStr(6)]: "Unavailable",
-      }
-    },
-    ];
+
+    load();
+    return () => { cancelled = true; };
   }, []);
 
-  // Filter athletes based on search term
-  const filteredAthletes = useMemo(() => {
-    if (!searchTerm.trim()) return mockAthletes;
-    const lowerSearch = searchTerm.toLowerCase();
-    return mockAthletes.filter(athlete =>
-      athlete.name.toLowerCase().includes(lowerSearch) ||
-      athlete.email.toLowerCase().includes(lowerSearch)
-    );
-  }, [searchTerm]);
+  // Helpers
+  function normalizeHealth(status) {
+    const s = String(status || "").toLowerCase();
+    if (s === "injured") return "Injured";
+    if (s === "unavailable") return "Unavailable";
+    return "Healthy"; // treat anything else as healthy/active
+  }
 
-  // Get availability for selected date
-  const athletesForDate = useMemo(() => {
-    return filteredAthletes.filter(athlete =>
-      athlete.availability[selectedDate] &&
-      athlete.availability[selectedDate] !== "Unavailable"
+  function derivedAvailabilityFromHealth(health) {
+    if (health === "Injured" || health === "Unavailable") return "Unavailable";
+    return "Available";
+  }
+
+  const getNext7Days = () => {
+    const days = [];
+    const base = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      days.push({
+        value: d.toISOString().split('T')[0],
+        label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      });
+    }
+    return days;
+  };
+
+  // Filtered list
+  const filteredAthletes = useMemo(() => {
+    const source = athletes;
+    if (!searchTerm.trim()) return source;
+    const ql = searchTerm.toLowerCase();
+    return source.filter(a =>
+      (a.name || "").toLowerCase().includes(ql) ||
+      (a.email || "").toLowerCase().includes(ql)
     );
+  }, [athletes, searchTerm]);
+
+  // Availability for selected date uses derived availability
+  const athletesForDate = useMemo(() => {
+    return filteredAthletes.filter(a => derivedAvailabilityFromHealth(a.healthStatus) !== "Unavailable");
   }, [filteredAthletes, selectedDate]);
 
-  // Calculate availability stats per day (next 7 days)
+  // Stats per day
   const availabilityStats = useMemo(() => {
     const days = [];
-    const today = new Date();
+    const source = athletes;
+    const base = new Date();
     for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
-      
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+
       let available = 0;
-      let partiallyAvailable = 0;
+      let partiallyAvailable = 0; // not used now
       let unavailable = 0;
 
-      mockAthletes.forEach(athlete => {
-        const status = athlete.availability[dateStr];
-        if (status === "Available") available++;
-        else if (status === "Partially Available") partiallyAvailable++;
-        else unavailable++;
-      });
+      for (const a of source) {
+        const status = derivedAvailabilityFromHealth(a.healthStatus);
+        if (status === "Available") available++; else unavailable++;
+      }
 
       days.push({
         date: dateStr,
-        dateObj: date,
+        dateObj: d,
         available,
         partiallyAvailable,
         unavailable,
-        total: mockAthletes.length,
+        total: source.length,
       });
     }
-
     return days.sort((a, b) => b.available - a.available);
-  }, []);
+  }, [athletes]);
 
   const getHealthStatusColor = (status) => {
     switch (status) {
       case "Healthy":
-        return "#10b981"; // green
+        return "#10b981";
       case "Injured":
-        return "#ef4444"; // red
-      case "Recovering":
-        return "#f59e0b"; // amber
+        return "#ef4444";
+      case "Unavailable":
+        return "#ef4444";
       default:
-        return "#6b7280"; // gray
+        return "#6b7280";
     }
   };
 
   const getAvailabilityColor = (status) => {
     switch (status) {
       case "Available":
-        return "#10b981"; // green
-      case "Partially Available":
-        return "#f59e0b"; // amber
+        return "#10b981";
       case "Unavailable":
-        return "#ef4444"; // red
+        return "#ef4444";
       default:
-        return "#6b7280"; // gray
+        return "#6b7280";
     }
   };
 
-  // Generate next 7 days for date selector
-  const getNext7Days = () => {
-    const days = [];
-    const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      days.push({
-        value: date.toISOString().split('T')[0],
-        label: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-      });
-    }
-    return days;
+  const getDerivedAvailabilityForDate = (athlete) => {
+    return derivedAvailabilityFromHealth(athlete.healthStatus);
   };
+
+  if (loading) {
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ color: "#6b7280" }}>Loading health and availability…</p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ color: "#ef4444" }}>{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "24px", maxWidth: "1400px", margin: "0 auto" }}>
@@ -233,7 +240,7 @@ export default function HealthAndAvailability() {
         }}>
           <div style={{ fontSize: "14px", color: "#6b7280", marginBottom: "8px" }}>Total Athletes</div>
           <div style={{ fontSize: "32px", fontWeight: 700, color: "#111827" }}>
-            {mockAthletes.length}
+            {athletes.length}
           </div>
         </div>
         <div style={{
@@ -244,7 +251,7 @@ export default function HealthAndAvailability() {
         }}>
           <div style={{ fontSize: "14px", color: "#6b7280", marginBottom: "8px" }}>Available Today</div>
           <div style={{ fontSize: "32px", fontWeight: 700, color: "#10b981" }}>
-            {athletesForDate.filter(a => a.availability[selectedDate] === "Available").length}
+            {filteredAthletes.filter(a => getDerivedAvailabilityForDate(a) === "Available").length}
           </div>
         </div>
         <div style={{
@@ -255,7 +262,7 @@ export default function HealthAndAvailability() {
         }}>
           <div style={{ fontSize: "14px", color: "#6b7280", marginBottom: "8px" }}>Healthy Athletes</div>
           <div style={{ fontSize: "32px", fontWeight: 700, color: "#10b981" }}>
-            {mockAthletes.filter(a => a.healthStatus === "Healthy").length}
+            {athletes.filter(a => a.healthStatus === "Healthy").length}
           </div>
         </div>
       </div>
@@ -293,7 +300,7 @@ export default function HealthAndAvailability() {
 
           <div style={{ marginTop: "16px" }}>
             {filteredAthletes.map(athlete => {
-              const availability = athlete.availability[selectedDate] || "Not Set";
+              const availability = getDerivedAvailabilityForDate(athlete);
               const color = getAvailabilityColor(availability);
               return (
                 <div
@@ -344,8 +351,8 @@ export default function HealthAndAvailability() {
           </p>
           
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {availabilityStats.map((day, index) => {
-              const percentage = Math.round((day.available / day.total) * 100);
+            {availabilityStats.map((day) => {
+              const percentage = day.total > 0 ? Math.round((day.available / day.total) * 100) : 0;
               return (
                 <div
                   key={day.date}
@@ -378,11 +385,6 @@ export default function HealthAndAvailability() {
                       transition: "width 0.3s ease"
                     }} />
                   </div>
-                  {day.partiallyAvailable > 0 && (
-                    <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
-                      {day.partiallyAvailable} partially available
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -436,7 +438,7 @@ export default function HealthAndAvailability() {
                   {/* Weekly Availability Summary */}
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {getNext7Days().map(day => {
-                      const status = athlete.availability[day.value] || "Not Set";
+                      const status = getDerivedAvailabilityForDate(athlete);
                       const color = getAvailabilityColor(status);
                       return (
                         <div
@@ -452,7 +454,7 @@ export default function HealthAndAvailability() {
                           }}
                           title={day.label}
                         >
-                          {day.label.split(',')[0].substring(0, 3)}: {status === "Available" ? "✓" : status === "Partially Available" ? "~" : "✗"}
+                          {day.label.split(',')[0].substring(0, 3)}: {status === "Available" ? "✓" : "✗"}
                         </div>
                       );
                     })}
