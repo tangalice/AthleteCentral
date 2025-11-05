@@ -198,36 +198,37 @@ export default function HealthStatusManager({ teamId }) {
 
   const handleStatusChange = async (athleteId, newStatus) => {
     if (!teamId || !athleteId) return;
-    console.log("🟢 Updating health:", teamId, athleteId, newStatus);
+    
     setSavingIds((prev) => new Set(prev).add(athleteId));
+    setError(""); // Clear any previous errors
   
     try {
-      const teamsSnap = await getDocs(
-        query(collection(db, "teams"), where("athletes", "array-contains", athleteId))
+      // Update only the current team's athlete document
+      const ref = doc(db, "teams", teamId, "athletes", athleteId);
+      await setDoc(
+        ref,
+        {
+          healthStatus: newStatus || null,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
       );
-  
-      for (const t of teamsSnap.docs) {
-        const ref = doc(db, "teams", t.id, "athletes", athleteId);
-        await setDoc(
-          ref,
-          {
-            healthStatus: newStatus ?? null,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-        console.log(`✅ Updated ${athleteId} in team ${t.id}`);
-      }
-    } catch (e) {
-      console.error("❌ Failed to sync athlete status:", e);
-      setError("Failed to update status");
-    } finally {
+      
+      // Optimistically update the UI
       setAthletes((prev) =>
         prev.map((a) =>
-          a.id === athleteId ? { ...a, healthStatus: newStatus ?? null } : a
+          a.id === athleteId ? { ...a, healthStatus: newStatus || null } : a
         )
       );
-  
+      
+      // Clear error on success
+      setError("");
+    } catch (e) {
+      console.error("Failed to update athlete status:", e);
+      setError("Failed to update status. Please try again.");
+      // Revert the optimistic update on error
+      // The onSnapshot listener will restore the correct state
+    } finally {
       setSavingIds((prev) => {
         const next = new Set(prev);
         next.delete(athleteId);
@@ -239,7 +240,6 @@ export default function HealthStatusManager({ teamId }) {
   
 
   if (loading) return <div style={{ padding: 16 }}>Loading athletes…</div>;
-  if (error) return <div style={{ padding: 16, color: "#dc2626" }}>{error}</div>;
 
   const containerStyle = { padding: 16 };
   const titleStyle = { fontSize: 18, fontWeight: 600, marginBottom: 16, color: "#111827" };
@@ -256,6 +256,20 @@ export default function HealthStatusManager({ teamId }) {
   return (
     <div style={containerStyle}>
       <h1 style={titleStyle}>Manage Athlete Health Status</h1>
+      
+      {error && (
+        <div style={{
+          padding: "12px 16px",
+          marginBottom: 16,
+          backgroundColor: "#fee2e2",
+          border: "1px solid #fecaca",
+          borderRadius: 8,
+          color: "#dc2626",
+          fontSize: 14
+        }}>
+          {error}
+        </div>
+      )}
 
       {athletes.length === 0 ? (
         <div style={{ color: "#6b7280" }}>No athletes found for this team.</div>
