@@ -115,14 +115,12 @@ function DropdownMenu({ user, activeTab }) {
   // Tools - Athlete only
   if (user?.role === "athlete") {
     menuItems.push({ path: "/athlete-tools", label: "Tools", activeTab: "athlete-tools" });
+    menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
+    menuItems.push({ path: "/compare-results", label: "Compare Results", activeTab: "compare-results" });
   }
   
   // Results - Available to both
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
-
-  if (user?.role === "athlete") {
-  menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
-  }
   
   // Goals - Different for coach vs athlete
   if (user?.role === "athlete") {
