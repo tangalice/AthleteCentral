@@ -134,11 +134,11 @@ function DropdownMenu({ user, activeTab }) {
     menuItems.push({ path: "/coach-feedback", label: "Give Feedback", activeTab: "coach-feedback" });
   }
   
-  // Health and Availability - Available to both
-  menuItems.push({ path: "/health-availability", label: "Health and Availability", activeTab: "health-availability" });
-
   // Coach-only management links
   if (user?.role === "coach") {
+    // Health and Availability - Coach only
+    menuItems.push({ path: "/health-availability", label: "Health and Availability", activeTab: "health-availability" });
+    // Health Status & Data Reports
     menuItems.push({ path: "/health-status", label: "Health Status", activeTab: "health-status" });
     menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
   }

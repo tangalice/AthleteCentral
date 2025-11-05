@@ -51,26 +51,70 @@ export default function HealthStatusPage() {
   }, [teamId]);
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Manage Athlete Health Status</h1>
-      <button
-        onClick={() => setTeamId("")} 
-        className="mb-4 px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm"
-      >
-        ← Back to Health Status
-      </button>
+    <div style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, color: "#111827", marginBottom: 8 }}>
+        Manage Athlete Health Status
+      </h1>
+      <p style={{ fontSize: 16, color: "#6b7280", marginBottom: 16 }}>
+        Select a team to view and update athlete health
+      </p>
 
-      {loading && <p className="text-gray-500">Loading your teams…</p>}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+        {teamId && (
+          <button
+            onClick={() => setTeamId("")}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #e5e7eb",
+              backgroundColor: "#f9fafb",
+              color: "#374151",
+              fontSize: 14,
+              cursor: "pointer"
+            }}
+          >
+            ← Back to team selection
+          </button>
+        )}
 
-      {teamId && !loading && <HealthStatusManager teamId={teamId} />}
+        {loading && (
+          <span style={{ alignSelf: "center", fontSize: 14, color: "#6b7280" }}>Loading your teams…</span>
+        )}
+      </div>
+
+      {teamId && !loading && (
+        <div style={{
+          padding: 20,
+          border: "1px solid #e5e7eb",
+          borderRadius: 8,
+          backgroundColor: "#fff",
+          marginBottom: 20
+        }}>
+          <HealthStatusManager teamId={teamId} />
+        </div>
+      )}
 
       {!teamId && !loading && teams.length > 1 && (
-        <div className="space-y-3">
-          <p className="text-gray-600">Select a team to manage health status:</p>
+        <div style={{
+          padding: 20,
+          border: "1px solid #e5e7eb",
+          borderRadius: 8,
+          backgroundColor: "#fff",
+        }}>
+          <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 10 }}>
+            Select a team to manage health status:
+          </div>
           <select
-            className="rounded-md border border-gray-300 px-2 py-1 text-sm"
             onChange={(e) => setTeamId(e.target.value)}
             defaultValue=""
+            style={{
+              padding: "10px 12px",
+              fontSize: 14,
+              border: "1px solid #d1d5db",
+              borderRadius: 6,
+              backgroundColor: "#fff",
+              cursor: "pointer"
+            }}
           >
             <option value="" disabled>Choose a team…</option>
             {teams.map(t => (
@@ -83,7 +127,16 @@ export default function HealthStatusPage() {
       )}
 
       {!teamId && !loading && teams.length === 0 && (
-        <p className="text-gray-500">No team selected — and no teams found for your coach account.</p>
+        <div style={{
+          padding: 20,
+          border: "1px solid #e5e7eb",
+          borderRadius: 8,
+          backgroundColor: "#fff",
+          color: "#6b7280",
+          fontSize: 14
+        }}>
+          No team selected — and no teams found for your coach account.
+        </div>
       )}
     </div>
   );

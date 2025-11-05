@@ -661,7 +661,7 @@ const router = createBrowserRouter([
         path: "health-availability",
         element: (
           <ProtectedRoute user={user}>
-            <HealthAndAvailability />
+            {userRole === "coach" ? <HealthAndAvailability /> : <Navigate to="/dashboard" replace />}
           </ProtectedRoute>
         ),
       },
