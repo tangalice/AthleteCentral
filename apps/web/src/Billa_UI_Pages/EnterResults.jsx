@@ -1,16 +1,19 @@
 // src/Billa_UI_Pages/EnterResults.jsx
 
 import { useState, useEffect } from 'react';
-import { collection, addDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
+import TestPerformanceService from '../services/TestPerformanceService';
 
 export default function EnterResults({ user }) {
   const [formData, setFormData] = useState({
     athleteId: '',
     athleteName: '',
-    eventType: '',
+    athleteSport: '',
+    testType: '',
     type: 'practice', // 'practice' or 'competition'
     time: '',
+    distance: '',
     date: '',
     notes: ''
   });
@@ -19,18 +22,65 @@ export default function EnterResults({ user }) {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  
+  // Get test types based on athlete's sport
+  const getTestTypes = (sport) => {
+    const sportLower = sport?.toLowerCase() || '';
+    switch (sportLower) {
+      case 'rowing':
+        return ['2k', '5k', '6k', '30min', '60min'];
+      case 'running':
+      case 'track':
+      case 'cross country':
+        return ['Mile', '5K', '10K', 'Half Marathon', 'Marathon'];
+      case 'swimming':
+        return ['50 Free', '100 Free', '200 Free', '500 Free', '100 Fly', '200 IM'];
+      default:
+        return ['2k', '5k', '6k']; // Default to rowing
+    }
+  };
+  
+  // Get distance display based on test type
+  const getDistanceForTestType = (testType, sport) => {
+    const sportLower = sport?.toLowerCase() || '';
+    switch (sportLower) {
+      case 'rowing':
+        return testType === '2k' ? '2000m' :
+               testType === '5k' ? '5000m' :
+               testType === '6k' ? '6000m' :
+               testType === '30min' ? '30 minutes' :
+               testType === '60min' ? '60 minutes' : testType;
+      case 'running':
+      case 'track':
+      case 'cross country':
+        return testType === 'Mile' ? '1 mile' :
+               testType === '5K' ? '5 kilometers' :
+               testType === '10K' ? '10 kilometers' :
+               testType === 'Half Marathon' ? '13.1 miles' :
+               testType === 'Marathon' ? '26.2 miles' : testType;
+      case 'swimming':
+        return testType === '50 Free' ? '50 meters' :
+               testType === '100 Free' ? '100 meters' :
+               testType === '200 Free' ? '200 meters' :
+               testType === '500 Free' ? '500 meters' :
+               testType === '100 Fly' ? '100 meters' :
+               testType === '200 IM' ? '200 meters' : testType;
+      default:
+        return testType;
+    }
+  };
 
   // Fetch athletes from the coach's team
   useEffect(() => {
     const fetchAthletes = async () => {
       try {
-        // TODO: Replace with actual team query once Teams feature is built
-        // For now, fetch all athletes (you'll need to filter by team later)
+        // Fetch all athletes
         const q = query(collection(db, 'users'), where('role', '==', 'athlete'));
         const snapshot = await getDocs(q);
         const athletesList = snapshot.docs.map(doc => ({
           id: doc.id,
           name: doc.data().displayName || doc.data().email,
+          sport: doc.data().sport || 'Unknown',
           ...doc.data()
         }));
         setAthletes(athletesList);
@@ -49,12 +99,26 @@ export default function EnterResults({ user }) {
       [name]: value
     }));
 
-    // Update athlete name when athlete is selected
+    // Update athlete info when athlete is selected
     if (name === 'athleteId') {
       const selectedAthlete = athletes.find(a => a.id === value);
+      if (selectedAthlete) {
+        setFormData(prev => ({
+          ...prev,
+          athleteName: selectedAthlete.name,
+          athleteSport: selectedAthlete.sport,
+          testType: '', // Reset test type when changing athlete
+          distance: ''
+        }));
+      }
+    }
+    
+    // Auto-fill distance when test type is selected
+    if (name === 'testType' && value) {
+      const distance = getDistanceForTestType(value, formData.athleteSport);
       setFormData(prev => ({
         ...prev,
-        athleteName: selectedAthlete?.name || ''
+        distance
       }));
     }
   };
@@ -64,8 +128,8 @@ export default function EnterResults({ user }) {
       setErrorMessage('Please select an athlete');
       return false;
     }
-    if (!formData.eventType) {
-      setErrorMessage('Please enter an event type');
+    if (!formData.testType) {
+      setErrorMessage('Please select a test type');
       return false;
     }
     if (!formData.time) {
@@ -76,6 +140,14 @@ export default function EnterResults({ user }) {
       setErrorMessage('Please select a date');
       return false;
     }
+    
+    // Validate time format (MM:SS.s)
+    const timeRegex = /^\d+:[0-5]\d\.\d$/;
+    if (!timeRegex.test(formData.time)) {
+      setErrorMessage('Time must be in format MM:SS.s (e.g., 6:30.5)');
+      return false;
+    }
+    
     return true;
   };
 
@@ -91,42 +163,53 @@ export default function EnterResults({ user }) {
     setLoading(true);
 
     try {
-      await addDoc(collection(db, 'users', formData.athleteId, 'performances'), {
-        userId: formData.athleteId,
-        athleteName: formData.athleteName,
-        eventType: formData.eventType,
-        type: formData.type,
-        time: parseFloat(formData.time),
-        date: Timestamp.fromDate(new Date(formData.date)),
-        notes: formData.notes,
-        coachId: user.uid,
-        coachName: user.displayName || user.email,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now()
-      });
+      // Use TestPerformanceService to add the performance
+      const result = await TestPerformanceService.addTestPerformance(
+        formData.athleteId,
+        {
+          athleteName: formData.athleteName,
+          sport: formData.athleteSport,
+          testType: formData.testType,
+          distance: formData.distance,
+          time: formData.time,
+          completed: true,
+          date: new Date(formData.date),
+          notes: formData.notes,
+          coachId: user.uid,
+          coachName: user.displayName || user.email
+        }
+      );
 
-      setSuccessMessage(`Result added successfully for ${formData.athleteName}!`);
-      
-      // Reset form
-      setFormData({
-        athleteId: '',
-        athleteName: '',
-        eventType: '',
-        type: 'practice',
-        time: '',
-        date: '',
-        notes: ''
-      });
+      if (result.success) {
+        setSuccessMessage(`Test performance added successfully for ${formData.athleteName}!`);
+        
+        // Reset form
+        setFormData({
+          athleteId: '',
+          athleteName: '',
+          athleteSport: '',
+          testType: '',
+          type: 'practice',
+          time: '',
+          distance: '',
+          date: '',
+          notes: ''
+        });
 
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccessMessage(''), 3000);
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } else {
+        setErrorMessage(result.error || 'Failed to add test performance');
+      }
     } catch (error) {
-      console.error('Error adding result:', error);
-      setErrorMessage('Failed to add result. Please try again.');
+      console.error('Error adding test performance:', error);
+      setErrorMessage('Failed to add test performance. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  const availableTestTypes = formData.athleteSport ? getTestTypes(formData.athleteSport) : [];
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto' }}>
@@ -143,9 +226,10 @@ export default function EnterResults({ user }) {
           marginBottom: '8px', 
           color: '#111827' 
         }}>
-          Enter Performance Result
+          Enter Test Performance
         </h2>
         <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '24px' }}>
+          Add a test piece result for an athlete (works for rowing, swimming, and running)
         </p>
 
         {successMessage && (
@@ -175,35 +259,6 @@ export default function EnterResults({ user }) {
         )}
 
         <form onSubmit={handleSubmit}>
-          {/* Result Type */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '6px', 
-              fontWeight: 600, 
-              fontSize: '14px',
-              color: '#374151'
-            }}>
-              Type *
-            </label>
-            <select 
-              name="type"
-              value={formData.type}
-              onChange={handleChange}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px',
-                backgroundColor: 'white'
-              }}
-            >
-              <option value="practice">Practice/Training</option>
-              <option value="competition">Competition/Meet</option>
-            </select>
-          </div>
-
           {/* Athlete Selection */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ 
@@ -232,39 +287,77 @@ export default function EnterResults({ user }) {
               <option value="">Select an athlete...</option>
               {athletes.map(athlete => (
                 <option key={athlete.id} value={athlete.id}>
-                  {athlete.name}
+                  {athlete.name} ({athlete.sport})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Event Type */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '6px', 
-              fontWeight: 600, 
-              fontSize: '14px',
-              color: '#374151'
-            }}>
-              Event *
-            </label>
-            <input 
-              type="text"
-              name="eventType"
-              value={formData.eventType}
-              onChange={handleChange}
-              placeholder="e.g., 50 FR, 100 Backstroke, 2k Row"
-              required
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px'
-              }}
-            />
-          </div>
+          {/* Test Type - only show if athlete selected */}
+          {formData.athleteId && (
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '6px', 
+                fontWeight: 600, 
+                fontSize: '14px',
+                color: '#374151'
+              }}>
+                Test Type * ({formData.athleteSport})
+              </label>
+              <select 
+                name="testType"
+                value={formData.testType}
+                onChange={handleChange}
+                required
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="">Select test type...</option>
+                {availableTestTypes.map(type => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Distance - auto-filled, read-only */}
+          {formData.distance && (
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '6px', 
+                fontWeight: 600, 
+                fontSize: '14px',
+                color: '#374151'
+              }}>
+                Distance
+              </label>
+              <input 
+                type="text"
+                name="distance"
+                value={formData.distance}
+                readOnly
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  backgroundColor: '#f9fafb',
+                  color: '#6b7280'
+                }}
+              />
+            </div>
+          )}
 
           {/* Time/Score */}
           <div style={{ marginBottom: '20px' }}>
@@ -275,14 +368,14 @@ export default function EnterResults({ user }) {
               fontSize: '14px',
               color: '#374151'
             }}>
-              Time/Score *
+              Time *
             </label>
             <input 
               type="text"
               name="time"
               value={formData.time}
               onChange={handleChange}
-              placeholder="e.g., 23.45 (in seconds)"
+              placeholder="e.g., 6:30.5 (MM:SS.s format)"
               required
               style={{
                 width: '100%',
@@ -293,7 +386,7 @@ export default function EnterResults({ user }) {
               }}
             />
             <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-              Enter time in seconds (e.g., 23.45 for 23.45 seconds)
+              Enter time in MM:SS.s format (e.g., 6:30.5 for 6 minutes 30.5 seconds)
             </p>
           </div>
 
@@ -376,7 +469,7 @@ export default function EnterResults({ user }) {
               if (!loading) e.target.style.backgroundColor = '#10b981';
             }}
           >
-            {loading ? 'Adding Result...' : 'Add Result'}
+            {loading ? 'Adding Test Performance...' : 'Add Test Performance'}
           </button>
         </form>
       </div>
