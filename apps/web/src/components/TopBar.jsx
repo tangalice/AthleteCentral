@@ -44,7 +44,9 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "health-availability" ||
     activeTab === "group-performance" ||
     activeTab === "individual-performance" ||
-    activeTab === "lineup-builder";
+    activeTab === "lineup-builder" ||
+    activeTab === "health-status" ||
+    activeTab === "data-reports";
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -86,7 +88,7 @@ function DropdownMenu({ user, activeTab }) {
     border: "1px solid #e5e7eb",
     borderRadius: "8px",
     boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-    minWidth: "180px",
+    minWidth: "220px",
     marginTop: "4px",
     zIndex: 1000,
     display: isOpen ? "flex" : "none",
@@ -134,6 +136,12 @@ function DropdownMenu({ user, activeTab }) {
   
   // Health and Availability - Available to both
   menuItems.push({ path: "/health-availability", label: "Health and Availability", activeTab: "health-availability" });
+
+  // Coach-only management links
+  if (user?.role === "coach") {
+    menuItems.push({ path: "/health-status", label: "Health Status", activeTab: "health-status" });
+    menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
+  }
   
   // Group Performance - Available to both
   menuItems.push({ path: "/group-performance", label: "Group Performance", activeTab: "group-performance" });
@@ -260,22 +268,8 @@ export default function TopBar({
             Calendar
           </Link>
 
-          {/* HEALTH STATUS TAB - Coach only */}
-          {user?.role === "coach" && (
-            <Link to="/health-status" style={linkStyle(activeTab === "health-status")}>
-              Health Status
-            </Link>
-          )}
-
-          {/* DROPDOWN MENU - Replaces Activity, Tools, Results, Goals, and Feedback */}
+          {/* DROPDOWN MENU - Consolidated more items */}
           <DropdownMenu user={user} activeTab={activeTab} />
-
-          {/* Coach-only tabs */}
-          {user?.role === "coach" && (
-            <Link to="/data-reports" style={linkStyle(activeTab === "data-reports")}>
-              Data Reports
-            </Link>
-          )}
 
           <Link to="/settings" style={linkStyle(activeTab === "settings")}>
             Settings
