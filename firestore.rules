@@ -13,17 +13,7 @@ service cloud.firestore {
       return isAuthed() && request.auth.uid == userId;
     }
     function isCoach(uid) {
-      // Check if user document exists and has role == "coach"
-      // Must check exists() first, as get() will fail if document doesn't exist
-      return exists(/databases/$(database)/documents/users/$(uid)) && 
-             get(/databases/$(database)/documents/users/$(uid)).data.role == "coach";
-    }
-    
-    // Alternative: Check if user is a coach of any team (more reliable)
-    function isCoachOfAnyTeam(uid) {
-      // This is expensive but more reliable - checks if user is in coaches array of any team
-      // For now, we'll use the simpler isCoach check, but this could be used as fallback
-      return false;
+      return get(/databases/$(database)/documents/users/$(uid)).data.role == "coach";
     }
     function isParticipant(participants) {
       return isAuthed() && request.auth.uid in participants;
@@ -39,26 +29,15 @@ service cloud.firestore {
       return isVerifiedUser() && 
         request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches;
     }
-    
-    // Check if the athlete (userId) is in any team where the current user is a coach
-    function isAthleteInCoachTeam(athleteId) {
-      // This is expensive, but we need to check all teams
-      // In practice, we'll allow coaches to update health status for any athlete
-      // The application logic ensures they can only see/update athletes in their teams
-      return true;
-    }
 
     /* ========== Users (profile) ========== */
     match /users/{userId} {
       allow read, create, update, delete: if isOwner(userId);
       allow read: if isVerifiedUser();
       // Allow coaches to update/create health status for athletes
-      // Note: Application code should only update healthStatus and healthStatusUpdatedAt fields
-      // We allow both create and update because setDoc with merge can create if doc doesn't exist
-      // Check if user is a coach - try to get their document, if it doesn't exist or role isn't coach, deny
       allow create, update: if isVerifiedUser() && 
-                            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "coach";
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "coach";
 
       /* ---- Goals subcollection ---- */
       match /goalsList/{goalId} {
@@ -93,6 +72,16 @@ service cloud.firestore {
     		allow read, write: if isVerifiedUser();
   		}
       
+    
+
+      /* ---- Practices subcollection ---- */  // ← ADD THIS
+      match /practices/{practiceId} {           // ← ADD THIS
+        allow read: if isOwner(userId);         // ← ADD THIS
+        allow read: if isVerifiedUser() && isCoach(request.auth.uid);  // ← ADD THIS
+        allow create, update, delete: if isOwner(userId);  // ← ADD THIS
+        allow create, update, delete: if isVerifiedUser() && isCoach(request.auth.uid);  // ← ADD THIS
+      }                                         // ← ADD THIS
+
       /* ---- Predictions subcollection ---- */
 			match /predictions/{predictionId} {
   			allow read, write: if isOwner(userId);
