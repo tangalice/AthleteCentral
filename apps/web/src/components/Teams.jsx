@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
-import { collection, query, where, getDocs, addDoc, doc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, doc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, serverTimestamp } from "firebase/firestore";
 
 export default function Teams() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -13,6 +15,9 @@ export default function Teams() {
   const [message, setMessage] = useState("");
   const [teamMembers, setTeamMembers] = useState({});
   const [memberSearch, setMemberSearch] = useState({});
+  const [expandedTeams, setExpandedTeams] = useState({});
+  const [creatingChat, setCreatingChat] = useState(false);
+  const creatingChatRef = useRef(false);
   
   // Create team form state
   const [newTeam, setNewTeam] = useState({
@@ -65,10 +70,8 @@ export default function Teams() {
       }));
       setTeams(teamsData);
       
-      // Load team members for coaches
-      if (userRole === "coach") {
-        await loadTeamMembers(teamsData);
-      }
+      // Load team members for both coaches and athletes
+      await loadTeamMembers(teamsData);
     });
 
     return () => unsubscribe();
@@ -286,66 +289,164 @@ export default function Teams() {
     }));
   };
 
-  // Create team chat with all members
+  // Create team chat with all members - check for existing first
   const createTeamChat = async (team) => {
+    if (creatingChat || creatingChatRef.current) return; // Prevent double clicks
+    
     if (!team.members || team.members.length === 0) {
       setMessage("No members in this team to message");
       return;
     }
 
+    if (!user) {
+      setMessage("Please log in to send messages");
+      return;
+    }
+
+    creatingChatRef.current = true;
+    setCreatingChat(true);
+    
     try {
-      // Check if a team chat already exists
+      const participants = team.members || [];
+      
+      // Check if a team chat already exists with the same participants and teamId
       const existingChatsQuery = query(
         collection(db, 'chats'),
         where('participants', 'array-contains', user.uid)
       );
       const existingChats = await getDocs(existingChatsQuery);
       
-      // Look for existing team chat with same participants
+      // Look for existing team chat with same participants and teamId
       const existingTeamChat = existingChats.docs.find(doc => {
         const chatData = doc.data();
         const chatParticipants = chatData.participants || [];
-        const teamMembers = team.members || [];
+        const chatTeamId = chatData.teamId;
+        
+        // Check if it's a team chat for this team with matching participants
+        if (chatTeamId !== team.id) return false;
         
         // Check if participants match (same length and all members included)
-        if (chatParticipants.length !== teamMembers.length) return false;
+        if (chatParticipants.length !== participants.length) return false;
         
-        return teamMembers.every(memberId => chatParticipants.includes(memberId));
+        // Check if all team members are in the chat participants
+        return participants.every(memberId => chatParticipants.includes(memberId));
       });
 
       if (existingTeamChat) {
+        // Reset state before navigation
+        creatingChatRef.current = false;
+        setCreatingChat(false);
         // Navigate to existing team chat
-        window.location.href = `/messages?chat=${existingTeamChat.id}`;
+        navigate(`/messages?chat=${existingTeamChat.id}`);
         return;
       }
 
       // Create new team chat
-      const participants = team.members || [];
       const teamChatData = {
         name: `${team.name} Team Chat`,
         participants: participants,
         createdBy: user.uid,
-        createdAt: new Date(),
-        lastMessageTime: new Date(),
+        createdAt: serverTimestamp(),
+        lastMessageTime: serverTimestamp(),
         lastMessage: '',
         unreadCounts: participants.reduce((acc, id) => { acc[id] = 0; return acc; }, {}),
-        readBy: { [user.uid]: new Date() },
+        readBy: { [user.uid]: serverTimestamp() },
         isTeamChat: true,
         teamId: team.id
       };
 
       const docRef = await addDoc(collection(db, 'chats'), teamChatData);
       
-      setMessage("Team chat created successfully!");
+      // Reset state before navigation
+      creatingChatRef.current = false;
+      setCreatingChat(false);
       
-      // Navigate to the new chat
-      setTimeout(() => {
-        window.location.href = `/messages?chat=${docRef.id}`;
-      }, 1000);
+      // Navigate to the new chat immediately
+      navigate(`/messages?chat=${docRef.id}`);
       
     } catch (error) {
       console.error('Error creating team chat:', error);
       setMessage(`Error creating team chat: ${error.message}`);
+      creatingChatRef.current = false;
+      setCreatingChat(false);
+    }
+  };
+
+  // Toggle team expansion
+  const toggleTeamExpansion = (teamId) => {
+    setExpandedTeams(prev => ({
+      ...prev,
+      [teamId]: !prev[teamId]
+    }));
+  };
+
+  // Create or find one-on-one chat with a specific member
+  const createOrFindDirectChat = async (member) => {
+    if (creatingChat) return; // Prevent double clicks
+    
+    if (!user) {
+      setMessage("Please log in to send messages");
+      return;
+    }
+
+    if (member.id === user.uid) {
+      setMessage("You cannot message yourself");
+      return;
+    }
+
+    setCreatingChat(true);
+    try {
+      // Check if a chat already exists between these two users
+      const existingChatsQuery = query(
+        collection(db, 'chats'),
+        where('participants', 'array-contains', user.uid)
+      );
+      const existingChats = await getDocs(existingChatsQuery);
+      
+      // Look for existing one-on-one chat (exactly 2 participants)
+      const existingChat = existingChats.docs.find(doc => {
+        const chatData = doc.data();
+        const participants = chatData.participants || [];
+        // Check if it's a 1-on-1 chat with this member
+        return participants.length === 2 && 
+               participants.includes(user.uid) && 
+               participants.includes(member.id);
+      });
+
+      if (existingChat) {
+        // Navigate to existing chat
+        setCreatingChat(false);
+        navigate(`/messages?chat=${existingChat.id}`);
+        return;
+      }
+
+      // Create new one-on-one chat
+      const participants = [user.uid, member.id];
+      const chatName = `${member.displayName || member.email}`;
+      
+      const chatData = {
+        name: chatName,
+        participants: participants,
+        createdBy: user.uid,
+        createdAt: serverTimestamp(),
+        lastMessageTime: serverTimestamp(),
+        lastMessage: '',
+        unreadCounts: participants.reduce((acc, id) => { acc[id] = 0; return acc; }, {}),
+        readBy: { [user.uid]: serverTimestamp() }
+      };
+
+      const docRef = await addDoc(collection(db, 'chats'), chatData);
+      
+      // Reset creating state before navigation
+      setCreatingChat(false);
+      
+      // Navigate to the new chat
+      navigate(`/messages?chat=${docRef.id}`);
+      
+    } catch (error) {
+      console.error('Error creating direct chat:', error);
+      setMessage(`Error creating chat: ${error.message}`);
+      setCreatingChat(false);
     }
   };
 
@@ -624,9 +725,10 @@ export default function Teams() {
                       <button
                         className="btn btn-primary"
                         onClick={() => createTeamChat(team)}
+                        disabled={creatingChat}
                         style={{ fontSize: 14, padding: "6px 12px" }}
                       >
-                        Send Message to Team
+                        {creatingChat ? "Creating..." : "Send Message to Team"}
                       </button>
                       <button
                         className="btn btn-outline text-danger"
@@ -638,64 +740,91 @@ export default function Teams() {
                     </div>
                   </div>
 
-                  {/* Team Members Management (Coach only) */}
-                  {isCoach && teamMembers[team.id] && (
+                  {/* Team Members Section - Available for both coaches and athletes */}
+                  {teamMembers[team.id] && (
                     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-                      <h4 style={{ margin: "0 0 12px 0", fontSize: 16 }}>Team Members</h4>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                        <h4 style={{ margin: 0, fontSize: 16 }}>Team Members</h4>
+                        <button
+                          className="btn btn-outline"
+                          onClick={() => toggleTeamExpansion(team.id)}
+                          style={{ fontSize: 12, padding: "4px 12px" }}
+                        >
+                          {expandedTeams[team.id] ? "▼ Hide" : "▶ Show"} Members
+                        </button>
+                      </div>
                       
-                      {/* Search Members */}
-                      <div style={{ marginBottom: 12 }}>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="Search members by name or email"
-                          value={memberSearch[team.id] || ""}
-                          onChange={(e) => updateMemberSearch(team.id, e.target.value)}
-                          style={{ maxWidth: 300 }}
-                        />
-                      </div>
-
-                      {/* Members List */}
-                      <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 4 }}>
-                        {getFilteredTeamMembers(team.id).length === 0 ? (
-                          <div style={{ padding: 12, textAlign: "center", color: "#6b7280" }}>
-                            {memberSearch[team.id] ? "No members found matching your search" : "No members in this team"}
+                      {expandedTeams[team.id] && (
+                        <>
+                          {/* Search Members */}
+                          <div style={{ marginBottom: 12 }}>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="Search members by name or email"
+                              value={memberSearch[team.id] || ""}
+                              onChange={(e) => updateMemberSearch(team.id, e.target.value)}
+                              style={{ maxWidth: 300 }}
+                            />
                           </div>
-                        ) : (
-                          getFilteredTeamMembers(team.id).map(member => (
-                            <div
-                              key={member.id}
-                              style={{
-                                padding: 12,
-                                borderBottom: "1px solid var(--border)",
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center"
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontWeight: 600 }}>
-                                  {member.displayName || member.email}
-                                  {member.id === user.uid && <span style={{ marginLeft: 8, color: "#10b981", fontSize: 12 }}>(You)</span>}
-                                </div>
-                                <div className="text-muted" style={{ fontSize: 14 }}>{member.email}</div>
-                                <div className="text-muted" style={{ fontSize: 12 }}>
-                                  {member.role === "coach" ? "Coach" : member.role === "athlete" ? "Athlete" : "User"}
-                                </div>
+
+                          {/* Members List */}
+                          <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 4 }}>
+                            {getFilteredTeamMembers(team.id).length === 0 ? (
+                              <div style={{ padding: 12, textAlign: "center", color: "#6b7280" }}>
+                                {memberSearch[team.id] ? "No members found matching your search" : "No members in this team"}
                               </div>
-                              {member.id !== user.uid && (
-                                <button
-                                  className="btn btn-outline text-danger"
-                                  onClick={() => removeUserFromTeam(team.id, member.id)}
-                                  style={{ fontSize: 12, padding: "4px 8px" }}
+                            ) : (
+                              getFilteredTeamMembers(team.id).map(member => (
+                                <div
+                                  key={member.id}
+                                  style={{
+                                    padding: 12,
+                                    borderBottom: "1px solid var(--border)",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center"
+                                  }}
                                 >
-                                  Remove
-                                </button>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
+                                  <div>
+                                    <div style={{ fontWeight: 600 }}>
+                                      {member.displayName || member.email}
+                                      {member.id === user.uid && <span style={{ marginLeft: 8, color: "#10b981", fontSize: 12 }}>(You)</span>}
+                                    </div>
+                                    <div className="text-muted" style={{ fontSize: 14 }}>{member.email}</div>
+                                    <div className="text-muted" style={{ fontSize: 12 }}>
+                                      {member.role === "coach" ? "Coach" : member.role === "athlete" ? "Athlete" : "User"}
+                                    </div>
+                                  </div>
+                                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                    {member.id !== user.uid && (
+                                      <>
+                                        <button
+                                          className="btn btn-primary"
+                                          onClick={() => createOrFindDirectChat(member)}
+                                          disabled={creatingChat}
+                                          style={{ fontSize: 12, padding: "4px 8px" }}
+                                        >
+                                          {creatingChat ? "..." : "Message"}
+                                        </button>
+                                        {isCoach && (
+                                          <button
+                                            className="btn btn-outline text-danger"
+                                            onClick={() => removeUserFromTeam(team.id, member.id)}
+                                            style={{ fontSize: 12, padding: "4px 8px" }}
+                                          >
+                                            Remove
+                                          </button>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
