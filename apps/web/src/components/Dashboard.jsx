@@ -49,35 +49,21 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   useEffect(() => {
     if (userRole !== "athlete" || !auth.currentUser) return;
 
-    let unsub = null;
-    (async () => {
-      try {
-        const teamsQ = query(
-          collection(db, "teams"),
-          where("athletes", "array-contains", auth.currentUser.uid)
-        );
-        const snap = await getDocs(teamsQ);
-        if (snap.empty) {
-          setHealthStatus("No team found");
-          return;
-        }
-        const tid = snap.docs[0].id;
-        const healthRef = doc(db, "teams", tid, "athletes", auth.currentUser.uid);
-        unsub = onSnapshot(healthRef, (docSnap) => {
-          if (docSnap.exists()) {
-            const d = docSnap.data();
-            setHealthStatus(d.healthStatus || "Unknown");
-          } else {
-            setHealthStatus("Not set");
-          }
-        });
-      } catch (err) {
-        console.error("Error loading health status:", err);
-        setHealthStatus("Error");
+    // Read health status directly from user document
+    const userRef = doc(db, "users", auth.currentUser.uid);
+    const unsub = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const d = docSnap.data();
+        setHealthStatus(d.healthStatus || "active");
+      } else {
+        setHealthStatus("Not set");
       }
-    })();
+    }, (err) => {
+      console.error("Error loading health status:", err);
+      setHealthStatus("Error");
+    });
 
-    return () => unsub && unsub();
+    return () => unsub();
   }, [userRole]);
 
   useEffect(() => {
