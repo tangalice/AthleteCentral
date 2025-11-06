@@ -42,7 +42,7 @@ service cloud.firestore {
       /* ---- Goals subcollection ---- */
       match /goalsList/{goalId} {
         allow read, write: if isOwner(userId);
-        allow create, read: if isVerifiedUser() && isCoach(request.auth.uid);
+        allow create, read, delete: if isVerifiedUser() && isCoach(request.auth.uid);
       }
 
       /* ---- Feedback subcollection ---- */
