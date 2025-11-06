@@ -233,7 +233,7 @@ export default function HealthAndAvailability() {
         Health and Availability
       </h1>
       <p style={{ fontSize: "16px", color: "#6b7280", marginBottom: "24px" }}>
-        View health status and availability of all athletes
+        View health status and availability of your athletes
       </p>
 
       {/* Search Bar */}
