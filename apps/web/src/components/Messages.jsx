@@ -178,15 +178,13 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     const unsubscribeMessages = onSnapshot(
       messagesQuery, 
       (snapshot) => {
-        const data = snapshot.docs.map(d => {
+        const data = snapshot.docs.map((d) => {
           const docData = d.data();
-          // Ensure timestamp is properly handled
           let timestamp = docData.timestamp;
           if (timestamp && typeof timestamp.toDate === 'function') {
             timestamp = timestamp.toDate();
-          } else if (!timestamp || !(timestamp instanceof Date)) {
-            // If timestamp is missing or invalid, use a fallback
-            timestamp = new Date(0);
+          } else {
+            timestamp = new Date();
           }
           return { id: d.id, ...docData, timestamp };
         });
@@ -256,9 +254,8 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     return () => {
       unsubscribeMessages();
       // Reset the ref when unmounting so we can reload if needed
-      if (currentChatIdRef.current === chatId) {
-        currentChatIdRef.current = null;
-      }
+      const chatId = selectedChat.id;
+      currentChatIdRef.current = chatId;
     };
   }, [selectedChat?.id]); // Use selectedChat.id instead of selectedChat to prevent unnecessary re-renders
 
@@ -347,10 +344,25 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     try {
       const messagesQuery = query(collection(db, 'messages'), where('chatId', '==', selectedChat.id));
       const snap = await getDocs(messagesQuery);
-      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  
+      await Promise.all(
+        snap.docs.map(async (d) => {
+          try {
+            await deleteDoc(d.ref);
+          } catch (err) {
+            console.error('Failed to delete message:', err);
+          }
+        })
+      );
+  
       await deleteDoc(doc(db, 'chats', selectedChat.id));
+  
+      setChats((prev) => prev.filter((c) => c.id !== selectedChat.id));
       setSelectedChat(null);
       setShowChatDetails(false);
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      alert('Failed to delete chat. Please try again.');
     } finally {
       setLoading(false);
     }

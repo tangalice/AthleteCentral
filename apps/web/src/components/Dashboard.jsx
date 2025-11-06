@@ -22,14 +22,12 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   // teamsMeta: [{ id, coaches: string[] }]
   const [teamsMeta, setTeamsMeta] = useState([]);
 
-  // 用稳定的派生值，避免把“对象引用变化”当作订阅重建条件
   const teamIds = useMemo(
     () => teamsMeta.map((t) => t.id).sort(),
     [teamsMeta]
   );
   const teamIdsKey = useMemo(() => teamIds.join(","), [teamIds]);
 
-  // 把每个 team 的教练 id 列表做成稳定 key，用于 athlete 过滤
   const coachKey = useMemo(
     () =>
       teamIds
@@ -41,13 +39,10 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     [teamIds, teamsMeta]
   );
 
-  // Upcoming events（接下来 7 天）
   const [reminders, setReminders] = useState([]);
 
-  // Athlete 端健康状态（原有保留）
   const [healthStatus, setHealthStatus] = useState("Loading...");
 
-  // Athlete 端的“只看分配给我”
   const [assignedOnly, setAssignedOnly] = useState(false);
 
   // ========== Athlete health live updates ==========
@@ -57,7 +52,6 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     let unsub = null;
     (async () => {
       try {
-        // 先找一个所在队伍（与原逻辑一致）
         const teamsQ = query(
           collection(db, "teams"),
           where("athletes", "array-contains", auth.currentUser.uid)
@@ -86,7 +80,6 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     return () => unsub && unsub();
   }, [userRole]);
 
-  // ========== 检查是否在任何队伍中（用于 notice banner） ==========
   useEffect(() => {
     if (!auth.currentUser || !userRole) return;
 
@@ -109,7 +102,6 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     return () => clearTimeout(t);
   }, [userRole]);
 
-  // ========== 拉取“我所在队伍”的元信息（队伍 id + 教练 uid 列表） ==========
   useEffect(() => {
     if (!auth.currentUser || !userRole) return;
 
@@ -117,7 +109,6 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
       try {
         const metas = [];
 
-        // 基本归属（coach 用 coaches；athlete 用 members）
         const baseQ = query(
           collection(db, "teams"),
           where(userRole === "coach" ? "coaches" : "members", "array-contains", auth.currentUser.uid)
@@ -128,7 +119,6 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
           metas.push({ id: d.id, coaches: Array.isArray(data.coaches) ? data.coaches : [] });
         });
 
-        // Athlete 端补充按 athletes 查询（有的库用 athletes 存成员）
         if (userRole === "athlete") {
           const altQ = query(
             collection(db, "teams"),
@@ -151,11 +141,8 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     })();
   }, [userRole]);
 
-  // ========== 订阅事件（去抖重建 + 聚合更新） ==========
-  // 思路：
-  // 1) 只把 teamIdsKey / coachKey / userRole / assignedOnly 作为依赖，避免因 teamsMeta 引用变化而重建。
-  // 2) 使用 ref 聚合每个 team 的 upcoming 列表，任一 team 更新时只重排并 set 一次。
-  const eventsByTeamRef = useRef({}); // { [teamId]: Event[] }
+
+  const eventsByTeamRef = useRef({}); // {
 
   useEffect(() => {
     if (!teamIdsKey) return;
@@ -164,7 +151,6 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const myId = auth.currentUser?.uid;
 
-    // 构造 coach 映射（稳定来源：coachKey）
     const coachMap = {};
     coachKey.split(";").forEach((pair) => {
       if (!pair) return;
@@ -172,7 +158,6 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
       coachMap[id] = coachesStr ? coachesStr.split("|").filter(Boolean) : [];
     });
 
-    // 订阅每个 team 的 events
     const unsubs = teamIds.map((id) => {
       const qRef = query(collection(db, "teams", id, "events"), orderBy("datetime", "asc"));
       return onSnapshot(qRef, (snap) => {
@@ -184,7 +169,6 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
         return { id: docSnap.id, teamId: id, ...data, datetime: dt };
         });
 
-        // 时间范围（未来 7 天）
         let upcoming = all.filter(
           (e) => e.datetime && e.datetime >= now && e.datetime <= nextWeek
         );
@@ -201,13 +185,11 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
           }
         }
 
-        // 更新 ref 并聚合
         eventsByTeamRef.current = {
           ...eventsByTeamRef.current,
           [id]: upcoming,
         };
 
-        // 聚合所有 team 的 upcoming，统一排序后 set
         const merged = Object.values(eventsByTeamRef.current).flat();
         merged.sort((a, b) => a.datetime - b.datetime);
         setReminders(merged);
@@ -216,9 +198,8 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
 
     return () => {
       unsubs.forEach((u) => u());
-      eventsByTeamRef.current = {}; // 清空缓存，避免旧数据闪回
+      eventsByTeamRef.current = {}; // 
     };
-    // 依赖用 key 而不是对象，减少不必要重建
   }, [teamIdsKey, coachKey, userRole, assignedOnly]);
 
   // ---- UI styles ----
