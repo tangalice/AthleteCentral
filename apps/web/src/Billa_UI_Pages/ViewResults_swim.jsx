@@ -8,6 +8,9 @@ export default function ViewResults_swim({ user }) {
   const [filter, setFilter] = useState('all');
   const [practiceResults, setPracticeResults] = useState([]);
   const [competitionResults, setCompetitionResults] = useState([]);
+  const [scmResults, setScmResults] = useState([]);
+  const [scyResults, setScyResults] = useState([]);
+  const [lcmResults, setLcmResults] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,9 +32,15 @@ export default function ViewResults_swim({ user }) {
 
       const practiceData = allResults.filter(r => r.type === 'practice');
       const competitionData = allResults.filter(r => r.type === 'competition');
+      const scmData = allResults.filter(r => r.courseType === 'scm');
+      const scyData = allResults.filter(r => r.courseType === 'scy');
+      const lcmData = allResults.filter(r => r.courseType === 'lcm');
 
       setPracticeResults(practiceData);
       setCompetitionResults(competitionData);
+      setScmResults(scmData);
+      setScyResults(scyData);
+      setLcmResults(lcmData);
     } catch (error) {
       console.error('Error fetching results:', error);
     } finally {
@@ -52,6 +61,15 @@ export default function ViewResults_swim({ user }) {
       results = practiceResults;
     } else if (filter === 'competition') {
       results = competitionResults;
+    }
+    else if (filter === 'scy') {
+      results = scyResults;
+    }
+    else if (filter === 'scm') {
+      results = scmResults;
+    }
+    else if (filter === 'lcm') {
+      results = lcmResults;
     }
 
     // Sort by date descending
@@ -121,6 +139,61 @@ export default function ViewResults_swim({ user }) {
           }}
         >
           Competition ({competitionResults.length})
+        </button>
+      </div>
+
+      <div>
+      {/* Filter Buttons */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '12px', 
+        marginBottom: '24px',
+        justifyContent: 'center'
+      }}>
+        <button 
+          onClick={() => setFilter('scy')}
+          style={{ 
+            padding: '10px 20px', 
+            border: `2px solid ${filter === 'scy' ? '#10b981' : '#d1d5db'}`, 
+            borderRadius: '6px',
+            backgroundColor: filter === 'scy' ? '#10b981' : 'white',
+            color: filter === 'scy' ? 'white' : '#6b7280',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          Short Course Yards (SCY) ({scyResults.length})
+        </button>
+        <button 
+          onClick={() => setFilter('scm')}
+          style={{ 
+            padding: '10px 20px', 
+            border: `2px solid ${filter === 'scm' ? '#10b981' : '#d1d5db'}`, 
+            borderRadius: '6px',
+            backgroundColor: filter === 'scm' ? '#10b981' : 'white',
+            color: filter === 'scm' ? 'white' : '#6b7280',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          Short Course Meters (SCM) ({scmResults.length})
+        </button>
+        <button 
+          onClick={() => setFilter('lcm')}
+          style={{ 
+            padding: '10px 20px', 
+            border: `2px solid ${filter === 'lcm' ? '#10b981' : '#d1d5db'}`, 
+            borderRadius: '6px',
+            backgroundColor: filter === 'lcm' ? '#10b981' : 'white',
+            color: filter === 'lcm' ? 'white' : '#6b7280',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          Long Course Meters (LCM) ({lcmResults.length})
         </button>
       </div>
 
@@ -232,6 +305,7 @@ export default function ViewResults_swim({ user }) {
           </table>
         </div>
       )}
+    </div>
     </div>
   );
 }

@@ -263,7 +263,7 @@ export default function EnterResults_swim({ user }) {
               onChange={handleChange}
               required
               style={{
-                width: '30%',
+                width: '28%',
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
@@ -288,7 +288,7 @@ export default function EnterResults_swim({ user }) {
               onChange={handleChange}
               required
               style={{
-                width: '30%',
+                width: '28%',
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
@@ -311,7 +311,7 @@ export default function EnterResults_swim({ user }) {
               onChange={handleChange}
               required
               style={{
-                width: '40%',
+                width: '38%',
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
