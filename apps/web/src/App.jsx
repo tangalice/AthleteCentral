@@ -41,6 +41,7 @@ import ViewAthletePractices from "./Billa_UI_Pages/Rowing_Stories/ViewAthletePra
 import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
 import CoachFeedbackPage from "./components/CoachFeedbackPage";
 import PredictResultsPage from "./pages/PredictResultsPage";
+import CompareResultsPage from "./pages/CompareResultsPage";
 
 import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
@@ -218,6 +219,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "lineup-builder" ? "lineup-builder" :
     root === "view-athlete-practices" ? "view-athlete-practices" :
     root === "predict-results" ? "predict-results" :
+    root === "compare-results" ? "compare-results" :
     "dashboard";
 
   return (
@@ -490,7 +492,7 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-            {
+      {
         path: "predict-results",
         element: (
           <ProtectedRoute user={user}>
@@ -499,6 +501,14 @@ const router = createBrowserRouter([
             ) : (
               <Navigate to="/dashboard" replace />
             )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "compare-results",
+        element: (
+          <ProtectedRoute user={user}>
+            <CompareResultsPage />
           </ProtectedRoute>
         ),
       },

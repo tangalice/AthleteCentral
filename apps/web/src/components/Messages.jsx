@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   collection,
@@ -9,6 +9,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   serverTimestamp,
   increment,
@@ -35,6 +36,11 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [chatUsers, setChatUsers] = useState([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const previousMessagesCountRef = useRef(0);
+  const currentChatIdRef = useRef(null);
+  const lastProcessedChatIdRef = useRef(null);
 
   // Unread helpers
   const getUnreadCount = (chat) => {
@@ -117,36 +123,101 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   }, [user]);
 
   // Handle URL parameter to open specific chat
+  const chatIdFromUrl = searchParams.get('chat');
   useEffect(() => {
-    const chatId = searchParams.get('chat');
-    if (chatId && chats.length > 0) {
-      const chat = chats.find(c => c.id === chatId);
-      if (chat) {
+    if (!chatIdFromUrl) {
+      lastProcessedChatIdRef.current = null;
+      return;
+    }
+    
+    // Only process if this is a different chat ID than we last processed
+    if (lastProcessedChatIdRef.current === chatIdFromUrl) {
+      return;
+    }
+    
+    if (chats.length > 0) {
+      const chat = chats.find(c => c.id === chatIdFromUrl);
+      if (chat && (!selectedChat || selectedChat.id !== chat.id)) {
+        // Reset the ref when changing chats
+        currentChatIdRef.current = null;
+        lastProcessedChatIdRef.current = chatIdFromUrl;
         setSelectedChat(chat);
-        markChatAsRead(chatId);
+        markChatAsRead(chatIdFromUrl);
       }
     }
-  }, [searchParams, chats]);
+  }, [chatIdFromUrl, chats.length, selectedChat?.id]); // Use chats.length to only react when chats are loaded
 
   // Load messages and participants for selected chat
   useEffect(() => {
     if (!selectedChat) {
       setMessages([]);
       setChatUsers([]);
+      previousMessagesCountRef.current = 0;
+      currentChatIdRef.current = null;
       return;
     }
     
-    // Load messages
-    const messagesQuery = query(collection(db, 'messages'), where('chatId', '==', selectedChat.id));
-    const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => {
-        const aTime = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
-        const bTime = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(0);
-        return aTime - bTime;
-      });
-      setMessages(data);
-    });
+    const chatId = selectedChat.id;
+    
+    // Prevent re-running if this is the same chat (already listening)
+    if (currentChatIdRef.current === chatId) {
+      return;
+    }
+    
+    // Reset message count when switching chats
+    previousMessagesCountRef.current = 0;
+    currentChatIdRef.current = chatId;
+    
+    // Use simple query without orderBy to avoid index requirements
+    // Client-side sorting is more reliable
+    const messagesQuery = query(
+      collection(db, 'messages'), 
+      where('chatId', '==', chatId)
+    );
+    
+    const unsubscribeMessages = onSnapshot(
+      messagesQuery, 
+      (snapshot) => {
+        const data = snapshot.docs.map((d) => {
+          const docData = d.data();
+          let timestamp = docData.timestamp;
+          if (timestamp && typeof timestamp.toDate === 'function') {
+            timestamp = timestamp.toDate();
+          } else {
+            timestamp = new Date();
+          }
+          return { id: d.id, ...docData, timestamp };
+        });
+        
+        // Sort by timestamp ascending (oldest first)
+        // Filter out messages with invalid timestamps for sorting
+        data.sort((a, b) => {
+          const aTime = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp?.seconds * 1000 || 0);
+          const bTime = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp?.seconds * 1000 || 0);
+          return aTime - bTime;
+        });
+        
+        const previousCount = previousMessagesCountRef.current;
+        setMessages(data);
+        
+        // Scroll to bottom if:
+        // 1. New messages were added (previousCount > 0 and data.length > previousCount)
+        // 2. This is the first load of messages for this chat (previousCount === 0 and data.length > 0)
+        if ((previousCount > 0 && data.length > previousCount) || (previousCount === 0 && data.length > 0)) {
+          setTimeout(() => {
+            if (messagesEndRef.current) {
+              messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+            }
+          }, 100);
+        }
+        
+        previousMessagesCountRef.current = data.length;
+      },
+      (error) => {
+        console.error('Error loading messages:', error);
+        setMessages([]);
+      }
+    );
     
     // Load chat participants
     const loadChatUsers = async () => {
@@ -159,10 +230,9 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
         
         const userPromises = userIds.map(async (userId) => {
           try {
-            const userDoc = await getDocs(query(collection(db, 'users')));
-            const userData = userDoc.docs.find(d => d.id === userId);
-            if (userData) {
-              return { id: userId, ...userData.data() };
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+              return { id: userId, ...userDoc.data() };
             }
             return { id: userId, displayName: 'Unknown User', email: 'unknown@example.com' };
           } catch (error) {
@@ -181,8 +251,14 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     
     loadChatUsers();
     
-    return () => unsubscribeMessages();
-  }, [selectedChat]);
+    return () => {
+      unsubscribeMessages();
+      // Reset the ref when unmounting so we can reload if needed
+      const chatId = selectedChat.id;
+      currentChatIdRef.current = chatId;
+    };
+  }, [selectedChat?.id]); // Use selectedChat.id instead of selectedChat to prevent unnecessary re-renders
+
 
   const createNewChat = async () => {
     if (!newChatName.trim()) return;
@@ -214,29 +290,48 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat) return;
+    if (!newMessage.trim() || !selectedChat || loading) return;
+    
+    // Capture the message text and chat ID before clearing
+    const messageText = newMessage.trim();
+    const chatId = selectedChat.id;
+    const participants = selectedChat.participants || [];
+    
+    // Clear the input immediately to provide instant feedback
+    setNewMessage('');
     setLoading(true);
+    
     try {
+      // Add message first
       await addDoc(collection(db, 'messages'), {
-        chatId: selectedChat.id,
+        chatId: chatId,
         senderId: user.uid,
         senderName: user.displayName || 'Anonymous',
-        text: newMessage.trim(),
+        text: messageText,
         timestamp: serverTimestamp()
       });
-      const chatRef = doc(db, 'chats', selectedChat.id);
-      const others = (selectedChat.participants || []).filter(id => id !== user.uid);
+      
+      // Then update chat document
+      const chatRef = doc(db, 'chats', chatId);
+      const others = participants.filter(id => id !== user.uid);
       const unreadUpdates = others.reduce((acc, id) => {
         acc[`unreadCounts.${id}`] = increment(1);
         return acc;
       }, {});
+      
       await updateDoc(chatRef, {
         lastMessageTime: serverTimestamp(),
-        lastMessage: newMessage.trim(),
+        lastMessage: messageText,
         lastMessageSenderId: user.uid,
         ...unreadUpdates
       });
-      setNewMessage('');
+      
+      // Don't scroll here - let the onSnapshot handler do it
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Restore the message if sending failed
+      setNewMessage(messageText);
+      alert('Failed to send message. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -249,10 +344,25 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     try {
       const messagesQuery = query(collection(db, 'messages'), where('chatId', '==', selectedChat.id));
       const snap = await getDocs(messagesQuery);
-      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  
+      await Promise.all(
+        snap.docs.map(async (d) => {
+          try {
+            await deleteDoc(d.ref);
+          } catch (err) {
+            console.error('Failed to delete message:', err);
+          }
+        })
+      );
+  
       await deleteDoc(doc(db, 'chats', selectedChat.id));
+  
+      setChats((prev) => prev.filter((c) => c.id !== selectedChat.id));
       setSelectedChat(null);
       setShowChatDetails(false);
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      alert('Failed to delete chat. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -303,11 +413,8 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
         ...unreadUpdates
       });
       
-      // Update the selectedChat state immediately to reflect the new participants
-      setSelectedChat(prev => ({
-        ...prev,
-        participants: newParticipants
-      }));
+      // Don't update selectedChat here - let the chats listener handle it
+      // This prevents infinite loops
       
       // Also update the chatUsers state to immediately show the new participants
       const newChatUsers = [...chatUsers, ...selectedUsers];
@@ -387,7 +494,14 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
             chats.map((chat) => (
               <div
                 key={chat.id}
-                onClick={() => { setSelectedChat(chat); markChatAsRead(chat.id); }}
+                onClick={() => {
+                  // Reset the ref when clicking on a different chat
+                  if (selectedChat?.id !== chat.id) {
+                    currentChatIdRef.current = null;
+                  }
+                  setSelectedChat(chat);
+                  markChatAsRead(chat.id);
+                }}
                 className="card"
                 style={{
                   margin: 0,
@@ -465,48 +579,54 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
             </div>
 
             {/* Messages list */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div 
+              ref={messagesContainerRef}
+              style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}
+            >
               {messages.length === 0 ? (
                 <div className="text-muted" style={{ textAlign: 'center', marginTop: 40 }}>
                   No messages yet. Start the conversation!
                 </div>
               ) : (
-                messages.map((message, index) => {
-                  const isOwn = message.senderId === user.uid;
-                  const prev = index > 0 ? messages[index - 1] : null;
-                  const showDate = !prev || formatDate(message.timestamp) !== formatDate(prev.timestamp);
+                <>
+                  {messages.map((message, index) => {
+                    const isOwn = message.senderId === user.uid;
+                    const prev = index > 0 ? messages[index - 1] : null;
+                    const showDate = !prev || formatDate(message.timestamp) !== formatDate(prev.timestamp);
 
-                  return (
-                    <div key={message.id}>
-                      {showDate && (
-                        <div className="text-muted" style={{ textAlign: 'center', margin: '16px 0 8px' }}>
-                          {formatDate(message.timestamp)}
+                    return (
+                      <div key={message.id}>
+                        {showDate && (
+                          <div className="text-muted" style={{ textAlign: 'center', margin: '16px 0 8px' }}>
+                            {formatDate(message.timestamp)}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+                          <div
+                            style={{
+                              maxWidth: '70%',
+                              padding: '10px 14px',
+                              borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                              lineHeight: 1.5,
+                              wordWrap: 'break-word',
+                              background: isOwn ? 'var(--brand-primary)' : '#F3F4F6',
+                              color: isOwn ? '#fff' : '#111827',
+                              boxShadow: '0 1px 2px rgba(0,0,0,.04)',
+                            }}
+                          >
+                            {message.text}
+                          </div>
                         </div>
-                      )}
-                      <div style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
-                        <div
-                          style={{
-                            maxWidth: '70%',
-                            padding: '10px 14px',
-                            borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                            lineHeight: 1.5,
-                            wordWrap: 'break-word',
-                            background: isOwn ? 'var(--brand-primary)' : '#F3F4F6',
-                            color: isOwn ? '#fff' : '#111827',
-                            boxShadow: '0 1px 2px rgba(0,0,0,.04)',
-                          }}
-                        >
-                          {message.text}
+                        <div style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+                          <span className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                            {formatTime(message.timestamp)}
+                          </span>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
-                        <span className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-                          {formatTime(message.timestamp)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </>
               )}
             </div>
 
