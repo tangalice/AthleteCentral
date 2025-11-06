@@ -37,7 +37,7 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "athlete-tools" ||
     activeTab === "results" ||
     activeTab === "goals" ||
-    activeTab === "predict-results" ||
+    activeTab === "practice-performances" ||
     activeTab === "view-athlete-goals" ||
     activeTab === "athlete-feedback" ||
     activeTab === "coach-feedback" ||
@@ -119,14 +119,11 @@ function DropdownMenu({ user, activeTab }) {
   
   // Results - Available to both
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
-
-  if (user?.role === "athlete") {
-  menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
-  }
   
   // Goals - Different for coach vs athlete
   if (user?.role === "athlete") {
     menuItems.push({ path: "/goals", label: "Goals", activeTab: "goals" });
+    menuItems.push({ path: "/practice-performances", label: "Enter Practice", activeTab: "practice-performances" });
   } else if (user?.role === "coach") {
     menuItems.push({ path: "/view-athlete-goals", label: "View Athlete Goals", activeTab: "view-athlete-goals" });
     menuItems.push({ path: "/suggest-goals", label: "Suggest Goals", activeTab: "suggest-goals" });

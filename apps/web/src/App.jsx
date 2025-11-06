@@ -37,6 +37,7 @@ import Goals from "./components/Goals";
 import SuggestGoals from "./components/SuggestGoals";
 import Calendar from "./components/Calendar";
 import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
+import ViewAthletePractices from "./Billa_UI_Pages/Rowing_Stories/ViewAthletePractices";
 import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
 import CoachFeedbackPage from "./components/CoachFeedbackPage";
 import PredictResultsPage from "./pages/PredictResultsPage";
@@ -215,6 +216,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "group-performance" ? "group-performance" :
     root === "individual-performance" ? "individual-performance" :
     root === "lineup-builder" ? "lineup-builder" :
+    root === "view-athlete-practices" ? "view-athlete-practices" :
     root === "predict-results" ? "predict-results" :
     "dashboard";
 
@@ -636,7 +638,15 @@ const router = createBrowserRouter([
         path: "practice-performances",
         element: (
           <ProtectedRoute user={user}>
-            <PracticePerformances />
+            <PracticePerformances user={user} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "view-athlete-practices",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? <ViewAthletePractices user={mergedUser} /> : <Navigate to="/dashboard" replace />}
           </ProtectedRoute>
         ),
       },
