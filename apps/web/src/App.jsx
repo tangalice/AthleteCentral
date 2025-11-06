@@ -721,7 +721,7 @@ const router = createBrowserRouter([
         path: "lineup-builder",
         element: (
           <ProtectedRoute user={user}>
-            {userSport?.toLowerCase() === "rowing" ? (
+            {userRole === "coach" && userSport?.toLowerCase() === "rowing" ? (
               <LineupBuilder user={mergedUser} userRole={userRole} userSport={userSport} />
             ) : (
               <Navigate to="/dashboard" replace />

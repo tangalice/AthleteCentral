@@ -145,6 +145,9 @@ function DropdownMenu({ user, activeTab }) {
     // Health Status & Data Reports
     menuItems.push({ path: "/health-status", label: "Health Status", activeTab: "health-status" });
     menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
+    menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" }); 
+    menuItems.push({ path: "/view-lineup-builder", label: "Lineup Builder", activeTab: "view-lineup-builder" }); 
+
   }
   
   // Group Performance - Available to both
@@ -154,9 +157,9 @@ function DropdownMenu({ user, activeTab }) {
   menuItems.push({ path: "/individual-performance", label: "Individual Performance", activeTab: "individual-performance" });
   
   // Lineup Builder - Only for rowing users
-  if (user?.sport?.toLowerCase() === "rowing") {
-    menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
-  }
+if (user?.role === "coach" && user?.sport?.toLowerCase() === "rowing") {
+  menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
+}
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", display: "flex", alignItems: "center" }}>
