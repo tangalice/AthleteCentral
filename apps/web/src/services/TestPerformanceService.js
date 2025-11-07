@@ -13,6 +13,7 @@ import {
     Timestamp 
   } from 'firebase/firestore';
   import { db } from '../firebase';
+  import { sendEmailNotification } from './EmailNotificationService';
   
   /**
    * Convert time string (MM:SS.s) to seconds
@@ -154,6 +155,19 @@ import {
           updatedAt: Timestamp.now()
         }
       );
+      
+      // Send email notification (fire and forget)
+      const dateStr = date instanceof Timestamp 
+        ? date.toDate().toLocaleDateString() 
+        : new Date(date).toLocaleDateString();
+      
+      sendEmailNotification(userId, 'newPerformanceResult', {
+        testType: testType || 'Performance',
+        date: dateStr,
+        coachName: coachName || 'Coach',
+      }).catch((emailError) => {
+        console.error('Error sending email notification:', emailError);
+      });
       
       return { success: true, id: docRef.id };
     } catch (error) {

@@ -120,9 +120,9 @@ export default function CoachGoals({ user }) {
                 onClick={() => setSelectedAthlete(athlete)}
                 style={{
                   padding: '16px',
-                  backgroundColor: selectedAthlete?.id === athlete.id ? '#10b981' : 'white',
-                  color: selectedAthlete?.id === athlete.id ? 'white' : '#111827',
-                  border: `2px solid ${selectedAthlete?.id === athlete.id ? '#10b981' : '#e5e7eb'}`,
+                  backgroundColor: 'white',
+                  color: '#111827',
+                  border: `${selectedAthlete?.id === athlete.id ? '3px' : '2px'} solid ${selectedAthlete?.id === athlete.id ? '#10b981' : '#e5e7eb'}`,
                   borderRadius: '8px',
                   textAlign: 'left',
                   cursor: 'pointer',
@@ -131,14 +131,14 @@ export default function CoachGoals({ user }) {
                 }}
                 onMouseOver={(e) => {
                   if (selectedAthlete?.id !== athlete.id) {
-                    e.target.style.backgroundColor = '#f9fafb';
-                    e.target.style.borderColor = '#10b981';
+                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                    e.currentTarget.style.borderColor = '#10b981';
                   }
                 }}
                 onMouseOut={(e) => {
                   if (selectedAthlete?.id !== athlete.id) {
-                    e.target.style.backgroundColor = 'white';
-                    e.target.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e5e7eb';
                   }
                 }}
               >
@@ -149,7 +149,7 @@ export default function CoachGoals({ user }) {
                     </div>
                     <div style={{ 
                       fontSize: '13px', 
-                      color: selectedAthlete?.id === athlete.id ? 'rgba(255,255,255,0.8)' : '#6b7280',
+                      color: '#6b7280',
                       marginTop: '4px'
                     }}>
                       {athlete.sport || 'No sport'}
@@ -158,8 +158,8 @@ export default function CoachGoals({ user }) {
                   <div style={{
                     padding: '4px 8px',
                     borderRadius: '12px',
-                    backgroundColor: selectedAthlete?.id === athlete.id ? 'rgba(255,255,255,0.2)' : '#f3f4f6',
-                    color: selectedAthlete?.id === athlete.id ? 'white' : '#6b7280',
+                    backgroundColor: '#f3f4f6',
+                    color: '#6b7280',
                     fontSize: '12px',
                     fontWeight: 600
                   }}>

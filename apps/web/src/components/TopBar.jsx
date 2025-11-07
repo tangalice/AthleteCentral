@@ -46,6 +46,7 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "group-performance" ||
     activeTab === "individual-performance" ||
     activeTab === "lineup-builder" ||
+    activeTab === "split-calculator" || 
     activeTab === "health-status" ||
     activeTab === "data-reports";
 
@@ -145,6 +146,10 @@ function DropdownMenu({ user, activeTab }) {
     // Health Status & Data Reports
     menuItems.push({ path: "/health-status", label: "Health Status", activeTab: "health-status" });
     menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
+    menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" }); 
+  }
+  if (user?.role === "coach" && user?.sport?.toLowerCase() === "rowing") {
+    menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
   }
   
   // Group Performance - Available to both
@@ -152,11 +157,14 @@ function DropdownMenu({ user, activeTab }) {
   
   // Individual Performance - Available to both
   menuItems.push({ path: "/individual-performance", label: "Individual Performance", activeTab: "individual-performance" });
+  if (user?.sport?.toLowerCase() === "rowing") {
+    menuItems.push({ path: "/split-calculator", label: "Split Calculator", activeTab: "split-calculator" });
+  }
   
   // Lineup Builder - Only for rowing users
-  if (user?.sport?.toLowerCase() === "rowing") {
-    menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
-  }
+if (user?.role === "coach" && user?.sport?.toLowerCase() === "rowing") {
+  menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
+}
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", display: "flex", alignItems: "center" }}>

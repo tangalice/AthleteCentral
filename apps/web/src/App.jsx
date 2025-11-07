@@ -46,12 +46,14 @@ import CompareResultsPage from "./pages/CompareResultsPage";
 import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
+import SplitCalculator from './Billa_UI_Pages/Rowing_Stories/SplitCalculator';
 import CoachGoals from './Billa_UI_Pages/CoachGoals';
 import AthleteToolsPage from "./pages/AthleteToolsPage";
 import HealthStatusPage from "./pages/HealthStatusPage";
 import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
 import HealthAndAvailability from "./pages/HealthAndAvailability";
+import AttendanceHistory from "./components/AttendanceHistory";
 
 import GroupPerformance from './Billa_UI_Pages/Rowing_Stories/GroupPerformance';
 import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
@@ -210,6 +212,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "goals"    ? "goals"    :
     root === "view-athlete-goals" ? "view-athlete-goals" :
     root === "coach-feedback" ? "coach-feedback" :
+    root === "split-calculator" ? "split-calculator" : 
     root === "data-reports" ? "data-reports" :
     root === "athlete-feedback" ? "athlete-feedback" :
     root === "suggest-goals" ? "suggest-goals" :
@@ -493,6 +496,18 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "split-calculator",
+        element: (
+          <ProtectedRoute user={user}>
+            {userSport?.toLowerCase() === "rowing" ? (
+              <SplitCalculator user={mergedUser} userRole={userRole} userSport={userSport} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "predict-results",
         element: (
           <ProtectedRoute user={user}>
@@ -590,6 +605,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <Calendar userRole={userRole} user={mergedUser} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "attendance-history",
+        element: (
+          <ProtectedRoute user={user}>
+            <AttendanceHistory userRole={userRole} />
           </ProtectedRoute>
         ),
       },
@@ -721,7 +744,7 @@ const router = createBrowserRouter([
         path: "lineup-builder",
         element: (
           <ProtectedRoute user={user}>
-            {userSport?.toLowerCase() === "rowing" ? (
+            {userRole === "coach" && userSport?.toLowerCase() === "rowing" ? (
               <LineupBuilder user={mergedUser} userRole={userRole} userSport={userSport} />
             ) : (
               <Navigate to="/dashboard" replace />

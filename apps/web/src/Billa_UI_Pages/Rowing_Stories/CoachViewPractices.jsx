@@ -9,7 +9,7 @@ import {
   where,
   orderBy,
 } from "firebase/firestore";
-import { db } from "../../firebase";
+import { db } from "../firebase";
 
 export default function CoachViewPractices({ user }) {
   const [practices, setPractices] = useState([]);

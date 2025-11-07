@@ -20,10 +20,10 @@ export default function Notifications() {
     incompleteProfile: true,
     addToTeam: true,
     upcomingEvent: true,
-    predictionReady: true,
     newPerformanceResult: true,
     coachSuggestedGoals: true,
     coachAddedFeedback: true,
+    coachUpdatedHealthStatus: true,
   });
 
   // Fetch notification settings on mount
@@ -45,10 +45,10 @@ export default function Notifications() {
             incompleteProfile: userData.incompleteProfile ?? true,
             addToTeam: userData.addToTeam ?? true,
             upcomingEvent: userData.upcomingEvent ?? true,
-            predictionReady: userData.predictionReady ?? true,
             newPerformanceResult: userData.newPerformanceResult ?? true,
             coachSuggestedGoals: userData.coachSuggestedGoals ?? true,
             coachAddedFeedback: userData.coachAddedFeedback ?? true,
+            coachUpdatedHealthStatus: userData.coachUpdatedHealthStatus ?? true,
           });
         }
       } catch (error) {
@@ -96,10 +96,10 @@ export default function Notifications() {
           incompleteProfile: notificationSettings.incompleteProfile,
           addToTeam: notificationSettings.addToTeam,
           upcomingEvent: notificationSettings.upcomingEvent,
-          predictionReady: notificationSettings.predictionReady,
           newPerformanceResult: notificationSettings.newPerformanceResult,
           coachSuggestedGoals: notificationSettings.coachSuggestedGoals,
           coachAddedFeedback: notificationSettings.coachAddedFeedback,
+          coachUpdatedHealthStatus: notificationSettings.coachUpdatedHealthStatus,
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -276,12 +276,7 @@ export default function Notifications() {
             {
               key: 'upcomingEvent',
               label: 'Upcoming Event in Schedule',
-              description: 'Reminders about upcoming events in your schedule'
-            },
-            {
-              key: 'predictionReady',
-              label: 'Prediction Ready',
-              description: 'When performance predictions are available'
+              description: 'When a new event is added to your schedule'
             },
             {
               key: 'newPerformanceResult',
@@ -297,6 +292,11 @@ export default function Notifications() {
               key: 'coachAddedFeedback',
               label: 'Coach Added Feedback',
               description: 'When your coach provides feedback on your performance'
+            },
+            {
+              key: 'coachUpdatedHealthStatus',
+              label: 'Coach Updated Health Status',
+              description: 'When your coach updates your health status'
             }
           ].map((item) => (
             <div key={item.key} style={{ 

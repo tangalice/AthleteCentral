@@ -31,48 +31,75 @@ export default function HealthAndAvailability() {
         const teamsSnap = await getDocs(teamsQ);
         const teamIds = teamsSnap.docs.map(d => d.id);
   
+        // Collect all unique athlete IDs from all teams
+        const athleteIds = new Set();
+        for (const teamDoc of teamsSnap.docs) {
+          const teamData = teamDoc.data();
+          const teamAthletes = Array.isArray(teamData.athletes) ? teamData.athletes : [];
+          teamAthletes.forEach(id => athleteIds.add(id));
+        }
+  
+        // Set up listeners for each athlete's user document
         const athleteMap = new Map();
-  
-        unsubs = teamIds.map(tId =>
-          onSnapshot(collection(db, "teams", tId, "athletes"), (snap) => {
-            snap.docs.forEach(sd => {
-              const d = sd.data() || {};
-              const existing = athleteMap.get(sd.id);
-              const nextStatus = (d.healthStatus || "active");
-              if (!existing) {
-                athleteMap.set(sd.id, nextStatus);
-              } else {
-                const rank = (s) => s === "injured" ? 2 : s === "unavailable" ? 1 : 0;
-                if (rank(nextStatus) > rank(existing)) athleteMap.set(sd.id, nextStatus);
-              }
-            });
-  
-            const updateList = async () => {
-              const result = [];
-              for (const [athleteId, status] of athleteMap.entries()) {
-                const userSnap = await getDoc(doc(db, "users", athleteId));
-                const u = userSnap.exists() ? (userSnap.data() || {}) : {};
-                const name = u.displayName || u.name || u.email || "Unnamed";
-                const email = u.email || "";
-                result.push({
-                  id: athleteId,
-                  name,
-                  email,
-                  healthStatus: normalizeHealth(status)
-                });
-              }
-              if (!cancelled) {
-                result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-                setAthletes(result);
-              }
-            };
-            updateList();
-          })
-        );
+        
+        unsubs = Array.from(athleteIds).map(athleteId => {
+          const userRef = doc(db, "users", athleteId);
+          return onSnapshot(userRef, (userSnap) => {
+            if (cancelled) return;
+            
+            if (userSnap.exists()) {
+              const u = userSnap.data();
+              const name = u.displayName || u.name || u.email || "Unnamed";
+              const email = u.email || "";
+              const healthStatus = normalizeHealth(u.healthStatus || "active");
+              
+              athleteMap.set(athleteId, {
+                id: athleteId,
+                name,
+                email,
+                healthStatus
+              });
+            } else {
+              // User doesn't exist, use defaults
+              athleteMap.set(athleteId, {
+                id: athleteId,
+                name: "Unnamed",
+                email: "",
+                healthStatus: normalizeHealth("active")
+              });
+            }
+            
+            // Update the list whenever any user document changes
+            const result = Array.from(athleteMap.values());
+            result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+            if (!cancelled) {
+              setAthletes(result);
+              setLoading(false);
+            }
+          }, (err) => {
+            if (!cancelled) {
+              console.warn("Error loading user:", athleteId, err);
+              // Add with defaults on error
+              athleteMap.set(athleteId, {
+                id: athleteId,
+                name: "Unnamed",
+                email: "",
+                healthStatus: normalizeHealth("active")
+              });
+              
+              const result = Array.from(athleteMap.values());
+              result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+              setAthletes(result);
+              setLoading(false);
+            }
+          });
+        });
       } catch (e) {
-        if (!cancelled) setError("Failed to load athletes.");
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          console.error("Error loading athletes:", e);
+          setError("Failed to load athletes.");
+          setLoading(false);
+        }
       }
     };
   
@@ -206,7 +233,7 @@ export default function HealthAndAvailability() {
         Health and Availability
       </h1>
       <p style={{ fontSize: "16px", color: "#6b7280", marginBottom: "24px" }}>
-        View health status and availability of all athletes
+        View health status and availability of your athletes
       </p>
 
       {/* Search Bar */}
@@ -405,7 +432,7 @@ export default function HealthAndAvailability() {
         border: "1px solid #e5e7eb"
       }}>
         <h2 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "16px", color: "#111827" }}>
-          All Athletes ({filteredAthletes.length})
+          Your Athletes ({filteredAthletes.length})
         </h2>
         
         <div style={{ display: "grid", gap: "12px" }}>

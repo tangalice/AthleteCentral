@@ -34,16 +34,20 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, create, update, delete: if isOwner(userId);
       allow read: if isVerifiedUser();
+      // Allow coaches to update/create health status for athletes
+      allow create, update: if isVerifiedUser() && 
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "coach";
 
       /* ---- Goals subcollection ---- */
       match /goalsList/{goalId} {
         allow read, write: if isOwner(userId);
-        allow create, read: if isVerifiedUser() && isCoach(request.auth.uid);
+        allow create, read, delete: if isVerifiedUser() && isCoach(request.auth.uid);
       }
 
       /* ---- Feedback subcollection ---- */
       match /feedbackList/{feedbackId} {
-        allow read: if isOwner(userId);
+        allow read, update: if isOwner(userId);
         allow create: if isVerifiedUser() && isCoach(request.auth.uid);
       }
 
@@ -65,13 +69,21 @@ service cloud.firestore {
       }
       
       match /performances/{resultId} {
-    		allow read, write: if isVerifiedUser();
-  		}
-      
+        allow read, write: if isVerifiedUser();
+      }
+
+      /* ---- Practices subcollection ---- */
+      match /practices/{practiceId} {
+        allow read: if isOwner(userId);
+        allow read: if isVerifiedUser() && isCoach(request.auth.uid);
+        allow create, update, delete: if isOwner(userId);
+        allow create, update, delete: if isVerifiedUser() && isCoach(request.auth.uid);
+      }
+
       /* ---- Predictions subcollection ---- */
-			match /predictions/{predictionId} {
-  			allow read, write: if isOwner(userId);
-			}
+      match /predictions/{predictionId} {
+        allow read, write: if isOwner(userId);
+      }
       
       match /savedReports/{reportId} {
         // Coaches can create and read their own saved reports
@@ -79,6 +91,13 @@ service cloud.firestore {
         // Allow updates or deletions only by the report owner (coach)
         allow update, delete: if isOwner(userId);
       }
+    }
+
+    /* ========== Performances (root level) ========== */
+    match /performances/{performanceId} {
+      allow read: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isCoach(request.auth.uid);
+      allow update, delete: if isVerifiedUser() && isCoach(request.auth.uid);
     }
 
     /* ========== Chats ========== */
@@ -100,7 +119,7 @@ service cloud.firestore {
       allow read: if isVerifiedUser();
       allow create: if isVerifiedUser() && request.auth.uid in request.resource.data.members && request.resource.data.createdBy == request.auth.uid;
       allow update: if isVerifiedUser();
-      allow delete: if isVerifiedUser() && resource.data.createdBy == request.auth.uid;
+      allow delete: if isVerifiedUser() && (resource.data.createdBy == request.auth.uid || isTeamCoach(teamId));
 
       match /events/{eventId} {
         allow read: if isTeamMember(teamId);
@@ -114,12 +133,31 @@ service cloud.firestore {
         allow write: if isVerifiedUser() && exists(/databases/$(database)/documents/teams/$(teamId)) && (request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches || request.auth.uid == get(/databases/$(database)/documents/teams/$(teamId)).data.createdBy);
       }
     }
+    
+    
+    /* ========== Mail ========== */
+    match /mail/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.message is map
+        && request.resource.data.message.subject is string
+        && (
+          (request.resource.data.message.html is string) ||
+          (request.resource.data.message.text is string)
+        )
+        && (
+          (request.resource.data.to is string) ||
+          (request.resource.data.to is list && request.resource.data.to.size() > 0)
+        );
+      allow read: if false; // don't expose outbound emails
+    }
+
 
     /* ========== Public ========== */
     match /public/{document=**} {
       allow read: if true;
       allow write: if false;
     }
+    
     /* ========== Shared Health Status ========== */
     match /sharedHealthStatus/{athleteId} {
       allow read, write, create: if isVerifiedUser() && isCoach(request.auth.uid);

@@ -1,18 +1,12 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import {
-  collection,
   doc,
   onSnapshot,
-  updateDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
   setDoc,
 } from "firebase/firestore";
 import { serverTimestamp } from "firebase/firestore";
+import { sendEmailNotification } from "../services/EmailNotificationService";
 
 
 
@@ -21,26 +15,6 @@ export default function HealthStatusManager({ teamId }) {
   const [loading, setLoading] = useState(true);
   const [savingIds, setSavingIds] = useState(new Set());
   const [error, setError] = useState("");
-  const [userStatusCache, setUserStatusCache] = useState({});
-  async function getUnifiedStatus(athleteId) {
-    const teamsSnap = await getDocs(collection(db, "teams"));
-    let latestStatus = "active";
-    let latestTime = 0;
-  
-    for (const teamDoc of teamsSnap.docs) {
-      const athleteRef = doc(db, "teams", teamDoc.id, "athletes", athleteId);
-      const athleteSnap = await getDoc(athleteRef);
-      if (athleteSnap.exists()) {
-        const data = athleteSnap.data();
-        const time = data.updatedAt?.seconds || 0;
-        if (time > latestTime) {
-          latestTime = time;
-          latestStatus = data.healthStatus || "active";
-        }
-      }
-    }
-    return latestStatus;
-  }
 
 
   const STATUS_OPTIONS = useMemo(
@@ -51,40 +25,7 @@ export default function HealthStatusManager({ teamId }) {
     ],
     []
   );
-  useEffect(() => {
-    const handleStorage = (event) => {
-      if (event.key === "healthStatusBroadcast" && event.newValue) {
-        try {
-          const { athleteId, newStatus } = JSON.parse(event.newValue);
-          setAthletes((prev) =>
-            prev.map((a) =>
-              a.id === athleteId ? { ...a, healthStatus: newStatus } : a
-            )
-          );
-        } catch (err) {
-          console.warn("Storage sync parse error:", err);
-        }
-      }
-    };
-  
-      
-    const handleCustomEvent = (e) => {
-      const { athleteId, newStatus } = e.detail;
-      setAthletes((prev) =>
-        prev.map((a) =>
-          a.id === athleteId ? { ...a, healthStatus: newStatus } : a
-        )
-      );
-    };
-  
-    window.addEventListener("storage", handleStorage);
-    window.addEventListener("healthStatusChanged", handleCustomEvent);
-  
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("healthStatusChanged", handleCustomEvent);
-    };
-  }, []);
+  // Removed storage/event listeners since we're using Firestore real-time listeners now
   
 
   useEffect(() => {
@@ -93,18 +34,14 @@ export default function HealthStatusManager({ teamId }) {
     setError("");
   
     const teamRef = doc(db, "teams", teamId);
-    const subCol = collection(db, "teams", teamId, "athletes");
-    let q;
-    try {
-      q = query(subCol, orderBy("name", "asc"));
-    } catch (e) {
-      console.warn("No athletes collection yet, skipping orderBy:", e);
-      q = subCol;
-    }
-  
-    const unsub = onSnapshot(q, async (snap) => {
+    let userUnsubs = [];
+    
+    const unsubTeam = onSnapshot(teamRef, (teamSnap) => {
       try {
-        const teamSnap = await getDoc(teamRef);
+        // Clean up previous user listeners
+        userUnsubs.forEach(unsub => unsub());
+        userUnsubs = [];
+        
         if (!teamSnap.exists()) {
           setError("Team not found.");
           setAthletes([]);
@@ -115,101 +52,86 @@ export default function HealthStatusManager({ teamId }) {
         const teamData = teamSnap.data();
         const athleteIds = Array.isArray(teamData.athletes) ? teamData.athletes : [];
   
-        const subMap = new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
-  
-        const list = [];
-        for (const athleteId of athleteIds) {
-          let name = "Unnamed";
-          let email = "";
-  
-          try {
-            const userSnap = await getDoc(doc(db, "users", athleteId));
-            if (userSnap.exists()) {
-              const u = userSnap.data();
-              name = u.displayName || u.name || u.email || "Unnamed";
-              email = u.email || "";
-            }
-          } catch (e) {
-            console.warn("Load user failed:", athleteId, e);
-          }
-  
-          const sub = subMap.get(athleteId);
-          let healthStatus = "active";
-
-          if (sub?.healthStatus) {
-            healthStatus = sub.healthStatus;
-          } else {
-            healthStatus = await getUnifiedStatus(athleteId);
-          }
-  
-          
-  
-          
-  
-          list.push({ id: athleteId, name, email, healthStatus });
-  
-          if (!sub) {
-            try {
-              await setDoc(
-                doc(db, "teams", teamId, "athletes", athleteId),
-                {
-                  name,
-                  email,
-                  healthStatus,
-                  createdAt: serverTimestamp(),
-                },
-                { merge: true }
-              );
-            } catch (e) {
-              console.warn("Backfill athlete doc failed:", athleteId, e);
-            }
-          }
+        if (athleteIds.length === 0) {
+          setAthletes([]);
+          setLoading(false);
+          return;
         }
   
-        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-        setAthletes(list);
-        setLoading(false);
+        // Load all athlete user documents and set up listeners for health status
+        const athleteMap = new Map();
+  
+        for (const athleteId of athleteIds) {
+          const userRef = doc(db, "users", athleteId);
+          const unsubUser = onSnapshot(userRef, (userSnap) => {
+            if (userSnap.exists()) {
+              const u = userSnap.data();
+              const name = u.displayName || u.name || u.email || "Unnamed";
+              const email = u.email || "";
+              const healthStatus = u.healthStatus || "active";
+              
+              athleteMap.set(athleteId, { id: athleteId, name, email, healthStatus });
+            } else {
+              // User doesn't exist, still add to list with defaults
+              athleteMap.set(athleteId, { 
+                id: athleteId, 
+                name: "Unnamed", 
+                email: "", 
+                healthStatus: "active" 
+              });
+            }
+            
+            // Update the list whenever any user document changes
+            const list = Array.from(athleteMap.values());
+            list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+            setAthletes(list);
+            setLoading(false);
+          }, (err) => {
+            console.warn("Error loading user:", athleteId, err);
+            // Add with defaults on error
+            athleteMap.set(athleteId, { 
+              id: athleteId, 
+              name: "Unnamed", 
+              email: "", 
+              healthStatus: "active" 
+            });
+            
+            const list = Array.from(athleteMap.values());
+            list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+            setAthletes(list);
+            setLoading(false);
+          });
+          
+          userUnsubs.push(unsubUser);
+        }
       } catch (err) {
-        console.error("onSnapshot handler error:", err);
+        console.error("Error loading team:", err);
         setError("Failed to load athletes.");
         setLoading(false);
       }
     });
   
-    return () => unsub();
+    return () => {
+      unsubTeam();
+      userUnsubs.forEach(unsub => unsub());
+    };
   }, [teamId]);
-  useEffect(() => {
-    const globalCol = collection(db, "sharedHealthStatus");
-    const unsubGlobal = onSnapshot(globalCol, (snap) => {
-      const updates = {};
-      snap.forEach((docSnap) => {
-        updates[docSnap.id] = docSnap.data().healthStatus;
-      });
-
-      setAthletes((prev) =>
-        prev.map((a) =>
-          updates[a.id] ? { ...a, healthStatus: updates[a.id] } : a
-        )
-      );
-    });
-
-    return () => unsubGlobal();
-  }, []);
 
   const handleStatusChange = async (athleteId, newStatus) => {
-    if (!teamId || !athleteId) return;
+    if (!athleteId) return;
     
     setSavingIds((prev) => new Set(prev).add(athleteId));
     setError(""); // Clear any previous errors
   
     try {
-      // Update only the current team's athlete document
-      const ref = doc(db, "teams", teamId, "athletes", athleteId);
+      // Update the user document (source of truth)
+      // Health status is now stored only in user documents, not in team subcollections
+      const userRef = doc(db, "users", athleteId);
       await setDoc(
-        ref,
+        userRef,
         {
           healthStatus: newStatus || null,
-          updatedAt: serverTimestamp(),
+          healthStatusUpdatedAt: serverTimestamp(),
         },
         { merge: true }
       );
@@ -221,11 +143,32 @@ export default function HealthStatusManager({ teamId }) {
         )
       );
       
+      // Send email notification if status was updated (fire and forget)
+      if (newStatus) {
+        const coach = auth.currentUser;
+        const coachName = coach?.displayName || coach?.email || "Coach";
+        const statusLabels = {
+          active: "Active",
+          injured: "Injured",
+          unavailable: "Unavailable"
+        };
+        const statusLabel = statusLabels[newStatus] || newStatus;
+        
+        sendEmailNotification(athleteId, 'coachUpdatedHealthStatus', {
+          healthStatus: statusLabel,
+          coachName,
+        }).catch((emailError) => {
+          console.error('Error sending email notification:', emailError);
+        });
+      }
+      
       // Clear error on success
       setError("");
     } catch (e) {
       console.error("Failed to update athlete status:", e);
-      setError("Failed to update status. Please try again.");
+      console.error("Error code:", e.code);
+      console.error("Error details:", e);
+      setError(`Failed to update status: ${e.message || "Please try again."}`);
       // Revert the optimistic update on error
       // The onSnapshot listener will restore the correct state
     } finally {
