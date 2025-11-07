@@ -7,6 +7,8 @@ import {
   doc,
   where,
   orderBy,
+  deleteDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "../../firebase";
 
@@ -25,6 +27,14 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
   const [selectedTestType, setSelectedTestType] = useState("all");
   const [loading, setLoading] = useState(true);
   const [teamId, setTeamId] = useState(null);
+  
+  // Edit modal state
+  const [editingPerformance, setEditingPerformance] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    time: "",
+    notes: "",
+    testType: ""
+  });
 
   // Get sport-specific test types
   const sportTestTypes = TEST_PIECE_TYPES[userSport?.toLowerCase()] || TEST_PIECE_TYPES.default;
@@ -158,7 +168,69 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
     });
   };
 
+  // Handle delete
+  const handleDelete = async (performanceId) => {
+    if (!window.confirm("Are you sure you want to delete this test result?")) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, "users", selectedAthlete, "testPerformances", performanceId));
+      
+      // Update local state
+      setTestPerformances(prev => prev.filter(p => p.id !== performanceId));
+      
+      alert("Test result deleted successfully!");
+    } catch (err) {
+      console.error("Error deleting performance:", err);
+      alert("Failed to delete test result. Please try again.");
+    }
+  };
+
+  // Handle edit click
+  const handleEditClick = (performance) => {
+    setEditingPerformance(performance);
+    setEditFormData({
+      time: performance.time || "",
+      notes: performance.notes || "",
+      testType: performance.testType || ""
+    });
+  };
+
+  // Handle edit save
+  const handleEditSave = async () => {
+    if (!editingPerformance) return;
+
+    try {
+      const perfRef = doc(db, "users", selectedAthlete, "testPerformances", editingPerformance.id);
+      
+      await updateDoc(perfRef, {
+        time: editFormData.time,
+        notes: editFormData.notes,
+        testType: editFormData.testType,
+        updatedAt: new Date()
+      });
+      
+      // Update local state
+      setTestPerformances(prev => prev.map(p => 
+        p.id === editingPerformance.id 
+          ? { ...p, ...editFormData }
+          : p
+      ));
+      
+      // Close modal
+      setEditingPerformance(null);
+      setEditFormData({ time: "", notes: "", testType: "" });
+      
+      alert("Test result updated successfully!");
+    } catch (err) {
+      console.error("Error updating performance:", err);
+      alert("Failed to update test result. Please try again.");
+    }
+  };
+
   const selectedAthleteName = athletes.find(a => a.id === selectedAthlete)?.name || "Athlete";
+  const isCoach = userRole === "coach";
 
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "20px" }}>
@@ -306,6 +378,11 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
                   <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
                     Notes
                   </th>
+                  {isCoach && (
+                    <th style={{ padding: "16px", textAlign: "right", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -340,6 +417,45 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
                     <td style={{ padding: "16px", fontSize: "14px", color: "#6b7280" }}>
                       {perf.notes || "-"}
                     </td>
+                    {isCoach && (
+                      <td style={{ padding: "16px", textAlign: "right" }}>
+                        <button
+                          onClick={() => handleEditClick(perf)}
+                          style={{
+                            padding: "6px 12px",
+                            marginRight: "8px",
+                            backgroundColor: "#3b82f6",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "6px",
+                            fontSize: "13px",
+                            fontWeight: "500",
+                            cursor: "pointer"
+                          }}
+                          onMouseOver={(e) => e.target.style.backgroundColor = "#2563eb"}
+                          onMouseOut={(e) => e.target.style.backgroundColor = "#3b82f6"}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(perf.id)}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: "#ef4444",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "6px",
+                            fontSize: "13px",
+                            fontWeight: "500",
+                            cursor: "pointer"
+                          }}
+                          onMouseOver={(e) => e.target.style.backgroundColor = "#dc2626"}
+                          onMouseOut={(e) => e.target.style.backgroundColor = "#ef4444"}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -347,6 +463,134 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingPerformance && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: "white",
+            borderRadius: "12px",
+            padding: "32px",
+            maxWidth: "500px",
+            width: "90%",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)"
+          }}>
+            <h3 style={{ fontSize: "20px", fontWeight: "600", marginBottom: "20px", color: "#111827" }}>
+              Edit Test Result
+            </h3>
+            
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500", color: "#374151", fontSize: "14px" }}>
+                Test Type
+              </label>
+              <select
+                value={editFormData.testType}
+                onChange={(e) => setEditFormData({ ...editFormData, testType: e.target.value })}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  outline: "none"
+                }}
+              >
+                {sportTestTypes.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500", color: "#374151", fontSize: "14px" }}>
+                Time
+              </label>
+              <input
+                type="text"
+                value={editFormData.time}
+                onChange={(e) => setEditFormData({ ...editFormData, time: e.target.value })}
+                placeholder="e.g., 8:00.0"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  outline: "none"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "24px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500", color: "#374151", fontSize: "14px" }}>
+                Notes
+              </label>
+              <textarea
+                value={editFormData.notes}
+                onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                rows="3"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  fontSize: "14px",
+                  outline: "none",
+                  resize: "vertical"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setEditingPerformance(null)}
+                style={{
+                  padding: "10px 20px",
+                  backgroundColor: "#f3f4f6",
+                  color: "#374151",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  cursor: "pointer"
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = "#e5e7eb"}
+                onMouseOut={(e) => e.target.style.backgroundColor = "#f3f4f6"}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                style={{
+                  padding: "10px 20px",
+                  backgroundColor: "#10b981",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  cursor: "pointer"
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = "#059669"}
+                onMouseOut={(e) => e.target.style.backgroundColor = "#10b981"}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
