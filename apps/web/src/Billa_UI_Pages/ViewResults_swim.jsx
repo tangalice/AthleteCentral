@@ -71,6 +71,54 @@ function convertResult(result) {
   return result;
 }
 
+function findPBs(resultsList) {
+  const pbList = {};
+
+  // Group results by event type
+  const grouped = {};
+  for (let r of resultsList) {
+    if (!grouped[r.eventType]) grouped[r.eventType] = [];
+    grouped[r.eventType].push(r);
+  }
+
+  // Process each event separately
+  for (let eventType in grouped) {
+    // Sort by date ascending
+    const sorted = grouped[eventType].sort(
+      (a, b) => new Date(a.date) - new Date(b.date)
+    );
+
+    let bestTimeSoFar = Infinity;
+    let allPBs = [];
+
+    // Mark PBs at the time
+    for (let res of sorted) {
+      const { id, time } = res;
+
+      // If this time beats all previous ones, it's a PB at the time
+      const isPBAtTheTime = time < bestTimeSoFar;
+
+      pbList[id] = {
+        isPB: isPBAtTheTime, // "PB at time of performance"
+        currPB: false,       // We'll fill this later
+      };
+
+      if (isPBAtTheTime) {
+        bestTimeSoFar = time;
+        allPBs.push(res);
+      }
+    }
+
+    // The last (fastest) PB is the current one
+    if (allPBs.length > 0) {
+      const currentPB = allPBs[allPBs.length - 1];
+      pbList[currentPB.id].currPB = true;
+    }
+  }
+
+  return pbList;
+}
+
 export default function ViewResults_swim({ user }) {
   const [filter, setFilter] = useState('all');
   const [practiceResults, setPracticeResults] = useState([]);
@@ -83,6 +131,7 @@ export default function ViewResults_swim({ user }) {
   const [convertedResult, setConvertedResult] = useState(null);
   const [showConvertPopup, setShowConvertPopup] = useState(false);
   const [showChart, setShowChart] = useState(false);
+  const [pbList, setPbList] = useState(null);
   const chartRef = useRef(null);
 
   useEffect(() => {
@@ -100,8 +149,6 @@ export default function ViewResults_swim({ user }) {
         id: doc.id,
         ...doc.data(),
         date: doc.data().date?.toDate() || null, 
-        //isPB: false,
-        //currPB: false,
       }));
 
       const practiceData = allResults.filter(r => r.type === 'practice');
@@ -126,24 +173,14 @@ export default function ViewResults_swim({ user }) {
   fetchResults();
 }, [user]);
 
-  const findPBs= () => {
-    Object.defineProperty(resultsList, 'writable', { value: true });
-    console.log("Finding PBs...");
-    for (let result of resultsList) {
-      console.log("Checking result:", result);
-      let pb = result.time;
-      result.isPB = true;
-      result.currPB = true;
-      for (let otherResult of resultsList) {
-        if (otherResult.eventType === result.eventType && otherResult.time < pb && otherResult.date < result.date) {
-          pb = otherResult.time;
-          result.isPB = false;
-          otherResult.currPB = false;
-          console.log("Found PB:", otherResult);
-        }
-      }
-    }
-  };
+  useEffect(() => {
+    if (!resultsList || resultsList.length === 0) return;
+
+    const computed = findPBs(resultsList);
+    setPbList(computed);
+    setLoading(false);
+    console.log("PB List:", computed);
+  }, [resultsList]);
 
   // Combine and filter results
   const getFilteredResults = () => {
@@ -174,9 +211,9 @@ export default function ViewResults_swim({ user }) {
   };
 
   const filteredResults = getFilteredResults();
-  
 
-  if (loading) {
+
+  if (loading || !pbList) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
         <p style={{ color: '#6b7280' }}>Loading your results...</p>
@@ -299,7 +336,7 @@ export default function ViewResults_swim({ user }) {
       <div ref={chartRef}>
         {showChart && (
           <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={filteredResults}>
+            <LineChart data={filteredResults.sort((a, b) => a.date - b.date)}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
               <YAxis
@@ -428,7 +465,7 @@ export default function ViewResults_swim({ user }) {
 
             {/* isPB? */}
             <td style={{ padding: '12px 16px', fontSize: '14px', color: '#6b7280' }}>
-              {result.isPB ? (result.currPB ? 'current PB' : 'PB at time of performance') : 'Not a PB'}
+              {pbList[result.id]?.isPB ? (pbList[result.id]?.currPB ? 'current PB' : 'PB at time of performance') : 'Not a PB'}
             </td>
 
             {/* Options */}        
