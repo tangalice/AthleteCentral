@@ -1,8 +1,18 @@
 // src/Billa_UI_Pages/ViewResults_swim.jsx
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
+import html2canvas from "html2canvas";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 
 // conversion formulas from https://motion-help.sportsengine.com/en/articles/8538107-how-to-perform-course-conversion-factoring-of-times
@@ -13,11 +23,11 @@ function convertResult(result) {
   let lcmconvertedTime = null;
 
   if (result.courseType === 'scy') {
-    if (result.distance === 500 || result.distance === 1000) {
+    if (result.distance === '500' || result.distance === '1000') {
       scmconvertedTime = result.time * 0.875;
       lcmconvertedTime = result.time * 0.8925;
     }
-    else if (result.distance === 1650) {
+    else if (result.distance === '1650') {
       scmconvertedTime = result.time * 0.997;
       lcmconvertedTime = result.time * 1.02;
     }
@@ -28,11 +38,11 @@ function convertResult(result) {
     return {course1:"SCM Converted Time", course1Time: scmconvertedTime, course2: "LCM Converted Time", course2Time: lcmconvertedTime, convertedCourse: "SCY", convertedTime: result.time};
   }
   else if (result.courseType === 'scm') {
-    if (result.distance === 400 || result.distance === 800) {
+    if (result.distance === '400' || result.distance === '800') {
       scyconvertedTime = result.time / 0.875;
       lcmconvertedTime = result.time * 1.02;
     }
-    else if (result.distance === 1500) {
+    else if (result.distance === '1500') {
       scyconvertedTime = result.time / 0.997;
       lcmconvertedTime = result.time * 1.02;
     }
@@ -43,11 +53,11 @@ function convertResult(result) {
     return {course1:"SCY Converted Time", course1Time: scyconvertedTime, course2: "LCM Converted Time", course2Time: lcmconvertedTime, convertedCourse: "SCM", convertedTime: result.time};
   }
   else if (result.courseType === 'lcm') {
-    if (result.distance === 400 || result.distance === 800) {
+    if (result.distance === '400' || result.distance === '800') {
       scmconvertedTime = result.time / 1.02;
       scyconvertedTime = scmconvertedTime / 0.875;
     }
-    else if (result.distance === 1500) {
+    else if (result.distance === '1500') {
       scmconvertedTime = result.time / 1.02;
       scyconvertedTime = scmconvertedTime / 0.997;
     }
@@ -72,6 +82,8 @@ export default function ViewResults_swim({ user }) {
   const [resultsList, setResultsList] = useState([]);
   const [convertedResult, setConvertedResult] = useState(null);
   const [showConvertPopup, setShowConvertPopup] = useState(false);
+  const [showChart, setShowChart] = useState(false);
+  const chartRef = useRef(null);
 
   useEffect(() => {
   const fetchResults = async () => {
@@ -87,9 +99,9 @@ export default function ViewResults_swim({ user }) {
       const allResults = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        date: doc.data().date?.toDate() || null,
-        isPB: false,
-        currPB: false,
+        date: doc.data().date?.toDate() || null, 
+        //isPB: false,
+        //currPB: false,
       }));
 
       const practiceData = allResults.filter(r => r.type === 'practice');
@@ -115,7 +127,8 @@ export default function ViewResults_swim({ user }) {
 }, [user]);
 
   const findPBs= () => {
-  console.log("Finding PBs...");
+    Object.defineProperty(resultsList, 'writable', { value: true });
+    console.log("Finding PBs...");
     for (let result of resultsList) {
       console.log("Checking result:", result);
       let pb = result.time;
@@ -161,7 +174,7 @@ export default function ViewResults_swim({ user }) {
   };
 
   const filteredResults = getFilteredResults();
-  findPBs();
+  
 
   if (loading) {
     return (
@@ -181,7 +194,7 @@ export default function ViewResults_swim({ user }) {
         justifyContent: 'center'
       }}>
         <button 
-          onClick={() => setFilter('all')}
+          onClick={() => { setFilter('all'); setShowChart(false); }}
           style={{ 
             padding: '10px 20px', 
             border: `2px solid ${filter === 'all' ? '#10b981' : '#d1d5db'}`, 
@@ -196,7 +209,7 @@ export default function ViewResults_swim({ user }) {
           All Results ({practiceResults.length + competitionResults.length})
         </button>
         <button 
-          onClick={() => setFilter('practice')}
+          onClick={() => { setFilter('practice'); setShowChart(false); }}
           style={{ 
             padding: '10px 20px', 
             border: `2px solid ${filter === 'practice' ? '#10b981' : '#d1d5db'}`, 
@@ -211,7 +224,7 @@ export default function ViewResults_swim({ user }) {
           Practice ({practiceResults.length})
         </button>
         <button 
-          onClick={() => setFilter('competition')}
+          onClick={() => { setFilter('competition'); setShowChart(false); }}
           style={{ 
             padding: '10px 20px', 
             border: `2px solid ${filter === 'competition' ? '#10b981' : '#d1d5db'}`, 
@@ -236,7 +249,7 @@ export default function ViewResults_swim({ user }) {
         justifyContent: 'center'
       }}>
         <button 
-          onClick={() => setFilter('scy')}
+          onClick={() => { setFilter('scy'); setShowChart(false); }}
           style={{ 
             padding: '10px 20px', 
             border: `2px solid ${filter === 'scy' ? '#10b981' : '#d1d5db'}`, 
@@ -251,7 +264,7 @@ export default function ViewResults_swim({ user }) {
           Short Course Yards (SCY) ({scyResults.length})
         </button>
         <button 
-          onClick={() => setFilter('scm')}
+          onClick={() => { setFilter('scm'); setShowChart(false); }}
           style={{ 
             padding: '10px 20px', 
             border: `2px solid ${filter === 'scm' ? '#10b981' : '#d1d5db'}`, 
@@ -266,7 +279,7 @@ export default function ViewResults_swim({ user }) {
           Short Course Meters (SCM) ({scmResults.length})
         </button>
         <button 
-          onClick={() => setFilter('lcm')}
+          onClick={() => { setFilter('lcm'); setShowChart(false); }}
           style={{ 
             padding: '10px 20px', 
             border: `2px solid ${filter === 'lcm' ? '#10b981' : '#d1d5db'}`, 
@@ -280,6 +293,27 @@ export default function ViewResults_swim({ user }) {
         >
           Long Course Meters (LCM) ({lcmResults.length})
         </button>
+      </div>
+
+      {/* Chart */}
+      <div ref={chartRef}>
+        {showChart && (
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={filteredResults}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis
+                label={{
+                  value: "Time (s)",
+                  angle: -90,
+                  position: "insideLeft",
+                }}
+              />
+              <Tooltip />
+              <Line type="monotone" dataKey="time" stroke="#3b82f6" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* Results Display */}
@@ -340,7 +374,7 @@ export default function ViewResults_swim({ user }) {
               backgroundColor: index % 2 === 0 ? 'white' : '#f9fafb',
               cursor: 'pointer'
             }}
-            onClick={() => setFilter(result.eventType)}
+            onClick={() => { setFilter(result.eventType); setShowChart(true); }}
 
           >
             {/* Date */}
