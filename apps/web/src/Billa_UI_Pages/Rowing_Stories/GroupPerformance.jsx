@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 // Sport-specific test types
 const getTestTypesBySport = (sport) => {
@@ -14,7 +16,7 @@ const getTestTypesBySport = (sport) => {
     case 'swimming':
       return ['All', '50 Free', '100 Free', '200 Free', '500 Free', '100 Fly', '200 IM'];
     default:
-      return ['All', '2k', '5k', '6k', '30min', '60min']; // default to rowing
+      return ['All', '2k', '5k', '6k', '30min', '60min'];
   }
 };
 
@@ -52,18 +54,86 @@ const getColumnsBySport = (sport) => {
   }
 };
 
-export default function GroupPerformance({ teamData = [], userSport = 'rowing' }) {
+export default function GroupPerformance({ user, userRole, userSport = 'rowing' }) {
   const testTypes = useMemo(() => getTestTypesBySport(userSport), [userSport]);
   const columns = useMemo(() => getColumnsBySport(userSport), [userSport]);
   
+  const [teamData, setTeamData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedTestType, setSelectedTestType] = useState('All');
-  const [sortBy, setSortBy] = useState('time'); // 'time', 'name', 'watts'
-  const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
+  const [completionStatus, setCompletionStatus] = useState('All');
+  const [sortBy, setSortBy] = useState('time');
+  const [sortOrder, setSortOrder] = useState('asc');
 
-  // Filter data by test type
+  // Fetch team performance data from Firestore
+  useEffect(() => {
+    const fetchTeamData = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        console.log('Fetching team data...', { userSport });
+
+        // Query the performances collection
+        const performancesRef = collection(db, 'performances');
+        
+        // Fetch all performances (no filter)
+        const querySnapshot = await getDocs(performancesRef);
+        
+        console.log('Found documents:', querySnapshot.size);
+
+        const performances = [];
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          console.log('Document data:', doc.id, data);
+          
+          // Show all performances regardless of sport
+          performances.push({
+            id: doc.id,
+            athleteId: data.userId || data.athleteId,
+            athleteName: data.athleteName || 'Unknown Athlete',
+            testType: data.testType || data.eventType || 'Unknown',
+            time: data.time || '--:--.-',
+            split: data.split || '',
+            watts: data.watts || 0,
+            date: data.date?.toDate?.() || data.date || new Date(),
+            sport: data.sport || userSport,
+            completed: data.completed !== false && data.time !== '--:--.-',
+          });
+        });
+
+        console.log('Processed performances:', performances.length);
+        setTeamData(performances);
+      } catch (err) {
+        console.error('Error fetching team data:', err);
+        setError(`Failed to load team performance data: ${err.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTeamData();
+  }, [user, userSport]);
+
+  // Filter data by test type and completion status
   const filteredData = teamData.filter((entry) => {
-    if (selectedTestType === 'All') return true;
-    return entry.testType === selectedTestType;
+    const matchesTestType = selectedTestType === 'All' || entry.testType === selectedTestType;
+    
+    let matchesCompletion = true;
+    if (completionStatus === 'Complete') {
+      matchesCompletion = entry.time !== '--:--.-' && entry.time;
+    } else if (completionStatus === 'Incomplete') {
+      matchesCompletion = entry.time === '--:--.-' || !entry.time;
+    }
+    
+    return matchesTestType && matchesCompletion;
   });
 
   // Sort data
@@ -73,7 +143,6 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
     if (sortBy === 'name') {
       comparison = a.athleteName.localeCompare(b.athleteName);
     } else if (sortBy === 'time') {
-      // Convert time string to seconds for comparison
       const timeToSeconds = (timeStr) => {
         if (timeStr === '--:--.-' || !timeStr) return Infinity;
         const parts = timeStr.split(':');
@@ -83,16 +152,16 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
       };
       comparison = timeToSeconds(a.time) - timeToSeconds(b.time);
     } else if (sortBy === 'watts') {
-      comparison = a.watts - b.watts;
+      comparison = (a.watts || 0) - (b.watts || 0);
     }
     
     return sortOrder === 'asc' ? comparison : -comparison;
   });
 
-  // Calculate rankings based on time for current test type
+  // Calculate rankings
   const rankings = {};
   filteredData.forEach((entry) => {
-    if (entry.time !== '--:--.-') {
+    if (entry.time !== '--:--.-' && entry.time) {
       if (!rankings[entry.testType]) {
         rankings[entry.testType] = [];
       }
@@ -100,7 +169,6 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
     }
   });
 
-  // Sort each test type by time
   Object.keys(rankings).forEach((testType) => {
     rankings[testType].sort((a, b) => {
       const timeToSeconds = (timeStr) => {
@@ -113,9 +181,8 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
     });
   });
 
-  // Get rank for an entry
   const getRank = (entry) => {
-    if (entry.time === '--:--.-') return '-';
+    if (entry.time === '--:--.-' || !entry.time) return '-';
     const typeRankings = rankings[entry.testType];
     if (!typeRankings) return '-';
     const index = typeRankings.findIndex((e) => e.id === entry.id);
@@ -138,7 +205,79 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
 
   // Calculate stats
   const totalAthletes = new Set(teamData.map(entry => entry.athleteId)).size;
-  const completedTests = teamData.filter(entry => entry.time !== '--:--.-').length;
+  const completedTests = teamData.filter(entry => entry.time !== '--:--.-' && entry.time).length;
+  const incompleteTests = teamData.filter(entry => entry.time === '--:--.-' || !entry.time).length;
+
+  // Loading state
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
+        <div style={{ textAlign: 'center', paddingTop: '100px' }}>
+          <p style={{ fontSize: '18px', color: '#6b7280' }}>Loading team performance data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
+        <div style={{ textAlign: 'center', paddingTop: '100px' }}>
+          <p style={{ fontSize: '18px', color: '#ef4444', marginBottom: '10px' }}>{error}</p>
+          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '20px' }}>
+            Check the browser console for more details
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '20px',
+              padding: '10px 20px',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // No data state
+  if (teamData.length === 0) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
+        <div style={{ marginBottom: '32px' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>
+            Team Performance
+          </h1>
+          <p style={{ color: '#6b7280', fontSize: '15px' }}>
+            View and compare team member test piece results
+            {userSport && <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>({userSport})</span>}
+          </p>
+        </div>
+        <div style={{ 
+          textAlign: 'center', 
+          paddingTop: '100px',
+          backgroundColor: '#f9fafb',
+          padding: '60px',
+          borderRadius: '12px',
+          border: '2px solid #e5e7eb'
+        }}>
+          <p style={{ fontSize: '18px', color: '#6b7280', marginBottom: '10px' }}>
+            No performance data found
+          </p>
+          <p style={{ fontSize: '14px', color: '#9ca3af' }}>
+            Coaches can add results from the "Enter Results" page
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
@@ -166,7 +305,7 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
         </h2>
         
         {/* Test Type Filter */}
-        <div>
+        <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
             Test Type
           </label>
@@ -200,6 +339,46 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
                 }}
               >
                 {type}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Completion Status Filter */}
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
+            Completion Status
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {['All', 'Complete', 'Incomplete'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setCompletionStatus(status)}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  border: completionStatus === status ? '2px solid #3b82f6' : '2px solid #e5e7eb',
+                  backgroundColor: completionStatus === status ? '#3b82f6' : '#ffffff',
+                  color: completionStatus === status ? '#ffffff' : '#111827',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  if (completionStatus !== status) {
+                    e.currentTarget.style.borderColor = '#3b82f6';
+                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (completionStatus !== status) {
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.backgroundColor = '#ffffff';
+                  }
+                }}
+              >
+                {status}
               </button>
             ))}
           </div>
@@ -318,20 +497,22 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
                     color: '#9ca3af',
                     fontSize: '15px'
                   }}>
-                    No team results found
+                    No team results found for the selected filters
                   </td>
                 </tr>
               ) : (
                 sortedData.map((entry, index) => {
                   const rank = getRank(entry);
                   const isTopThree = rank !== '-' && rank <= 3;
+                  const isIncomplete = entry.time === '--:--.-' || !entry.time;
                   
                   return (
                     <tr
                       key={entry.id}
                       style={{ 
                         borderBottom: '1px solid #f3f4f6',
-                        backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa'
+                        backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa',
+                        opacity: isIncomplete ? 0.6 : 1
                       }}
                     >
                       <td style={{ padding: '16px 24px' }}>
@@ -377,8 +558,8 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
                           {entry.testType}
                         </span>
                       </td>
-                      <td style={{ padding: '16px 24px', color: '#111827', fontFamily: 'monospace', fontSize: '15px', fontWeight: 600 }}>
-                        {entry.time}
+                      <td style={{ padding: '16px 24px', color: isIncomplete ? '#ef4444' : '#111827', fontFamily: 'monospace', fontSize: '15px', fontWeight: 600 }}>
+                        {entry.time || '--:--.-'}
                       </td>
                       {columns.showSplit && (
                         <td style={{ padding: '16px 24px', color: '#6b7280', fontFamily: 'monospace', fontSize: '14px' }}>
@@ -449,6 +630,20 @@ export default function GroupPerformance({ teamData = [], userSport = 'rowing' }
           </div>
           <div style={{ fontSize: '32px', fontWeight: 700, color: '#10b981' }}>
             {completedTests}
+          </div>
+        </div>
+        <div style={{ 
+          backgroundColor: '#ffffff', 
+          padding: '24px', 
+          borderRadius: '12px',
+          border: '2px solid #e5e7eb',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px', fontWeight: 600 }}>
+            Incomplete Tests
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: 700, color: '#ef4444' }}>
+            {incompleteTests}
           </div>
         </div>
       </div>

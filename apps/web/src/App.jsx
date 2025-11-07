@@ -46,6 +46,7 @@ import CompareResultsPage from "./pages/CompareResultsPage";
 import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
+import SplitCalculator from './Billa_UI_Pages/Rowing_Stories/SplitCalculator';
 import CoachGoals from './Billa_UI_Pages/CoachGoals';
 import AthleteToolsPage from "./pages/AthleteToolsPage";
 import HealthStatusPage from "./pages/HealthStatusPage";
@@ -210,6 +211,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "goals"    ? "goals"    :
     root === "view-athlete-goals" ? "view-athlete-goals" :
     root === "coach-feedback" ? "coach-feedback" :
+    root === "split-calculator" ? "split-calculator" : 
     root === "data-reports" ? "data-reports" :
     root === "athlete-feedback" ? "athlete-feedback" :
     root === "suggest-goals" ? "suggest-goals" :
@@ -489,6 +491,18 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <Dashboard userRole={userRole} user={user} unreadMessageCount={unreadMessageCount} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "split-calculator",
+        element: (
+          <ProtectedRoute user={user}>
+            {userSport?.toLowerCase() === "rowing" ? (
+              <SplitCalculator user={mergedUser} userRole={userRole} userSport={userSport} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
           </ProtectedRoute>
         ),
       },
