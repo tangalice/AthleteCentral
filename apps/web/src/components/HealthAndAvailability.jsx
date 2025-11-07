@@ -57,6 +57,8 @@ export default function HealthAndAvailability() {
   const todayISO = new Date().toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState(todayISO);
   const [selectedTeamId, setSelectedTeamId] = useState("all"); // 'all' or teamId
+  const [weeklyStatuses, setWeeklyStatuses] = useState({});
+
 
   // ----- Data state -----
   const [teams, setTeams] = useState([]); // [{id, name}]
@@ -212,13 +214,7 @@ export default function HealthAndAvailability() {
   const pickTeamIdForAthlete = (athlete) => {
     const { teamIds = [] } = athlete || {};
     if (!teamIds || teamIds.length === 0) return null;
-
-    if (selectedTeamId !== "all" && teamIds.includes(selectedTeamId)) {
-      return selectedTeamId;
-    }
-    if (teamIds.length === 1) return teamIds[0];
-    // deterministic choice for "all" across multiple teams
-    return teamIds.slice().sort()[0];
+      return teamIds.slice().sort()[0];
   };
 
   // ============================================================
@@ -270,6 +266,7 @@ export default function HealthAndAvailability() {
     reloadStatusesForDate(selectedDate, athletes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, athletes, selectedTeamId]);
+  
 
   // ============================================================
   // 4) Save a status for the selected date
@@ -346,6 +343,36 @@ export default function HealthAndAvailability() {
 
       // Post-write reload to defeat any late old read
       await reloadStatusesForDate(selectedDate, athletes);
+      // ✅ ensure 7-day summary updates after any change
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const next7 = getNext7Days();
+      const summary = {};
+      for (const day of next7) {
+        const dateKey = day.value.replace(/-/g, "");
+        const dayMap = {};
+        await Promise.all(
+          athletes.map(async (a) => {
+            const tid = pickTeamIdForAthlete(a);
+            if (!tid) {
+              dayMap[a.id] = "active";
+              return;
+            }
+            try {
+              const snap = await getDoc(
+                doc(db, "athleteAvailability", `${tid}_${a.id}_${dateKey}`)
+              );
+              dayMap[a.id] = snap.exists()
+                ? snap.data()?.status || "active"
+                : "active";
+            } catch {
+              dayMap[a.id] = "active";
+            }
+          })
+        );
+        summary[day.value] = dayMap;
+      }
+      setWeeklyStatuses(summary);
+
     } catch (e) {
       console.error("Update daily status failed:", e);
       setError(e?.message ? `Failed to update: ${e.message}` : "Failed to update status.");
@@ -380,6 +407,43 @@ export default function HealthAndAvailability() {
     }
     return list;
   }, [athletes, selectedTeamId, searchTerm]);
+  // Load 7-day summary availability
+  useEffect(() => {
+    if (filteredAthletes.length === 0) return;
+    const next7 = getNext7Days();
+
+    (async () => {
+      const summary = {};
+      for (const day of next7) {
+        const dateKey = day.value.replace(/-/g, "");
+        const dayMap = {};
+
+        await Promise.all(
+          filteredAthletes.map(async (a) => {
+            const tid = pickTeamIdForAthlete(a);
+            if (!tid) {
+              dayMap[a.id] = "active";
+              return;
+            }
+            try {
+              const snap = await getDoc(
+                doc(db, "athleteAvailability", `${tid}_${a.id}_${dateKey}`)
+              );
+              dayMap[a.id] = snap.exists()
+                ? snap.data()?.status || "active"
+                : "active";
+            } catch {
+              dayMap[a.id] = "active";
+            }
+          })
+        );
+
+        summary[day.value] = dayMap;
+      }
+
+      setWeeklyStatuses(summary);
+    })();
+  }, [filteredAthletes, selectedTeamId]);
 
   // (From V1)
   const dailyStats = useMemo(() => {
@@ -393,33 +457,30 @@ export default function HealthAndAvailability() {
   }, [filteredAthletes, athleteStatuses]);
 
   // (From V2)
+  // ✅ Fixed version: always read from weeklyStatuses (consistent 7-day data)
   const bestDays = useMemo(() => {
     const next7 = getNext7Days();
     const dayScores = next7.map((day) => {
-      const available = filteredAthletes.filter((a) => {
-        let status;
-        if (day.value === selectedDate) {
-          status = athleteStatuses[a.id] || "active";
-        } else {
-          status = a.healthStatus || "active";
-        }
-        return status === "active";
-      }).length;
-
+      const statuses = weeklyStatuses[day.value] || {};
+      const available = filteredAthletes.filter(
+        (a) => (statuses[a.id] || "active") === "active"
+      ).length;
       const total = filteredAthletes.length;
       const percent = total > 0 ? Math.round((available / total) * 100) : 0;
-
-      return {
-        ...day,
-        available,
-        total,
-        percent,
-      };
+      return { ...day, available, total, percent };
     });
 
-    // Sort by availability percentage
-    return dayScores.sort((a, b) => b.available - a.available);
-  }, [filteredAthletes, athleteStatuses, selectedDate]); // This logic only depends on the athlete list
+    // Sort by availability %
+    return dayScores.sort((a, b) => {
+      if (a.value === selectedDate) return -1;
+      if (b.value === selectedDate) return 1;
+    
+      if (b.percent !== a.percent) return b.percent - a.percent;
+    
+      return new Date(a.value) - new Date(b.value);
+    });
+  }, [filteredAthletes, weeklyStatuses, selectedDate]);
+
 
   // ============================================================
   // Render
@@ -720,7 +781,94 @@ export default function HealthAndAvailability() {
               </div>
             )}
           </div>
+          {/* ✅ 7-Day View (Left Bottom Section) */}
+          <div
+            style={{
+              marginTop: 24,
+              padding: 20,
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              backgroundColor: "#f9fafb",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: 18,
+                fontWeight: 600,
+                marginBottom: 12,
+                color: "#111827",
+              }}
+            >
+              7-Day View (Availability Summary)
+            </h2>
+
+            {Object.keys(weeklyStatuses).length === 0 ? (
+              <p style={{ color: "#6b7280" }}>Loading 7-day summary…</p>
+            ) : (
+              <div style={{ maxHeight: 260, overflowY: "auto", paddingRight: 8 }}>
+                {getNext7Days().map((day) => {
+                  const statuses = weeklyStatuses[day.value] || {};
+                  return (
+                    <div
+                      key={day.value}
+                      style={{
+                        marginBottom: 10,
+                        paddingBottom: 8,
+                        borderBottom: "1px solid #e5e7eb",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 600,
+                          color: "#111827",
+                          marginBottom: 4,
+                        }}
+                      >
+                        {day.label}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          rowGap: 4,
+                          fontSize: 13,
+                          color: "#374151",
+                        }}
+                      >
+                        {filteredAthletes.map((a) => {
+                          const st = statuses[a.id] || "active";
+                          const color =
+                            st === "injured"
+                              ? "#dc2626"
+                              : st === "unavailable"
+                              ? "#ea580c"
+                              : "#16a34a";
+                          return (
+                            <span
+                              key={a.id}
+                              style={{
+                                marginRight: 12,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <span style={{ color }}>
+                                {st === "active" ? "✅" : "❌"}
+                              </span>{" "}
+                              {a.name} ({st})
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
+        
 
         {/* Right: Best Days (From V2) */}
         <div>
