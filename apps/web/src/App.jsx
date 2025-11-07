@@ -53,6 +53,7 @@ import HealthStatusPage from "./pages/HealthStatusPage";
 import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
 import HealthAndAvailability from "./pages/HealthAndAvailability";
+import AttendanceHistory from "./components/AttendanceHistory";
 
 import GroupPerformance from './Billa_UI_Pages/Rowing_Stories/GroupPerformance';
 import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
@@ -604,6 +605,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <Calendar userRole={userRole} user={mergedUser} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "attendance-history",
+        element: (
+          <ProtectedRoute user={user}>
+            <AttendanceHistory userRole={userRole} />
           </ProtectedRoute>
         ),
       },
