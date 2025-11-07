@@ -151,8 +151,10 @@ export default function CoachDataReports() {
 
     try {
       const reportsRef = collection(db, "users", coach.uid, "savedReports");
+      const athlete = athletes.find((a) => a.id === selectedAthlete);
       const newReport = {
         athleteId: selectedAthlete,
+        athleteName: athlete?.displayName || athlete?.email || "Unknown Athlete",
         type: selectedType,
         event: selectedEvent,
         data: chartData,
@@ -174,6 +176,7 @@ export default function CoachDataReports() {
     setSelectedEvent(report.event);
     setChartData(report.data || []);
     setStatus("");
+    setStatus(`Loaded report for ${report.athleteName || "Unknown Athlete"}`);
   };
 
   /* ---------------- Download CSV ---------------- */
@@ -232,17 +235,21 @@ export default function CoachDataReports() {
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {savedReports.map((r) => (
               <li
-                key={r.id}
-                style={{
-                  padding: "8px 0",
-                  borderBottom: "1px solid #e5e7eb",
-                  cursor: "pointer",
-                }}
-                onClick={() => loadSavedReport(r)}
-              >
-                <span style={{ fontWeight: 600 }}>{r.event}</span>{" "}
-                <small>({r.type})</small>
-              </li>
+  key={r.id}
+  style={{
+    padding: "8px 0",
+    borderBottom: "1px solid #e5e7eb",
+    cursor: "pointer",
+  }}
+  onClick={() => loadSavedReport(r)}
+>
+  <span style={{ fontWeight: 600 }}>{r.event}</span>{" "}
+  <small>({r.type})</small>
+  <br />
+  <small style={{ color: "#6b7280" }}>
+    {r.athleteName || "Unknown Athlete"}
+  </small>
+</li>
             ))}
           </ul>
         ) : (

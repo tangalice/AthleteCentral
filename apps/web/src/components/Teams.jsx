@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { collection, query, where, getDocs, addDoc, doc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, serverTimestamp, deleteDoc } from "firebase/firestore";
+import { sendEmailNotification } from "../services/EmailNotificationService";
 
 export default function Teams() {
   const navigate = useNavigate();
@@ -133,6 +134,17 @@ export default function Teams() {
       };
 
       await addDoc(collection(db, "teams"), teamData);
+      
+      // Send email notifications to athletes who were added to the team (fire and forget)
+      newTeam.selectedUsers.forEach(async (athlete) => {
+        try {
+          await sendEmailNotification(athlete.id, 'addToTeam', {
+            teamName: teamData.name,
+          });
+        } catch (emailError) {
+          console.error('Error sending email notification:', emailError);
+        }
+      });
       
       setMessage("Team created successfully!");
       setShowCreateTeam(false);

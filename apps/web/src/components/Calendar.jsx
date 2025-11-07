@@ -16,6 +16,7 @@ import {
   doc,
   Timestamp,
 } from "firebase/firestore";
+import { sendEmailNotificationToMultiple } from "../services/EmailNotificationService";
 import EventAttendance from "./EventAttendance";
 
 // Import centralized services/constants
@@ -176,6 +177,16 @@ export default function Calendar({ userRole }) {
 
     setCreating(true);
     try {
+      // Get team data first for email notifications and attendance calculation
+      const teamDoc = await getDoc(doc(db, "teams", teamId));
+      const teamData = teamDoc.data();
+      const teamName = teamData?.name || "Your Team";
+      
+      // Calculate attendance total: use assigned count, or team athletes count for team-wide events
+      const attendanceTotal = createAssigned.length > 0 
+        ? createAssigned.length 
+        : (assignables.length || teamData?.athletes?.length || 0);
+      
       const dt = new Date(`${createForm.date}T${createForm.time}`);
       await addDoc(collection(db, "teams", teamId, "events"), {
         title: createForm.title.trim(),
@@ -184,10 +195,45 @@ export default function Calendar({ userRole }) {
         datetime: Timestamp.fromDate(dt),
         assignedMemberIds: createAssigned.slice(), 
         createdBy: me,
-        createdAt: new Date(),
-        attendanceSummary: { present: 0, total: createAssigned.length, rate: 0 },
+        createdAt: Timestamp.fromDate(new Date()),
+        attendanceSummary: { present: 0, total: attendanceTotal, rate: 0 },
         attendanceRecords: {}, // Initialize empty records
       });
+      
+      // Determine who to notify: assigned members or all team athletes
+      let userIdsToNotify = [];
+      if (createAssigned.length > 0) {
+        userIdsToNotify = createAssigned;
+      } else {
+        // Team-wide event: notify all athletes
+        userIdsToNotify = teamData?.athletes || [];
+      }
+      
+      // Format date and time for email
+      const eventDate = new Date(`${createForm.date}T${createForm.time}`);
+      const eventDateStr = eventDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      const eventTimeStr = eventDate.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Send email notifications (fire and forget)
+      if (userIdsToNotify.length > 0) {
+        sendEmailNotificationToMultiple(userIdsToNotify, 'upcomingEvent', {
+          eventTitle: createForm.title.trim(),
+          eventDate: eventDateStr,
+          eventTime: eventTimeStr,
+          teamName,
+        }).catch((emailError) => {
+          console.error('Error sending email notifications:', emailError);
+        });
+      }
+      
       closeCreate();
     } catch (e) {
       console.error("create event failed", e);

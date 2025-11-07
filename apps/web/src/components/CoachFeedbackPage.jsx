@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { db, auth } from "../firebase";
 import { collection, getDocs, addDoc } from "firebase/firestore";
+import { sendEmailNotification } from "../services/EmailNotificationService";
 
 export default function CoachFeedbackPage() {
   const [athletes, setAthletes] = useState([]);
@@ -51,6 +52,14 @@ export default function CoachFeedbackPage() {
       setStatus("Feedback successfully submitted!");
       setMessage("");
       setSelectedAthlete("");
+      
+      // Send email notification (fire and forget)
+      sendEmailNotification(selectedAthlete, 'coachAddedFeedback', {
+        category,
+        coachName: coach.displayName || coach.email || "Coach",
+      }).catch((emailError) => {
+        console.error('Error sending email notification:', emailError);
+      });
     } catch (err) {
       console.error("Error submitting feedback:", err);
       setStatus("Error submitting feedback.");

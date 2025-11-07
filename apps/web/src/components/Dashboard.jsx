@@ -13,6 +13,7 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
+import { checkAndNotifyIncompleteProfile } from "../services/EmailNotificationService";
 
 export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const data = useLoaderData();
@@ -52,8 +53,28 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   );
   const eventsByTeamRef = useRef({});
 
-  
-  /* ========== Athlete health live updates (unchanged) ========== */
+  // ========== Check profile completeness and send notification if needed ==========
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    
+    const checkProfile = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          await checkAndNotifyIncompleteProfile(auth.currentUser.uid, userData, auth.currentUser);
+        }
+      } catch (error) {
+        console.error("Error checking profile completeness:", error);
+      }
+    };
+    
+    // Check profile completeness on mount (with a small delay to avoid blocking initial render)
+    const timeoutId = setTimeout(checkProfile, 2000);
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  /* ========== Athlete health live updates ========== */
   useEffect(() => {
     // ... (logic unchanged)
     if (userRole !== "athlete" || !auth.currentUser) return;
