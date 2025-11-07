@@ -469,6 +469,7 @@ export default function HealthAndAvailability() {
       const percent = total > 0 ? Math.round((available / total) * 100) : 0;
       return { ...day, available, total, percent };
     });
+    
 
     // Sort by availability %
     return dayScores.sort((a, b) => {
@@ -480,6 +481,12 @@ export default function HealthAndAvailability() {
       return new Date(a.value) - new Date(b.value);
     });
   }, [filteredAthletes, weeklyStatuses, selectedDate]);
+  const topPercent = useMemo(() => {
+    return bestDays.length > 0
+      ? Math.max(...bestDays.map(d => d.percent))
+      : 0;
+  }, [bestDays]);
+  
 
 
   // ============================================================
@@ -893,6 +900,8 @@ export default function HealthAndAvailability() {
             <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 12 }}>
               Next 7 days ranked by team availability (based on default status)
             </div>
+            
+
 
             {bestDays.map((day, idx) => (
               <div
@@ -915,7 +924,7 @@ export default function HealthAndAvailability() {
                 >
                   <div>
                     <div style={{ fontSize: 14, fontWeight: idx === 0 ? 600 : 400 }}>
-                      {idx === 0 && "🏆 "}
+                    {day.percent === topPercent && "🏆 "}
                       {day.label}
                     </div>
                     <div style={{ fontSize: 12, color: "#6b7280" }}>
