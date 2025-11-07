@@ -13,31 +13,47 @@ service cloud.firestore {
       return isAuthed() && request.auth.uid == userId;
     }
     function isCoach(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data.role == "coach";
+      return exists(/databases/$(database)/documents/users/$(uid)) && 
+             get(/databases/$(database)/documents/users/$(uid)).data.role == "coach";
     }
     function isParticipant(participants) {
       return isAuthed() && request.auth.uid in participants;
     }
     function isTeamMember(teamId) {
-      return isVerifiedUser() && (
+      return isVerifiedUser() && exists(/databases/$(database)/documents/teams/$(teamId)) && (
         request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members ||
         request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.athletes ||
         request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches
       );
     }
     function isTeamCoach(teamId) {
-      return isVerifiedUser() && 
+      return isVerifiedUser() && exists(/databases/$(database)/documents/teams/$(teamId)) &&
         request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches;
+    }
+    function isTeamAthlete(teamId) {
+      return isVerifiedUser() && exists(/databases/$(database)/documents/teams/$(teamId)) && (
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.athletes ||
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members
+      );
+    }
+    // Helper to check if user is a coach of the athlete's team
+    function isCoachOfAthlete(athleteId) {
+      return isVerifiedUser() && isCoach(request.auth.uid);
     }
 
     /* ========== Users (profile) ========== */
     match /users/{userId} {
       allow read, create, update, delete: if isOwner(userId);
       allow read: if isVerifiedUser();
-      // Allow coaches to update/create health status for athletes
-      allow create, update: if isVerifiedUser() && 
-                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "coach";
+      // Allow coaches to update health status for athletes
+      allow update: if isVerifiedUser() && 
+                      isCoach(request.auth.uid) &&
+                      request.auth.uid != userId &&
+                      resource.data
+                       .diff(request.resource.data)
+                       .changedKeys()
+                       .hasOnly(['healthStatus','healthStatusUpdatedAt'])
+                  && (request.resource.data.healthStatus in ['active','injured','unavailable']);
 
       /* ---- Goals subcollection ---- */
       match /goalsList/{goalId} {
@@ -126,11 +142,21 @@ service cloud.firestore {
         allow create: if isTeamCoach(teamId) && request.resource.data.createdBy == request.auth.uid && request.resource.data.datetime != null && request.resource.data.title != null;
         allow update: if isTeamCoach(teamId);
         allow delete: if isTeamCoach(teamId);
+        
+        /* ---- Event Attendance subcollection ---- */
+        match /attendance/{attendanceId} {
+          allow read: if isTeamMember(teamId);
+          allow create, update: if isTeamCoach(teamId);
+          allow delete: if isTeamCoach(teamId);
+        }
       }
 
       match /athletes/{athleteId} {
         allow read: if isTeamMember(teamId);
-        allow write: if isVerifiedUser() && exists(/databases/$(database)/documents/teams/$(teamId)) && (request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches || request.auth.uid == get(/databases/$(database)/documents/teams/$(teamId)).data.createdBy);
+        allow read, write: if isVerifiedUser() && isCoach(request.auth.uid);
+        allow write: if isVerifiedUser() && exists(/databases/$(database)/documents/teams/$(teamId)) && 
+                       (request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.coaches || 
+                        request.auth.uid == get(/databases/$(database)/documents/teams/$(teamId)).data.createdBy);
       }
     }
     
@@ -151,6 +177,41 @@ service cloud.firestore {
       allow read: if false; // don't expose outbound emails
     }
 
+
+    /* ========== Athlete Availability (New Collection) ========== */
+    // Document IDs format: {teamId}_{athleteId}_{dateKey}
+    // Example: team123_user456_20250106
+    match /athleteAvailability/{availabilityId} {
+      // Anyone verified can read (for now, can be restricted later)
+      allow read: if isVerifiedUser();
+      
+      // Coaches can create/update/delete availability
+      allow create: if isVerifiedUser() && isCoach(request.auth.uid);
+      allow update: if isVerifiedUser() && isCoach(request.auth.uid);
+      allow delete: if isVerifiedUser() && isCoach(request.auth.uid);
+    }
+
+    /* ========== Shared Health Status (Legacy - Keep for compatibility) ========== */
+    match /sharedHealthStatus/{athleteId} {
+      allow read: if isVerifiedUser();
+      allow write, create: if isVerifiedUser() && isCoach(request.auth.uid);
+    }
+    
+    /* ========== Mail ========== */
+    match /mail/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.message is map
+        && request.resource.data.message.subject is string
+        && (
+          (request.resource.data.message.html is string) ||
+          (request.resource.data.message.text is string)
+        )
+        && (
+          (request.resource.data.to is string) ||
+          (request.resource.data.to is list && request.resource.data.to.size() > 0)
+        );
+      allow read: if false; // don't expose outbound emails
+    }
 
     /* ========== Public ========== */
     match /public/{document=**} {
