@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../../firebase';
 
 // Sport-specific test types
 const getTestTypesBySport = (sport) => {
@@ -54,6 +54,71 @@ const getColumnsBySport = (sport) => {
   }
 };
 
+// Calculate split time from total time and distance
+const calculateSplit = (timeStr, testType, sport) => {
+  if (!timeStr || timeStr === '--:--.-') return null;
+  
+  const sportLower = sport?.toLowerCase() || '';
+  
+  // Get distance in meters based on test type
+  const getDistanceMeters = (testType) => {
+    const testLower = testType?.toLowerCase() || '';
+    if (testLower.includes('2k') || testLower === '2k') return 2000;
+    if (testLower.includes('5k') || testLower === '5k') return 5000;
+    if (testLower.includes('6k') || testLower === '6k') return 6000;
+    // For time-based tests, we can't calculate split
+    if (testLower.includes('min')) return null;
+    return null;
+  };
+  
+  const distanceMeters = getDistanceMeters(testType);
+  if (!distanceMeters) return null;
+  
+  try {
+    // Convert time to total seconds
+    const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
+    if (!timeString.includes(':')) return null;
+    
+    const parts = timeString.split(':');
+    const minutes = parseInt(parts[0]) || 0;
+    const seconds = parseFloat(parts[1]) || 0;
+    const totalSeconds = minutes * 60 + seconds;
+    
+    // Calculate split per 500m (for rowing)
+    if (sportLower === 'rowing') {
+      const splitSeconds = (totalSeconds / distanceMeters) * 500;
+      const splitMinutes = Math.floor(splitSeconds / 60);
+      const splitSecs = (splitSeconds % 60).toFixed(1);
+      return `${splitMinutes}:${splitSecs.padStart(4, '0')}`;
+    }
+    
+    return null;
+  } catch (err) {
+    console.error('Error calculating split:', err);
+    return null;
+  }
+};
+
+// Calculate watts from split time (for rowing)
+const calculateWatts = (splitStr) => {
+  if (!splitStr) return 0;
+  
+  try {
+    // Convert split time to seconds
+    const parts = splitStr.split(':');
+    const minutes = parseInt(parts[0]) || 0;
+    const seconds = parseFloat(parts[1]) || 0;
+    const splitSeconds = minutes * 60 + seconds;
+    
+    // Watts formula: 2.80 / (pace/500)^3
+    const watts = 2.80 / Math.pow(splitSeconds / 500, 3);
+    return Math.round(watts);
+  } catch (err) {
+    console.error('Error calculating watts:', err);
+    return 0;
+  }
+};
+
 export default function GroupPerformance({ user, userRole, userSport = 'rowing' }) {
   const testTypes = useMemo(() => getTestTypesBySport(userSport), [userSport]);
   const columns = useMemo(() => getColumnsBySport(userSport), [userSport]);
@@ -69,8 +134,11 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
   // Fetch team performance data from Firestore
   useEffect(() => {
     const fetchTeamData = async () => {
-      if (!user) {
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
         setLoading(false);
+        setError('No user logged in');
         return;
       }
 
@@ -80,36 +148,116 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
 
         console.log('Fetching team data...', { userSport });
 
-        // Query the performances collection
-        const performancesRef = collection(db, 'performances');
-        
-        // Fetch all performances (no filter)
-        const querySnapshot = await getDocs(performancesRef);
-        
-        console.log('Found documents:', querySnapshot.size);
+        // Force token refresh
+        await currentUser.getIdToken(true);
+        console.log('✅ Token refreshed successfully');
 
-        const performances = [];
+        // STEP 1: Get the user's team(s)
+        const teamsRef = collection(db, 'teams');
+        const teamsQuery = query(teamsRef);
+        const teamsSnapshot = await getDocs(teamsQuery);
+        
+        console.log('Found teams:', teamsSnapshot.size);
 
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          console.log('Document data:', doc.id, data);
+        // Find teams where current user is a member
+        const userTeams = [];
+        const teamMemberIds = new Set();
+
+        teamsSnapshot.forEach((teamDoc) => {
+          const teamData = teamDoc.data();
+          const members = teamData.members || [];
+          const athletes = teamData.athletes || [];
+          const coaches = teamData.coaches || [];
           
-          // Show all performances regardless of sport
-          performances.push({
-            id: doc.id,
-            athleteId: data.userId || data.athleteId,
-            athleteName: data.athleteName || 'Unknown Athlete',
-            testType: data.testType || data.eventType || 'Unknown',
-            time: data.time || '--:--.-',
-            split: data.split || '',
-            watts: data.watts || 0,
-            date: data.date?.toDate?.() || data.date || new Date(),
-            sport: data.sport || userSport,
-            completed: data.completed !== false && data.time !== '--:--.-',
-          });
+          // Check if current user is in this team
+          if (members.includes(currentUser.uid) || 
+              athletes.includes(currentUser.uid) || 
+              coaches.includes(currentUser.uid)) {
+            
+            userTeams.push({
+              id: teamDoc.id,
+              ...teamData
+            });
+            
+            // Collect all member IDs from this team
+            [...members, ...athletes, ...coaches].forEach(id => teamMemberIds.add(id));
+          }
         });
 
-        console.log('Processed performances:', performances.length);
+        console.log('User teams:', userTeams.length);
+        console.log('Team member IDs:', Array.from(teamMemberIds));
+
+        if (teamMemberIds.size === 0) {
+          setTeamData([]);
+          setLoading(false);
+          setError('You are not part of any team yet');
+          return;
+        }
+
+        // STEP 2: Fetch performances from each user's subcollection
+        const performances = [];
+        
+        // Query each user's testPerformances subcollection (not performances!)
+        for (const userId of Array.from(teamMemberIds)) {
+          try {
+            console.log(`Fetching test performances for user: ${userId}`);
+            
+            // Get user's name first
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+            const userName = userDoc.exists() ? 
+              (userDoc.data().displayName || userDoc.data().name || 'Unknown Athlete') : 
+              'Unknown Athlete';
+            
+            // Query the user's testPerformances subcollection (changed from 'performances')
+            const userPerformancesRef = collection(db, 'users', userId, 'testPerformances');
+            const performancesSnapshot = await getDocs(userPerformancesRef);
+            
+            console.log(`Found ${performancesSnapshot.size} test performances for ${userName}`);
+
+            performancesSnapshot.forEach((doc) => {
+              const data = doc.data();
+              console.log('Test performance data:', doc.id, data);
+              
+              // Calculate split from time and test type
+              const calculatedSplit = calculateSplit(data.time, data.testType, data.sport || userSport);
+              const split = data.split || calculatedSplit;
+              
+              // Calculate watts from split (or use stored watts)
+              const calculatedWatts = split ? calculateWatts(split) : 0;
+              const watts = data.watts || calculatedWatts;
+              
+              // FIXED: Determine if completed - a test is incomplete if time is '--:--.-' or missing
+              const isIncomplete = !data.time || data.time === '--:--.-' || data.completed === false;
+              const isCompleted = !isIncomplete;
+              
+              console.log('Test completion check:', {
+                id: doc.id,
+                time: data.time,
+                completed: data.completed,
+                isCompleted
+              });
+              
+              performances.push({
+                id: doc.id,
+                athleteId: userId,
+                athleteName: data.athleteName || userName,
+                testType: data.testType || data.eventType || 'Unknown',
+                time: data.time || '--:--.-',
+                split: split || '-',
+                watts: watts,
+                date: data.date?.toDate?.() || data.date || new Date(),
+                sport: data.sport || userSport,
+                completed: isCompleted,
+              });
+            });
+          } catch (userError) {
+            console.error(`Error fetching test performances for user ${userId}:`, userError);
+            // Continue with other users even if one fails
+          }
+        }
+
+        console.log('Total processed performances:', performances.length);
         setTeamData(performances);
       } catch (err) {
         console.error('Error fetching team data:', err);
@@ -120,69 +268,107 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
     };
 
     fetchTeamData();
-  }, [user, userSport]);
+  }, [userSport]);
 
   // Filter data by test type and completion status
-  const filteredData = teamData.filter((entry) => {
-    const matchesTestType = selectedTestType === 'All' || entry.testType === selectedTestType;
+  const filteredData = useMemo(() => {
+    console.log('Filtering data:', {
+      totalRecords: teamData.length,
+      selectedTestType,
+      completionStatus
+    });
     
-    let matchesCompletion = true;
-    if (completionStatus === 'Complete') {
-      matchesCompletion = entry.time !== '--:--.-' && entry.time;
-    } else if (completionStatus === 'Incomplete') {
-      matchesCompletion = entry.time === '--:--.-' || !entry.time;
-    }
+    const filtered = teamData.filter((entry) => {
+      const matchesTestType = selectedTestType === 'All' || entry.testType === selectedTestType;
+      
+      let matchesCompletion = true;
+      if (completionStatus === 'Complete') {
+        matchesCompletion = entry.completed === true;
+      } else if (completionStatus === 'Incomplete') {
+        matchesCompletion = entry.completed === false;
+      }
+      // If 'All', matchesCompletion stays true
+      
+      return matchesTestType && matchesCompletion;
+    });
     
-    return matchesTestType && matchesCompletion;
-  });
+    console.log('Filtered results:', filtered.length);
+    return filtered;
+  }, [teamData, selectedTestType, completionStatus]);
 
   // Sort data
-  const sortedData = [...filteredData].sort((a, b) => {
-    let comparison = 0;
-    
-    if (sortBy === 'name') {
-      comparison = a.athleteName.localeCompare(b.athleteName);
-    } else if (sortBy === 'time') {
-      const timeToSeconds = (timeStr) => {
-        if (timeStr === '--:--.-' || !timeStr) return Infinity;
-        const parts = timeStr.split(':');
-        const minutes = parseInt(parts[0]);
-        const seconds = parseFloat(parts[1]);
-        return minutes * 60 + seconds;
-      };
-      comparison = timeToSeconds(a.time) - timeToSeconds(b.time);
-    } else if (sortBy === 'watts') {
-      comparison = (a.watts || 0) - (b.watts || 0);
-    }
-    
-    return sortOrder === 'asc' ? comparison : -comparison;
-  });
+  const sortedData = useMemo(() => {
+    return [...filteredData].sort((a, b) => {
+      let comparison = 0;
+      
+      if (sortBy === 'name') {
+        comparison = a.athleteName.localeCompare(b.athleteName);
+      } else if (sortBy === 'time') {
+        const timeToSeconds = (timeStr) => {
+          // Handle null, undefined, or '--:--.-'
+          if (!timeStr || timeStr === '--:--.-') return Infinity;
+          
+          // Convert to string if it's not already
+          const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
+          
+          // Check if it contains a colon (mm:ss.s format)
+          if (!timeString.includes(':')) return Infinity;
+          
+          try {
+            const parts = timeString.split(':');
+            const minutes = parseInt(parts[0]) || 0;
+            const seconds = parseFloat(parts[1]) || 0;
+            return minutes * 60 + seconds;
+          } catch (err) {
+            console.error('Error parsing time:', timeString, err);
+            return Infinity;
+          }
+        };
+        comparison = timeToSeconds(a.time) - timeToSeconds(b.time);
+      } else if (sortBy === 'watts') {
+        comparison = (a.watts || 0) - (b.watts || 0);
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredData, sortBy, sortOrder]);
 
   // Calculate rankings
-  const rankings = {};
-  filteredData.forEach((entry) => {
-    if (entry.time !== '--:--.-' && entry.time) {
-      if (!rankings[entry.testType]) {
-        rankings[entry.testType] = [];
+  const rankings = useMemo(() => {
+    const rankingsMap = {};
+    filteredData.forEach((entry) => {
+      if (entry.completed) {
+        if (!rankingsMap[entry.testType]) {
+          rankingsMap[entry.testType] = [];
+        }
+        rankingsMap[entry.testType].push(entry);
       }
-      rankings[entry.testType].push(entry);
-    }
-  });
-
-  Object.keys(rankings).forEach((testType) => {
-    rankings[testType].sort((a, b) => {
-      const timeToSeconds = (timeStr) => {
-        const parts = timeStr.split(':');
-        const minutes = parseInt(parts[0]);
-        const seconds = parseFloat(parts[1]);
-        return minutes * 60 + seconds;
-      };
-      return timeToSeconds(a.time) - timeToSeconds(b.time);
     });
-  });
+
+    Object.keys(rankingsMap).forEach((testType) => {
+      rankingsMap[testType].sort((a, b) => {
+        const timeToSeconds = (timeStr) => {
+          if (!timeStr || timeStr === '--:--.-') return Infinity;
+          const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
+          if (!timeString.includes(':')) return Infinity;
+          try {
+            const parts = timeString.split(':');
+            const minutes = parseInt(parts[0]) || 0;
+            const seconds = parseFloat(parts[1]) || 0;
+            return minutes * 60 + seconds;
+          } catch (err) {
+            return Infinity;
+          }
+        };
+        return timeToSeconds(a.time) - timeToSeconds(b.time);
+      });
+    });
+    
+    return rankingsMap;
+  }, [filteredData]);
 
   const getRank = (entry) => {
-    if (entry.time === '--:--.-' || !entry.time) return '-';
+    if (!entry.completed) return '-';
     const typeRankings = rankings[entry.testType];
     if (!typeRankings) return '-';
     const index = typeRankings.findIndex((e) => e.id === entry.id);
@@ -205,8 +391,14 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
 
   // Calculate stats
   const totalAthletes = new Set(teamData.map(entry => entry.athleteId)).size;
-  const completedTests = teamData.filter(entry => entry.time !== '--:--.-' && entry.time).length;
-  const incompleteTests = teamData.filter(entry => entry.time === '--:--.-' || !entry.time).length;
+  const completedTests = teamData.filter(entry => entry.completed).length;
+  const incompleteTests = teamData.filter(entry => !entry.completed).length;
+
+  // Handler for completion status with logging
+  const handleCompletionStatusChange = (status) => {
+    console.log('Completion status changed to:', status);
+    setCompletionStatus(status);
+  };
 
   // Loading state
   if (loading) {
@@ -353,7 +545,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
             {['All', 'Complete', 'Incomplete'].map((status) => (
               <button
                 key={status}
-                onClick={() => setCompletionStatus(status)}
+                onClick={() => handleCompletionStatusChange(status)}
                 style={{
                   padding: '10px 16px',
                   borderRadius: '8px',
@@ -504,7 +696,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
                 sortedData.map((entry, index) => {
                   const rank = getRank(entry);
                   const isTopThree = rank !== '-' && rank <= 3;
-                  const isIncomplete = entry.time === '--:--.-' || !entry.time;
+                  const isIncomplete = !entry.completed;
                   
                   return (
                     <tr
@@ -563,12 +755,21 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
                       </td>
                       {columns.showSplit && (
                         <td style={{ padding: '16px 24px', color: '#6b7280', fontFamily: 'monospace', fontSize: '14px' }}>
-                          {entry.split || '-'}
+                          {entry.split !== '-' ? entry.split : '-'}
                         </td>
                       )}
                       {columns.showWatts && (
-                        <td style={{ padding: '16px 24px', color: '#6b7280', fontSize: '14px' }}>
-                          {entry.watts > 0 ? `${entry.watts}W` : '-'}
+                        <td style={{ padding: '16px 24px', fontSize: '14px' }}>
+                          {entry.watts > 0 ? (
+                            <span style={{ 
+                              fontWeight: 600,
+                              color: '#111827'
+                            }}>
+                              {entry.watts}W
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9ca3af' }}>-</span>
+                          )}
                         </td>
                       )}
                       <td style={{ padding: '16px 24px', color: '#9ca3af', fontSize: '13px' }}>

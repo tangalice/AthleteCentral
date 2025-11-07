@@ -46,9 +46,11 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "group-performance" ||
     activeTab === "individual-performance" ||
     activeTab === "lineup-builder" ||
-
     activeTab === "split-calculator" || 
-    activeTab === "data-reports";
+    activeTab === "data-reports" ||
+    activeTab === "view-athlete-practices" ||
+    activeTab === "weight-info" ||
+    activeTab === "coach-weight-info";
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -127,6 +129,7 @@ function DropdownMenu({ user, activeTab }) {
   if (user?.role === "athlete") {
     menuItems.push({ path: "/goals", label: "Goals", activeTab: "goals" });
     menuItems.push({ path: "/practice-performances", label: "Enter Practice", activeTab: "practice-performances" });
+    menuItems.push({ path: "/weight-info", label: "Weight Info", activeTab: "weight-info" });
   } else if (user?.role === "coach") {
     menuItems.push({ path: "/view-athlete-goals", label: "View Athlete Goals", activeTab: "view-athlete-goals" });
     menuItems.push({ path: "/suggest-goals", label: "Suggest Goals", activeTab: "suggest-goals" });
@@ -138,31 +141,34 @@ function DropdownMenu({ user, activeTab }) {
   } else if (user?.role === "coach") {
     menuItems.push({ path: "/coach-feedback", label: "Give Feedback", activeTab: "coach-feedback" });
   }
+
+  
   
   // Coach-only management links
   if (user?.role === "coach") {
-    // Health and Availability - Coach only
     menuItems.push({ path: "/health-availability", label: "Health and Availability", activeTab: "health-availability" });
     menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
-    menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" }); 
+    menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" });
+    menuItems.push({ path: "/coach-weight-info", label: "Athlete Weights", activeTab: "coach-weight-info" });
+    
+    // Lineup Builder - Only for rowing coaches
+    if (user?.sport?.toLowerCase() === "rowing") {
+      menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
+    }
   }
-  if (user?.role === "coach" && user?.sport?.toLowerCase() === "rowing") {
-    menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
-  }
+
+  
   
   // Group Performance - Available to both
   menuItems.push({ path: "/group-performance", label: "Group Performance", activeTab: "group-performance" });
   
   // Individual Performance - Available to both
   menuItems.push({ path: "/individual-performance", label: "Individual Performance", activeTab: "individual-performance" });
+  
+  // Split Calculator - Only for rowing users
   if (user?.sport?.toLowerCase() === "rowing") {
     menuItems.push({ path: "/split-calculator", label: "Split Calculator", activeTab: "split-calculator" });
   }
-  
-  // Lineup Builder - Only for rowing users
-if (user?.role === "coach" && user?.sport?.toLowerCase() === "rowing") {
-  menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
-}
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", display: "flex", alignItems: "center" }}>

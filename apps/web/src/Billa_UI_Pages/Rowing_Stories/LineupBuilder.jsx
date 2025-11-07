@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { db, auth } from '../../firebase';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
 const TEST_PIECE_TYPES = ['2k', '6k', '500m'];
 
@@ -7,7 +9,193 @@ export default function LineupBuilder() {
   const [boatSize, setBoatSize] = useState(8);
   const [lineup1, setLineup1] = useState(Array(8).fill(null));
   const [lineup2, setLineup2] = useState(Array(8).fill(null));
-  const [availableAthletes] = useState([]);
+  const [availableAthletes, setAvailableAthletes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch athletes and their test pieces from Firebase
+  useEffect(() => {
+    const fetchTeamData = async () => {
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        setLoading(false);
+        setError('No user logged in');
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        console.log('Fetching team data for lineup builder...');
+
+        // Force token refresh (same as GroupPerformance)
+        await currentUser.getIdToken(true);
+        console.log('✅ Token refreshed successfully');
+
+        // STEP 1: Get the user's team(s) - same pattern as GroupPerformance
+        const teamsRef = collection(db, 'teams');
+        const teamsQuery = query(teamsRef);
+        const teamsSnapshot = await getDocs(teamsQuery);
+        
+        console.log('Found teams:', teamsSnapshot.size);
+
+        // Find teams where current user is a member
+        const userTeams = [];
+        const teamMemberIds = new Set();
+
+        teamsSnapshot.forEach((teamDoc) => {
+          const teamData = teamDoc.data();
+          const members = teamData.members || [];
+          const athletes = teamData.athletes || [];
+          const coaches = teamData.coaches || [];
+          
+          // Check if current user is in this team
+          if (members.includes(currentUser.uid) || 
+              athletes.includes(currentUser.uid) || 
+              coaches.includes(currentUser.uid)) {
+            
+            userTeams.push({
+              id: teamDoc.id,
+              ...teamData
+            });
+            
+            // Collect all member IDs from this team
+            [...members, ...athletes, ...coaches].forEach(id => teamMemberIds.add(id));
+          }
+        });
+
+        console.log('User teams:', userTeams.length);
+        console.log('Team member IDs:', Array.from(teamMemberIds));
+
+        if (teamMemberIds.size === 0) {
+          setError('You are not part of any team yet');
+          setAvailableAthletes([]);
+          setLoading(false);
+          return;
+        }
+
+        const athleteIds = Array.from(teamMemberIds);
+
+        // STEP 2: Query each user's testPerformances subcollection directly (same as GroupPerformance)
+        const perUserBest = {}; // { [userId]: bestSeconds }
+
+        console.log(`Querying test performances for ${selectedTestPiece} from ${athleteIds.length} athletes`);
+        
+        // Check if current user is a coach
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        const isCoach = userDoc.exists() && userDoc.data().role === 'coach';
+        
+        for (const userId of athleteIds) {
+          try {
+            // Query the user's testPerformances subcollection directly
+            const userPerformancesRef = collection(db, 'users', userId, 'testPerformances');
+            const performancesSnapshot = await getDocs(userPerformancesRef);
+            
+            console.log(`Found ${performancesSnapshot.size} test performances for user ${userId}`);
+
+            performancesSnapshot.forEach((docSnap) => {
+              const d = docSnap.data();
+              
+              console.log('Test performance doc:', {
+                userId: userId,
+                testType: d.testType,
+                testPiece: d.testPiece,
+                time: d.time,
+                selectedTestPiece: selectedTestPiece
+              });
+              
+              // Filter by test type (field is called testType, not testPiece)
+              if (d.testType !== selectedTestPiece) {
+                console.log(`Skipping - testType "${d.testType}" doesn't match "${selectedTestPiece}"`);
+                return;
+              }
+              
+              // Filter by isPublic if not coach
+              if (!isCoach && !d.isPublic) return;
+              
+              // Convert time to seconds if it's a string
+              let timeInSeconds;
+              if (typeof d.time === 'number') {
+                timeInSeconds = d.time;
+              } else if (typeof d.time === 'string' && d.time !== '--:--.-') {
+                // Parse "8:00.0" format to seconds
+                const parts = d.time.split(':');
+                if (parts.length === 2) {
+                  const mins = parseInt(parts[0]) || 0;
+                  const secs = parseFloat(parts[1]) || 0;
+                  timeInSeconds = mins * 60 + secs;
+                } else {
+                  return; // Invalid format
+                }
+              } else {
+                return; // No valid time
+              }
+              
+              console.log('Converted time:', d.time, '→', timeInSeconds, 'seconds');
+              
+              // Track best time for this user
+              if (perUserBest[userId] === undefined || timeInSeconds < perUserBest[userId]) {
+                perUserBest[userId] = timeInSeconds;
+              }
+            });
+          } catch (userError) {
+            console.error(`Error fetching test performances for user ${userId}:`, userError);
+            // Continue with other users even if one fails
+          }
+        }
+
+        console.log('Best times per user:', perUserBest);
+        
+        const userIdsWithResults = Object.keys(perUserBest);
+        if (userIdsWithResults.length === 0) {
+          console.log('No test results found');
+          setError(`No ${selectedTestPiece} test results found for your team.`);
+          setAvailableAthletes([]);
+          setLoading(false);
+          return;
+        }
+
+        // STEP 3: Get names for all users that have a result
+        const nameMap = {}; // { [uid]: displayName }
+        for (const userId of userIdsWithResults) {
+          try {
+            const userDocRef = doc(db, 'users', userId);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+              const ud = userDocSnap.data();
+              nameMap[userId] = ud.displayName || ud.name || 'Unknown Athlete';
+            }
+          } catch (err) {
+            console.error(`Error fetching name for user ${userId}:`, err);
+            nameMap[userId] = 'Unknown Athlete';
+          }
+        }
+
+        console.log('Name map:', nameMap);
+        
+        // STEP 4: Build and sort athletes list
+        const athletesData = userIdsWithResults.map(uid => ({
+          id: uid,
+          name: nameMap[uid] || 'Unknown Athlete',
+          testPieces: { [selectedTestPiece]: perUserBest[uid] }
+        })).sort((a, b) => perUserBest[a.id] - perUserBest[b.id]);
+
+        console.log('Athletes data:', athletesData);
+        
+        setAvailableAthletes(athletesData);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching team data:', err);
+        setError(`Error loading data: ${err.message}`);
+        setAvailableAthletes([]);
+        setLoading(false);
+      }
+    };
+
+    fetchTeamData();
+  }, [selectedTestPiece]);
 
   // Handle boat size change
   const handleBoatSizeChange = (newSize) => {
@@ -61,7 +249,8 @@ export default function LineupBuilder() {
   };
 
   const isAthleteInLineup = (athleteId) => {
-    return lineup1.some(a => a?.id === athleteId) || lineup2.some(a => a?.id === athleteId);
+    // Allow athletes in multiple lineups - always return false
+    return false;
   };
 
   const LineupColumn = ({ lineupNum, lineup, average }) => (
@@ -221,6 +410,7 @@ export default function LineupBuilder() {
               >
                 <option value={8}>8+ (Eight)</option>
                 <option value={4}>4+ (Four)</option>
+                <option value={2}>2- (Pair)</option>
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -305,7 +495,38 @@ export default function LineupBuilder() {
             flex: 1,
             paddingRight: '8px'
           }}>
-            {availableAthletes.length === 0 ? (
+            {loading ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#6b7280'
+              }}>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: '500' }}>
+                  Loading athletes...
+                </p>
+              </div>
+            ) : error ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#dc2626'
+              }}>
+                <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '500' }}>
+                  Error
+                </p>
+                <p style={{ margin: 0, fontSize: '14px' }}>
+                  {error}
+                </p>
+              </div>
+            ) : availableAthletes.length === 0 ? (
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -316,10 +537,10 @@ export default function LineupBuilder() {
                 color: '#6b7280'
               }}>
                 <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '500' }}>
-                  No athletes loaded
+                  No athletes found
                 </p>
                 <p style={{ margin: 0, fontSize: '14px' }}>
-                  Connect to Firebase to load your team's athletes
+                  Make sure athletes are added to your team
                 </p>
               </div>
             ) : (

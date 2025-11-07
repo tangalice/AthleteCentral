@@ -19,75 +19,143 @@ export default function CoachViewPractices({ user }) {
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [loading, setLoading] = useState(true);
   const [teamId, setTeamId] = useState(null);
+  const [allTeams, setAllTeams] = useState([]); // NEW: Store all teams
+  const [selectedTeamId, setSelectedTeamId] = useState(null); // NEW: Selected team
 
-  // Get coach's team and athletes
+  // Get all coach's teams
   useEffect(() => {
     if (!user) return;
 
-    const loadTeamAndAthletes = async () => {
-        try {
-          // Find team where user is a coach
-          const teamsQuery = query(
-            collection(db, "teams"),
-            where("coaches", "array-contains", user.uid)
-          );
-          const teamsSnapshot = await getDocs(teamsQuery);
+    const loadAllTeams = async () => {
+      try {
+        console.log('🔍 Loading all teams for user:', user.uid);
+        
+        const teamsQuery = query(collection(db, "teams"));
+        const teamsSnapshot = await getDocs(teamsQuery);
+        
+        console.log('📋 Found total teams:', teamsSnapshot.size);
+        
+        const userTeams = [];
+        
+        // Find ALL teams where user is a COACH (not just member)
+        teamsSnapshot.forEach((teamDoc) => {
+          const teamData = teamDoc.data();
+          const coaches = teamData.coaches || [];
+          const members = teamData.members || [];
           
-          if (!teamsSnapshot.empty) {
-            const team = teamsSnapshot.docs[0];
-            const teamData = team.data();
-            setTeamId(team.id);
-            
-            // Get athlete details
-            const athleteIds = teamData.athletes || [];
-            const athletesList = [];
-            
-            for (const athleteId of athleteIds) {
-              try {
-                // FIXED: Use getDoc instead of getDocs with query
-                const userDocRef = doc(db, "users", athleteId);
-                const userDoc = await getDoc(userDocRef);
-                
-                if (userDoc.exists()) {
-                  const userData = userDoc.data();
-                  athletesList.push({
-                    id: athleteId,
-                    name: userData.displayName || userData.email || "Unknown",
-                    email: userData.email
-                  });
-                }
-              } catch (err) {
-                console.error("Error loading athlete:", athleteId, err);
-              }
-            }
-            
-            setAthletes(athletesList);
+          // Check if user is a coach in this team
+          if (coaches.includes(user.uid) || members.includes(user.uid)) {
+            console.log('✅ User is coach/member of team:', teamDoc.id);
+            userTeams.push({
+              id: teamDoc.id,
+              name: teamData.name || teamData.description || `Team ${teamDoc.id.slice(0, 8)}`,
+              data: teamData
+            });
           }
-        } catch (err) {
-          console.error("Error loading team:", err);
+        });
+        
+        console.log('📊 Total user teams:', userTeams.length);
+        setAllTeams(userTeams);
+        
+        // Auto-select first team if available
+        if (userTeams.length > 0) {
+          setSelectedTeamId(userTeams[0].id);
+        } else {
+          setLoading(false);
         }
-      };
-    loadTeamAndAthletes();
+      } catch (err) {
+        console.error('❌ Error loading teams:', err);
+        setLoading(false);
+      }
+    };
+
+    loadAllTeams();
   }, [user]);
+
+  // Load athletes when team is selected
+  useEffect(() => {
+    if (!selectedTeamId) return;
+
+    const loadTeamAndAthletes = async () => {
+      try {
+        setLoading(true);
+        console.log('🔍 Loading athletes for team:', selectedTeamId);
+        
+        const selectedTeam = allTeams.find(t => t.id === selectedTeamId);
+        if (!selectedTeam) return;
+        
+        setTeamId(selectedTeamId);
+        const teamData = selectedTeam.data;
+        
+        // Get ALL team members (athletes + members arrays combined)
+        const athleteIds = [
+          ...(teamData.athletes || []),
+          ...(teamData.members || [])
+        ].filter((id, index, arr) => arr.indexOf(id) === index && id !== user.uid); // Remove duplicates and coach
+        
+        console.log('👥 Team member IDs:', athleteIds);
+        
+        // Get athlete details
+        const athletesList = [];
+        
+        for (const athleteId of athleteIds) {
+          try {
+            const userDocRef = doc(db, "users", athleteId);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              console.log('✅ Loaded athlete:', athleteId, userData.displayName || userData.email);
+              athletesList.push({
+                id: athleteId,
+                name: userData.displayName || userData.email || "Unknown",
+                email: userData.email,
+                role: userData.role
+              });
+            } else {
+              console.warn('⚠️ User doc not found:', athleteId);
+            }
+          } catch (err) {
+            console.error("❌ Error loading athlete:", athleteId, err);
+          }
+        }
+        
+        console.log('📊 Total athletes loaded:', athletesList.length);
+        setAthletes(athletesList);
+      } catch (err) {
+        console.error("❌ Error loading team:", err);
+      }
+    };
+    
+    loadTeamAndAthletes();
+  }, [selectedTeamId, allTeams, user]);
 
   // Load practices from all athletes
   useEffect(() => {
-    if (!teamId || athletes.length === 0) return;
+    if (!teamId || athletes.length === 0) {
+      console.log('⏳ Waiting for team and athletes...', { teamId, athletesCount: athletes.length });
+      if (athletes.length === 0 && teamId) {
+        setLoading(false);
+      }
+      return;
+    }
 
-    const allPractices = [];
+    console.log('📥 Loading practices for', athletes.length, 'athletes in team:', teamId);
+    
     const unsubscribers = [];
+    let allPracticesMap = new Map(); // Use Map to track practices by athlete
 
     athletes.forEach((athlete) => {
+      console.log('📥 Setting up listener for:', athlete.name);
+      
       const q = query(
         collection(db, "users", athlete.id, "practices"),
         orderBy("date", "desc")
       );
 
       const unsub = onSnapshot(q, (snapshot) => {
-        // Remove old practices for this athlete
-        const filtered = allPractices.filter(p => p.athleteId !== athlete.id);
+        console.log(`📝 Got ${snapshot.size} practices for ${athlete.name}`);
         
-        // Add new practices
         const newPractices = snapshot.docs.map((d) => ({
           id: d.id,
           athleteId: athlete.id,
@@ -95,19 +163,36 @@ export default function CoachViewPractices({ user }) {
           ...d.data()
         }));
         
-        setPractices([...filtered, ...newPractices].sort((a, b) => {
+        // Update map with this athlete's practices
+        allPracticesMap.set(athlete.id, newPractices);
+        
+        // Combine all practices from map
+        const combinedPractices = [];
+        allPracticesMap.forEach((practices) => {
+          combinedPractices.push(...practices);
+        });
+        
+        // Sort by date
+        combinedPractices.sort((a, b) => {
           const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
           const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
           return dateB - dateA;
-        }));
+        });
         
+        console.log('📊 Total practices:', combinedPractices.length);
+        setPractices(combinedPractices);
         setLoading(false);
+      }, (error) => {
+        console.error(`❌ Error loading practices for ${athlete.name}:`, error);
       });
 
       unsubscribers.push(unsub);
     });
 
-    return () => unsubscribers.forEach(unsub => unsub());
+    return () => {
+      console.log('🧹 Cleaning up practice listeners');
+      unsubscribers.forEach(unsub => unsub());
+    };
   }, [teamId, athletes]);
 
   // Filter practices
@@ -185,8 +270,56 @@ export default function CoachViewPractices({ user }) {
         Team Practice Overview
       </h2>
       <p style={{ color: "#6b7280", marginBottom: "30px", fontSize: "15px" }}>
-        View all practice logs from your athletes.
+        View all practice logs from your athletes. Open browser console (F12) for debugging info.
       </p>
+
+      {/* Team Selector */}
+      {allTeams.length > 1 && (
+        <div style={{
+          padding: "16px",
+          marginBottom: "20px",
+          backgroundColor: "#fff",
+          borderRadius: "12px",
+          border: "2px solid #3b82f6",
+          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)"
+        }}>
+          <label style={{
+            display: "block",
+            marginBottom: "8px",
+            fontWeight: "600",
+            color: "#374151",
+            fontSize: "14px"
+          }}>
+            Select Team
+          </label>
+          <select
+            value={selectedTeamId || ''}
+            onChange={(e) => {
+              setSelectedTeamId(e.target.value);
+              setPractices([]); // Clear practices when switching teams
+              setAthletes([]); // Clear athletes
+            }}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid #d1d5db",
+              backgroundColor: "#fff",
+              color: "#111827",
+              fontSize: "16px",
+              fontWeight: "600",
+              outline: "none",
+              cursor: "pointer"
+            }}
+          >
+            {allTeams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name} ({team.data.athletes?.length || 0} athletes)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Athlete Stats Summary */}
       {athletes.length > 0 && (
@@ -375,7 +508,7 @@ export default function CoachViewPractices({ user }) {
             <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>
               {athletes.length === 0 
                 ? "Add athletes to your team to see their practices."
-                : "Athletes haven't logged any practices yet."}
+                : "Athletes haven't logged any practices yet, or check the browser console for errors."}
             </p>
           </div>
         ) : (
