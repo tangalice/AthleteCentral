@@ -1,114 +1,201 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { db } from '../../firebase'; // Going up to apps/web level
-import { collection, collectionGroup, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../../firebase';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
 const TEST_PIECE_TYPES = ['2k', '6k', '500m'];
 
-export default function LineupBuilder({ user }) {
+export default function LineupBuilder() {
   const [selectedTestPiece, setSelectedTestPiece] = useState('2k');
   const [boatSize, setBoatSize] = useState(8);
   const [lineup1, setLineup1] = useState(Array(8).fill(null));
   const [lineup2, setLineup2] = useState(Array(8).fill(null));
   const [availableAthletes, setAvailableAthletes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Fetch athletes and their test pieces from Firebase
   useEffect(() => {
     const fetchTeamData = async () => {
-      if (!user?.teamId) {
-        console.log('No teamId found for user');
-        setAvailableAthletes([]);
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
         setLoading(false);
+        setError('No user logged in');
         return;
       }
-  
+
       try {
         setLoading(true);
-  
-        // 1) Team members
-        const teamRef = doc(db, 'teams', user.teamId);
-        const teamDoc = await getDoc(teamRef);
-        if (!teamDoc.exists()) {
-          console.log('Team not found');
+        setError(null);
+
+        console.log('Fetching team data for lineup builder...');
+
+        // Force token refresh (same as GroupPerformance)
+        await currentUser.getIdToken(true);
+        console.log('✅ Token refreshed successfully');
+
+        // STEP 1: Get the user's team(s) - same pattern as GroupPerformance
+        const teamsRef = collection(db, 'teams');
+        const teamsQuery = query(teamsRef);
+        const teamsSnapshot = await getDocs(teamsQuery);
+        
+        console.log('Found teams:', teamsSnapshot.size);
+
+        // Find teams where current user is a member
+        const userTeams = [];
+        const teamMemberIds = new Set();
+
+        teamsSnapshot.forEach((teamDoc) => {
+          const teamData = teamDoc.data();
+          const members = teamData.members || [];
+          const athletes = teamData.athletes || [];
+          const coaches = teamData.coaches || [];
+          
+          // Check if current user is in this team
+          if (members.includes(currentUser.uid) || 
+              athletes.includes(currentUser.uid) || 
+              coaches.includes(currentUser.uid)) {
+            
+            userTeams.push({
+              id: teamDoc.id,
+              ...teamData
+            });
+            
+            // Collect all member IDs from this team
+            [...members, ...athletes, ...coaches].forEach(id => teamMemberIds.add(id));
+          }
+        });
+
+        console.log('User teams:', userTeams.length);
+        console.log('Team member IDs:', Array.from(teamMemberIds));
+
+        if (teamMemberIds.size === 0) {
+          setError('You are not part of any team yet');
           setAvailableAthletes([]);
           setLoading(false);
           return;
         }
-        const teamData = teamDoc.data();
-        const athleteIds = [...new Set([...(teamData.athletes || []), ...(teamData.members || [])])];
-        if (athleteIds.length === 0) {
-          setAvailableAthletes([]);
-          setLoading(false);
-          return;
-        }
-  
-        // 2) Query all testPerformances for this piece in batches
-        // You need userId on each testPerformances doc.
+
+        const athleteIds = Array.from(teamMemberIds);
+
+        // STEP 2: Query each user's testPerformances subcollection directly (same as GroupPerformance)
         const perUserBest = {}; // { [userId]: bestSeconds }
-        const batches = chunk(athleteIds, 10);
-  
-        for (const batch of batches) {
-          // collectionGroup requires import: getDocs, query, where, collectionGroup from 'firebase/firestore'
-          // If you don't have collectionGroup imported yet, add it to your imports.
-          const isCoach = user?.role === 'coach';
-  
-          // Build the base constraints
-          const constraints = [
-            where('userId', 'in', batch),
-            where('testPiece', '==', selectedTestPiece),
-          ];
-          if (!isCoach) constraints.push(where('isPublic', '==', true));
-  
-          const cg = query(collectionGroup(db, 'testPerformances'), ...constraints);
-          const snap = await getDocs(cg);
-  
-          snap.forEach(docSnap => {
-            const d = docSnap.data();
-            if (typeof d.time !== 'number') return;
-            const uid = d.userId;
-            if (perUserBest[uid] === undefined || d.time < perUserBest[uid]) {
-              perUserBest[uid] = d.time;
-            }
-          });
+
+        console.log(`Querying test performances for ${selectedTestPiece} from ${athleteIds.length} athletes`);
+        
+        // Check if current user is a coach
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        const isCoach = userDoc.exists() && userDoc.data().role === 'coach';
+        
+        for (const userId of athleteIds) {
+          try {
+            // Query the user's testPerformances subcollection directly
+            const userPerformancesRef = collection(db, 'users', userId, 'testPerformances');
+            const performancesSnapshot = await getDocs(userPerformancesRef);
+            
+            console.log(`Found ${performancesSnapshot.size} test performances for user ${userId}`);
+
+            performancesSnapshot.forEach((docSnap) => {
+              const d = docSnap.data();
+              
+              console.log('Test performance doc:', {
+                userId: userId,
+                testType: d.testType,
+                testPiece: d.testPiece,
+                time: d.time,
+                selectedTestPiece: selectedTestPiece
+              });
+              
+              // Filter by test type (field is called testType, not testPiece)
+              if (d.testType !== selectedTestPiece) {
+                console.log(`Skipping - testType "${d.testType}" doesn't match "${selectedTestPiece}"`);
+                return;
+              }
+              
+              // Filter by isPublic if not coach
+              if (!isCoach && !d.isPublic) return;
+              
+              // Convert time to seconds if it's a string
+              let timeInSeconds;
+              if (typeof d.time === 'number') {
+                timeInSeconds = d.time;
+              } else if (typeof d.time === 'string' && d.time !== '--:--.-') {
+                // Parse "8:00.0" format to seconds
+                const parts = d.time.split(':');
+                if (parts.length === 2) {
+                  const mins = parseInt(parts[0]) || 0;
+                  const secs = parseFloat(parts[1]) || 0;
+                  timeInSeconds = mins * 60 + secs;
+                } else {
+                  return; // Invalid format
+                }
+              } else {
+                return; // No valid time
+              }
+              
+              console.log('Converted time:', d.time, '→', timeInSeconds, 'seconds');
+              
+              // Track best time for this user
+              if (perUserBest[userId] === undefined || timeInSeconds < perUserBest[userId]) {
+                perUserBest[userId] = timeInSeconds;
+              }
+            });
+          } catch (userError) {
+            console.error(`Error fetching test performances for user ${userId}:`, userError);
+            // Continue with other users even if one fails
+          }
         }
-  
+
+        console.log('Best times per user:', perUserBest);
+        
         const userIdsWithResults = Object.keys(perUserBest);
         if (userIdsWithResults.length === 0) {
+          console.log('No test results found');
+          setError(`No ${selectedTestPiece} test results found for your team.`);
           setAvailableAthletes([]);
           setLoading(false);
           return;
         }
-  
-        // 3) Get names for all users that have a result (batch by documentId 'in')
+
+        // STEP 3: Get names for all users that have a result
         const nameMap = {}; // { [uid]: displayName }
-        for (const batch of chunk(userIdsWithResults, 10)) {
-          const usersCol = collection(db, 'users');
-          const qUsers = query(usersCol, where('__name__', 'in', batch)); // FieldPath.documentId() alias
-          const uSnap = await getDocs(qUsers);
-          uSnap.forEach(u => {
-            const ud = u.data();
-            nameMap[u.id] = ud.displayName || ud.name || 'Unknown Athlete';
-          });
+        for (const userId of userIdsWithResults) {
+          try {
+            const userDocRef = doc(db, 'users', userId);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+              const ud = userDocSnap.data();
+              nameMap[userId] = ud.displayName || ud.name || 'Unknown Athlete';
+            }
+          } catch (err) {
+            console.error(`Error fetching name for user ${userId}:`, err);
+            nameMap[userId] = 'Unknown Athlete';
+          }
         }
-  
-        // 4) Build and sort athletes list
+
+        console.log('Name map:', nameMap);
+        
+        // STEP 4: Build and sort athletes list
         const athletesData = userIdsWithResults.map(uid => ({
           id: uid,
           name: nameMap[uid] || 'Unknown Athlete',
           testPieces: { [selectedTestPiece]: perUserBest[uid] }
         })).sort((a, b) => perUserBest[a.id] - perUserBest[b.id]);
-  
+
+        console.log('Athletes data:', athletesData);
+        
         setAvailableAthletes(athletesData);
         setLoading(false);
       } catch (err) {
         console.error('Error fetching team data:', err);
+        setError(`Error loading data: ${err.message}`);
         setAvailableAthletes([]);
         setLoading(false);
       }
     };
-  
+
     fetchTeamData();
-  }, [user?.teamId, user?.role, selectedTestPiece]);
+  }, [selectedTestPiece]);
 
   // Handle boat size change
   const handleBoatSizeChange = (newSize) => {
@@ -162,7 +249,8 @@ export default function LineupBuilder({ user }) {
   };
 
   const isAthleteInLineup = (athleteId) => {
-    return lineup1.some(a => a?.id === athleteId) || lineup2.some(a => a?.id === athleteId);
+    // Allow athletes in multiple lineups - always return false
+    return false;
   };
 
   const LineupColumn = ({ lineupNum, lineup, average }) => (
@@ -419,6 +507,23 @@ export default function LineupBuilder({ user }) {
               }}>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: '500' }}>
                   Loading athletes...
+                </p>
+              </div>
+            ) : error ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#dc2626'
+              }}>
+                <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '500' }}>
+                  Error
+                </p>
+                <p style={{ margin: 0, fontSize: '14px' }}>
+                  {error}
                 </p>
               </div>
             ) : availableAthletes.length === 0 ? (
