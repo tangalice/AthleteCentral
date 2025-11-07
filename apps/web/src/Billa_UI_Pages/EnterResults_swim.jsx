@@ -263,7 +263,7 @@ export default function EnterResults_swim({ user }) {
               onChange={handleChange}
               required
               style={{
-                width: '28%',
+                width: '30%',
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
@@ -276,6 +276,7 @@ export default function EnterResults_swim({ user }) {
                 <option key="100" value="100">100</option>
                 <option key="200" value="200">200</option>
                 <option key="400" value="400">400</option>
+                <option key="500" value="500">500</option>
                 <option key="800" value="800">800</option>
                 <option key="1000" value="1000">1000</option>
                 <option key="1500" value="1500">1500</option>
@@ -288,7 +289,7 @@ export default function EnterResults_swim({ user }) {
               onChange={handleChange}
               required
               style={{
-                width: '28%',
+                width: '30%',
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
@@ -311,7 +312,7 @@ export default function EnterResults_swim({ user }) {
               onChange={handleChange}
               required
               style={{
-                width: '38%',
+                width: '40%',
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
