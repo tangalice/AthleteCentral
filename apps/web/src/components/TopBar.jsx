@@ -46,7 +46,6 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "group-performance" ||
     activeTab === "individual-performance" ||
     activeTab === "lineup-builder" ||
-    activeTab === "health-status" ||
     activeTab === "data-reports";
 
   // Close dropdown when clicking outside
@@ -142,8 +141,6 @@ function DropdownMenu({ user, activeTab }) {
   if (user?.role === "coach") {
     // Health and Availability - Coach only
     menuItems.push({ path: "/health-availability", label: "Health and Availability", activeTab: "health-availability" });
-    // Health Status & Data Reports
-    menuItems.push({ path: "/health-status", label: "Health Status", activeTab: "health-status" });
     menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
     menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" }); 
     menuItems.push({ path: "/view-lineup-builder", label: "Lineup Builder", activeTab: "view-lineup-builder" }); 

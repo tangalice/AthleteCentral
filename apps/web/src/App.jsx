@@ -48,10 +48,9 @@ import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
 import CoachGoals from './Billa_UI_Pages/CoachGoals';
 import AthleteToolsPage from "./pages/AthleteToolsPage";
-import HealthStatusPage from "./pages/HealthStatusPage";
 import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
-import HealthAndAvailability from "./pages/HealthAndAvailability";
+import HealthAndAvailability from "./components/HealthAndAvailability";
 import AttendanceHistory from "./components/AttendanceHistory";
 
 import GroupPerformance from './Billa_UI_Pages/Rowing_Stories/GroupPerformance';
@@ -204,7 +203,6 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "messages" ? "messages" : 
     root === "teams"    ? "teams"    :
     root === "calendar" ? "calendar" :
-    root === "health-status" ? "health-status" :
     root === "activity" ? "activity" :
     root === "athlete-tools" ? "athlete-tools" :
     root === "results"  ? "results"  :
@@ -599,14 +597,6 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <AttendanceHistory userRole={userRole} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "health-status",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <HealthStatusPage /> : <Navigate to="/dashboard" replace />}
           </ProtectedRoute>
         ),
       },
