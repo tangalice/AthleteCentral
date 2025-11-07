@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
-import { collection, query, where, getDocs, addDoc, doc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, doc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, serverTimestamp, deleteDoc } from "firebase/firestore";
 
 export default function Teams() {
   const navigate = useNavigate();
@@ -259,6 +259,21 @@ export default function Teams() {
     } catch (error) {
       console.error("Error leaving team:", error);
       setMessage(`Error leaving team: ${error.message}`);
+    }
+  };
+
+  // Delete team (coach only)
+  const deleteTeam = async (teamId) => {
+    if (!window.confirm("Are you sure you want to delete this team? This action cannot be undone and will remove the team from all members.")) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, "teams", teamId));
+      setMessage("Team deleted successfully");
+    } catch (error) {
+      console.error("Error deleting team:", error);
+      setMessage(`Error deleting team: ${error.message}`);
     }
   };
 
@@ -730,6 +745,15 @@ export default function Teams() {
                       >
                         {creatingChat ? "Creating..." : "Send Message to Team"}
                       </button>
+                      {isCoach && team.coaches?.includes(user.uid) && (
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => deleteTeam(team.id)}
+                          style={{ fontSize: 14, padding: "6px 12px" }}
+                        >
+                          Delete Team
+                        </button>
+                      )}
                       <button
                         className="btn btn-outline text-danger"
                         onClick={() => leaveTeam(team.id)}
