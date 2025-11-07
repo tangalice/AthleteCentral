@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { collection, addDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import { sendEmailNotification } from '../services/EmailNotificationService';
 
 export default function EnterResults_swim({ user }) {
   const [formData, setFormData] = useState({
@@ -111,6 +112,18 @@ export default function EnterResults_swim({ user }) {
       });
 
       setSuccessMessage(`Result added successfully for ${formData.athleteName}!`);
+      
+      // Send email notification (fire and forget)
+      const dateStr = new Date(formData.date).toLocaleDateString();
+      const eventType = `${formData.distance} ${formData.stroke} ${formData.courseType}`;
+      
+      sendEmailNotification(formData.athleteId, 'newPerformanceResult', {
+        testType: eventType,
+        date: dateStr,
+        coachName: user.displayName || user.email || 'Coach',
+      }).catch((emailError) => {
+        console.error('Error sending email notification:', emailError);
+      });
       
       // Reset form
       setFormData({

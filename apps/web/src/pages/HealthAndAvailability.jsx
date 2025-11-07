@@ -432,7 +432,7 @@ export default function HealthAndAvailability() {
         border: "1px solid #e5e7eb"
       }}>
         <h2 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "16px", color: "#111827" }}>
-          All Athletes ({filteredAthletes.length})
+          Your Athletes ({filteredAthletes.length})
         </h2>
         
         <div style={{ display: "grid", gap: "12px" }}>

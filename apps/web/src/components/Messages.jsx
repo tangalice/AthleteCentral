@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
+import { sendEmailNotification } from '../services/EmailNotificationService';
 
 const Messages = ({ onUnreadCountChange = () => {} }) => {
   const [user, authLoading] = useAuthState(auth);
@@ -41,6 +42,7 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   const previousMessagesCountRef = useRef(0);
   const currentChatIdRef = useRef(null);
   const lastProcessedChatIdRef = useRef(null);
+  const sendingMessageRef = useRef(false);
 
   // Unread helpers
   const getUnreadCount = (chat) => {
@@ -178,23 +180,51 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     const unsubscribeMessages = onSnapshot(
       messagesQuery, 
       (snapshot) => {
-        const data = snapshot.docs.map((d) => {
-          const docData = d.data();
-          let timestamp = docData.timestamp;
-          if (timestamp && typeof timestamp.toDate === 'function') {
-            timestamp = timestamp.toDate();
-          } else {
-            timestamp = new Date();
-          }
-          return { id: d.id, ...docData, timestamp };
-        });
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         
         // Sort by timestamp ascending (oldest first)
-        // Filter out messages with invalid timestamps for sorting
+        // Messages with invalid timestamps should go to the end
         data.sort((a, b) => {
-          const aTime = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp?.seconds * 1000 || 0);
-          const bTime = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp?.seconds * 1000 || 0);
-          return aTime - bTime;
+          // Handle Firestore Timestamp objects
+          let aTime, bTime;
+          let aValid = true, bValid = true;
+          
+          if (a.timestamp?.toDate && typeof a.timestamp.toDate === 'function') {
+            aTime = a.timestamp.toDate();
+          } else if (a.timestamp?.seconds) {
+            aTime = new Date(a.timestamp.seconds * 1000);
+          } else if (a.timestamp instanceof Date) {
+            aTime = a.timestamp;
+          } else if (typeof a.timestamp === 'number' && a.timestamp > 0) {
+            aTime = new Date(a.timestamp);
+          } else {
+            aValid = false;
+            aTime = new Date(0);
+          }
+          
+          if (b.timestamp?.toDate && typeof b.timestamp.toDate === 'function') {
+            bTime = b.timestamp.toDate();
+          } else if (b.timestamp?.seconds) {
+            bTime = new Date(b.timestamp.seconds * 1000);
+          } else if (b.timestamp instanceof Date) {
+            bTime = b.timestamp;
+          } else if (typeof b.timestamp === 'number' && b.timestamp > 0) {
+            bTime = new Date(b.timestamp);
+          } else {
+            bValid = false;
+            bTime = new Date(0);
+          }
+          
+          // Check if dates are valid (not epoch 0 or invalid)
+          if (isNaN(aTime.getTime()) || aTime.getTime() === 0) aValid = false;
+          if (isNaN(bTime.getTime()) || bTime.getTime() === 0) bValid = false;
+          
+          // Invalid timestamps go to the end
+          if (!aValid && !bValid) return 0;
+          if (!aValid) return 1;
+          if (!bValid) return -1;
+          
+          return aTime.getTime() - bTime.getTime();
         });
         
         const previousCount = previousMessagesCountRef.current;
@@ -254,8 +284,9 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     return () => {
       unsubscribeMessages();
       // Reset the ref when unmounting so we can reload if needed
-      const chatId = selectedChat.id;
-      currentChatIdRef.current = chatId;
+      if (currentChatIdRef.current === chatId) {
+        currentChatIdRef.current = null;
+      }
     };
   }, [selectedChat?.id]); // Use selectedChat.id instead of selectedChat to prevent unnecessary re-renders
 
@@ -290,19 +321,28 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || loading) return;
+    // Check all conditions before proceeding
+    if (!newMessage?.trim() || !selectedChat?.id || loading || sendingMessageRef.current) {
+      return;
+    }
     
     // Capture the message text and chat ID before clearing
     const messageText = newMessage.trim();
     const chatId = selectedChat.id;
     const participants = selectedChat.participants || [];
     
+    if (!chatId) {
+      console.error('No chat ID available');
+      return;
+    }
+    
     // Clear the input immediately to provide instant feedback
     setNewMessage('');
+    sendingMessageRef.current = true;
     setLoading(true);
     
     try {
-      // Add message first
+      // Add message first with serverTimestamp
       await addDoc(collection(db, 'messages'), {
         chatId: chatId,
         senderId: user.uid,
@@ -326,6 +366,27 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
         ...unreadUpdates
       });
       
+      // Send email notifications to recipients (fire and forget)
+      const senderName = user.displayName || user.email || 'Someone';
+      others.forEach(async (recipientId) => {
+        try {
+          // Get current unread count for this recipient (after increment)
+          const chatDoc = await getDoc(chatRef);
+          if (chatDoc.exists()) {
+            const chatData = chatDoc.data();
+            const unreadCount = (chatData.unreadCounts || {})[recipientId] || 1;
+            
+            await sendEmailNotification(recipientId, 'unreadMessages', {
+              unreadCount,
+              senderName,
+            });
+          }
+        } catch (emailError) {
+          // Don't block message sending if email fails
+          console.error('Error sending email notification:', emailError);
+        }
+      });
+      
       // Don't scroll here - let the onSnapshot handler do it
     } catch (error) {
       console.error('Error sending message:', error);
@@ -333,6 +394,8 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
       setNewMessage(messageText);
       alert('Failed to send message. Please try again.');
     } finally {
+      // Always reset loading state
+      sendingMessageRef.current = false;
       setLoading(false);
     }
   };
@@ -344,25 +407,10 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     try {
       const messagesQuery = query(collection(db, 'messages'), where('chatId', '==', selectedChat.id));
       const snap = await getDocs(messagesQuery);
-  
-      await Promise.all(
-        snap.docs.map(async (d) => {
-          try {
-            await deleteDoc(d.ref);
-          } catch (err) {
-            console.error('Failed to delete message:', err);
-          }
-        })
-      );
-  
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
       await deleteDoc(doc(db, 'chats', selectedChat.id));
-  
-      setChats((prev) => prev.filter((c) => c.id !== selectedChat.id));
       setSelectedChat(null);
       setShowChatDetails(false);
-    } catch (error) {
-      console.error('Error deleting chat:', error);
-      alert('Failed to delete chat. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -432,18 +480,70 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   };
 
   const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    let date;
+    try {
+      if (timestamp?.toDate && typeof timestamp.toDate === 'function') {
+        date = timestamp.toDate();
+      } else if (timestamp?.seconds) {
+        date = new Date(timestamp.seconds * 1000);
+      } else if (timestamp instanceof Date) {
+        date = timestamp;
+      } else if (typeof timestamp === 'number' && timestamp > 0) {
+        date = new Date(timestamp);
+      } else {
+        // Use current time as fallback
+        date = new Date();
+      }
+      
+      // Check if date is valid (not epoch 0 or invalid)
+      if (isNaN(date.getTime()) || date.getTime() === 0) {
+        // Use current time as fallback
+        date = new Date();
+      }
+      
+      // Format as hh:mm
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
+    } catch (error) {
+      // Use current time as fallback
+      const now = new Date();
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
   };
+  
   const formatDate = (timestamp) => {
-    if (!timestamp) return '';
-    const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const t = new Date();
-    const y = new Date(); y.setDate(t.getDate() - 1);
-    if (d.toDateString() === t.toDateString()) return 'Today';
-    if (d.toDateString() === y.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString();
+    let d;
+    try {
+      if (timestamp?.toDate && typeof timestamp.toDate === 'function') {
+        d = timestamp.toDate();
+      } else if (timestamp?.seconds) {
+        d = new Date(timestamp.seconds * 1000);
+      } else if (timestamp instanceof Date) {
+        d = timestamp;
+      } else if (typeof timestamp === 'number' && timestamp > 0) {
+        d = new Date(timestamp);
+      } else {
+        // Use current date as fallback
+        d = new Date();
+      }
+      
+      // Check if date is valid (not epoch 0 or invalid)
+      if (isNaN(d.getTime()) || d.getTime() === 0) {
+        // Use current date as fallback
+        d = new Date();
+      }
+      
+      const t = new Date();
+      const y = new Date(); y.setDate(t.getDate() - 1);
+      if (d.toDateString() === t.toDateString()) return 'Today';
+      if (d.toDateString() === y.toDateString()) return 'Yesterday';
+      return d.toLocaleDateString();
+    } catch (error) {
+      return 'Today';
+    }
   };
 
   // User selection helpers
@@ -649,7 +749,7 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
                 <button
                   className="btn btn-primary"
                   onClick={sendMessage}
-                  disabled={!newMessage.trim() || loading}
+                  disabled={!newMessage.trim() || loading || !selectedChat || sendingMessageRef.current}
                   style={{ whiteSpace: 'nowrap' }}
                 >
                   Send

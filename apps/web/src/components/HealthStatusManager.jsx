@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import {
   doc,
   onSnapshot,
   setDoc,
 } from "firebase/firestore";
 import { serverTimestamp } from "firebase/firestore";
+import { sendEmailNotification } from "../services/EmailNotificationService";
 
 
 
@@ -141,6 +142,25 @@ export default function HealthStatusManager({ teamId }) {
           a.id === athleteId ? { ...a, healthStatus: newStatus || null } : a
         )
       );
+      
+      // Send email notification if status was updated (fire and forget)
+      if (newStatus) {
+        const coach = auth.currentUser;
+        const coachName = coach?.displayName || coach?.email || "Coach";
+        const statusLabels = {
+          active: "Active",
+          injured: "Injured",
+          unavailable: "Unavailable"
+        };
+        const statusLabel = statusLabels[newStatus] || newStatus;
+        
+        sendEmailNotification(athleteId, 'coachUpdatedHealthStatus', {
+          healthStatus: statusLabel,
+          coachName,
+        }).catch((emailError) => {
+          console.error('Error sending email notification:', emailError);
+        });
+      }
       
       // Clear error on success
       setError("");

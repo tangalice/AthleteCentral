@@ -16,6 +16,7 @@ import {
   documentId,
   Timestamp,
 } from "firebase/firestore";
+import { sendEmailNotificationToMultiple } from "../services/EmailNotificationService";
 
 const ATTENDANCE_OPTIONS = [
   { value: "present", label: "Present" },
@@ -241,7 +242,7 @@ export default function Calendar({ userRole, user }) {
     setLoading(true);
     try {
       const when = Timestamp.fromDate(new Date(`${formData.date}T${formData.time}`));
-      await addDoc(collection(db, "teams", teamId, "events"), {
+      const eventDoc = await addDoc(collection(db, "teams", teamId, "events"), {
         title: formData.title.trim(),
         description: formData.description.trim(),
         datetime: when,
@@ -252,6 +253,46 @@ export default function Calendar({ userRole, user }) {
         assignedMemberIds: assignedMemberIds,   // [] => team-wide
         attendanceByMember: {},                // 初始化为空
       });
+      
+      // Get team data for team name
+      const teamDoc = await getDoc(doc(db, "teams", teamId));
+      const teamData = teamDoc.data();
+      const teamName = teamData?.name || "Your Team";
+      
+      // Determine who to notify: assigned members or all team athletes
+      let userIdsToNotify = [];
+      if (assignedMemberIds.length > 0) {
+        userIdsToNotify = assignedMemberIds;
+      } else {
+        // Team-wide event: notify all athletes
+        userIdsToNotify = teamData?.athletes || [];
+      }
+      
+      // Format date and time for email
+      const eventDate = new Date(`${formData.date}T${formData.time}`);
+      const eventDateStr = eventDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      const eventTimeStr = eventDate.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Send email notifications (fire and forget)
+      if (userIdsToNotify.length > 0) {
+        sendEmailNotificationToMultiple(userIdsToNotify, 'upcomingEvent', {
+          eventTitle: formData.title.trim(),
+          eventDate: eventDateStr,
+          eventTime: eventTimeStr,
+          teamName,
+        }).catch((emailError) => {
+          console.error('Error sending email notifications:', emailError);
+        });
+      }
+      
       setFormData({ title: "", date: "", time: "", description: "", type: "practice" });
       setAssignedMemberIds([]);
       setShowCreateForm(false);
