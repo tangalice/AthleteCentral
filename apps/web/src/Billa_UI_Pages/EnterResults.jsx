@@ -15,7 +15,8 @@ export default function EnterResults({ user }) {
     time: '',
     distance: '',
     date: '',
-    notes: ''
+    notes: '',
+    completed: true // NEW: track completion status
   });
 
   const [athletes, setAthletes] = useState([]);
@@ -93,7 +94,25 @@ export default function EnterResults({ user }) {
   }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
+    
+    // Handle checkbox separately
+    if (type === 'checkbox') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: checked
+      }));
+      
+      // If marking as incomplete, clear the time field
+      if (name === 'completed' && !checked) {
+        setFormData(prev => ({
+          ...prev,
+          time: '--:--.-'
+        }));
+      }
+      return;
+    }
+    
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -132,20 +151,24 @@ export default function EnterResults({ user }) {
       setErrorMessage('Please select a test type');
       return false;
     }
-    if (!formData.time) {
-      setErrorMessage('Please enter a time');
-      return false;
-    }
     if (!formData.date) {
       setErrorMessage('Please select a date');
       return false;
     }
     
-    // Validate time format (MM:SS.s)
-    const timeRegex = /^\d+:[0-5]\d\.\d$/;
-    if (!timeRegex.test(formData.time)) {
-      setErrorMessage('Time must be in format MM:SS.s (e.g., 6:30.5)');
-      return false;
+    // Only validate time format if test is marked as completed
+    if (formData.completed) {
+      if (!formData.time) {
+        setErrorMessage('Please enter a time');
+        return false;
+      }
+      
+      // Validate time format (MM:SS.s)
+      const timeRegex = /^\d+:[0-5]\d\.\d$/;
+      if (!timeRegex.test(formData.time)) {
+        setErrorMessage('Time must be in format MM:SS.s (e.g., 6:30.5)');
+        return false;
+      }
     }
     
     return true;
@@ -171,8 +194,8 @@ export default function EnterResults({ user }) {
           sport: formData.athleteSport,
           testType: formData.testType,
           distance: formData.distance,
-          time: formData.time,
-          completed: true,
+          time: formData.completed ? formData.time : '--:--.-',
+          completed: formData.completed,
           date: new Date(formData.date),
           notes: formData.notes,
           coachId: user.uid,
@@ -181,7 +204,8 @@ export default function EnterResults({ user }) {
       );
 
       if (result.success) {
-        setSuccessMessage(`Test performance added successfully for ${formData.athleteName}!`);
+        const status = formData.completed ? 'completed' : 'incomplete';
+        setSuccessMessage(`Test performance marked as ${status} for ${formData.athleteName}!`);
         
         // Reset form
         setFormData({
@@ -193,7 +217,8 @@ export default function EnterResults({ user }) {
           time: '',
           distance: '',
           date: '',
-          notes: ''
+          notes: '',
+          completed: true
         });
 
         // Clear success message after 3 seconds
@@ -359,7 +384,55 @@ export default function EnterResults({ user }) {
             </div>
           )}
 
-          {/* Time/Score */}
+          {/* NEW: Completion Status Toggle */}
+          <div style={{ 
+            marginBottom: '20px',
+            padding: '16px',
+            backgroundColor: '#f9fafb',
+            borderRadius: '8px',
+            border: '2px solid #e5e7eb'
+          }}>
+            <label style={{ 
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}>
+              <input 
+                type="checkbox"
+                name="completed"
+                checked={formData.completed}
+                onChange={handleChange}
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  marginRight: '12px',
+                  cursor: 'pointer'
+                }}
+              />
+              <div>
+                <span style={{ 
+                  fontWeight: 600, 
+                  fontSize: '14px',
+                  color: '#374151'
+                }}>
+                  Mark as Completed
+                </span>
+                <p style={{ 
+                  fontSize: '12px', 
+                  color: '#6b7280', 
+                  marginTop: '4px',
+                  marginLeft: '0'
+                }}>
+                  {formData.completed 
+                    ? 'Test has been completed with a recorded time' 
+                    : 'Test is scheduled but not yet completed'}
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* Time/Score - only required if completed */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ 
               display: 'block', 
@@ -368,26 +441,37 @@ export default function EnterResults({ user }) {
               fontSize: '14px',
               color: '#374151'
             }}>
-              Time *
+              Time {formData.completed && '*'}
             </label>
             <input 
               type="text"
               name="time"
               value={formData.time}
               onChange={handleChange}
-              placeholder="e.g., 6:30.5 (MM:SS.s format)"
-              required
+              placeholder={formData.completed ? "e.g., 6:30.5 (MM:SS.s format)" : "Will be filled when test is completed"}
+              required={formData.completed}
+              disabled={!formData.completed}
               style={{
                 width: '100%',
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
-                fontSize: '14px'
+                fontSize: '14px',
+                backgroundColor: formData.completed ? 'white' : '#f9fafb',
+                color: formData.completed ? '#111827' : '#9ca3af',
+                cursor: formData.completed ? 'text' : 'not-allowed'
               }}
             />
-            <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-              Enter time in MM:SS.s format (e.g., 6:30.5 for 6 minutes 30.5 seconds)
-            </p>
+            {formData.completed && (
+              <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                Enter time in MM:SS.s format (e.g., 6:30.5 for 6 minutes 30.5 seconds)
+              </p>
+            )}
+            {!formData.completed && (
+              <p style={{ fontSize: '12px', color: '#ef4444', marginTop: '4px' }}>
+                Time will be marked as incomplete (--:--.-) until the test is completed
+              </p>
+            )}
           </div>
 
           {/* Date */}
@@ -453,7 +537,7 @@ export default function EnterResults({ user }) {
             style={{
               width: '100%',
               padding: '12px',
-              backgroundColor: loading ? '#9ca3af' : '#10b981',
+              backgroundColor: loading ? '#9ca3af' : formData.completed ? '#10b981' : '#f59e0b',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
@@ -463,13 +547,21 @@ export default function EnterResults({ user }) {
               transition: 'background-color 0.2s'
             }}
             onMouseOver={(e) => {
-              if (!loading) e.target.style.backgroundColor = '#059669';
+              if (!loading) {
+                e.target.style.backgroundColor = formData.completed ? '#059669' : '#d97706';
+              }
             }}
             onMouseOut={(e) => {
-              if (!loading) e.target.style.backgroundColor = '#10b981';
+              if (!loading) {
+                e.target.style.backgroundColor = formData.completed ? '#10b981' : '#f59e0b';
+              }
             }}
           >
-            {loading ? 'Adding Test Performance...' : 'Add Test Performance'}
+            {loading 
+              ? 'Saving...' 
+              : formData.completed 
+                ? 'Add Completed Test' 
+                : 'Add Incomplete Test'}
           </button>
         </form>
       </div>

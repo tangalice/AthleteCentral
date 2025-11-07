@@ -1,13 +1,114 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { db } from '../../firebase'; // Going up to apps/web level
+import { collection, collectionGroup, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
 const TEST_PIECE_TYPES = ['2k', '6k', '500m'];
 
-export default function LineupBuilder() {
+export default function LineupBuilder({ user }) {
   const [selectedTestPiece, setSelectedTestPiece] = useState('2k');
   const [boatSize, setBoatSize] = useState(8);
   const [lineup1, setLineup1] = useState(Array(8).fill(null));
   const [lineup2, setLineup2] = useState(Array(8).fill(null));
-  const [availableAthletes] = useState([]);
+  const [availableAthletes, setAvailableAthletes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch athletes and their test pieces from Firebase
+  useEffect(() => {
+    const fetchTeamData = async () => {
+      if (!user?.teamId) {
+        console.log('No teamId found for user');
+        setAvailableAthletes([]);
+        setLoading(false);
+        return;
+      }
+  
+      try {
+        setLoading(true);
+  
+        // 1) Team members
+        const teamRef = doc(db, 'teams', user.teamId);
+        const teamDoc = await getDoc(teamRef);
+        if (!teamDoc.exists()) {
+          console.log('Team not found');
+          setAvailableAthletes([]);
+          setLoading(false);
+          return;
+        }
+        const teamData = teamDoc.data();
+        const athleteIds = [...new Set([...(teamData.athletes || []), ...(teamData.members || [])])];
+        if (athleteIds.length === 0) {
+          setAvailableAthletes([]);
+          setLoading(false);
+          return;
+        }
+  
+        // 2) Query all testPerformances for this piece in batches
+        // You need userId on each testPerformances doc.
+        const perUserBest = {}; // { [userId]: bestSeconds }
+        const batches = chunk(athleteIds, 10);
+  
+        for (const batch of batches) {
+          // collectionGroup requires import: getDocs, query, where, collectionGroup from 'firebase/firestore'
+          // If you don't have collectionGroup imported yet, add it to your imports.
+          const isCoach = user?.role === 'coach';
+  
+          // Build the base constraints
+          const constraints = [
+            where('userId', 'in', batch),
+            where('testPiece', '==', selectedTestPiece),
+          ];
+          if (!isCoach) constraints.push(where('isPublic', '==', true));
+  
+          const cg = query(collectionGroup(db, 'testPerformances'), ...constraints);
+          const snap = await getDocs(cg);
+  
+          snap.forEach(docSnap => {
+            const d = docSnap.data();
+            if (typeof d.time !== 'number') return;
+            const uid = d.userId;
+            if (perUserBest[uid] === undefined || d.time < perUserBest[uid]) {
+              perUserBest[uid] = d.time;
+            }
+          });
+        }
+  
+        const userIdsWithResults = Object.keys(perUserBest);
+        if (userIdsWithResults.length === 0) {
+          setAvailableAthletes([]);
+          setLoading(false);
+          return;
+        }
+  
+        // 3) Get names for all users that have a result (batch by documentId 'in')
+        const nameMap = {}; // { [uid]: displayName }
+        for (const batch of chunk(userIdsWithResults, 10)) {
+          const usersCol = collection(db, 'users');
+          const qUsers = query(usersCol, where('__name__', 'in', batch)); // FieldPath.documentId() alias
+          const uSnap = await getDocs(qUsers);
+          uSnap.forEach(u => {
+            const ud = u.data();
+            nameMap[u.id] = ud.displayName || ud.name || 'Unknown Athlete';
+          });
+        }
+  
+        // 4) Build and sort athletes list
+        const athletesData = userIdsWithResults.map(uid => ({
+          id: uid,
+          name: nameMap[uid] || 'Unknown Athlete',
+          testPieces: { [selectedTestPiece]: perUserBest[uid] }
+        })).sort((a, b) => perUserBest[a.id] - perUserBest[b.id]);
+  
+        setAvailableAthletes(athletesData);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching team data:', err);
+        setAvailableAthletes([]);
+        setLoading(false);
+      }
+    };
+  
+    fetchTeamData();
+  }, [user?.teamId, user?.role, selectedTestPiece]);
 
   // Handle boat size change
   const handleBoatSizeChange = (newSize) => {
@@ -221,6 +322,7 @@ export default function LineupBuilder() {
               >
                 <option value={8}>8+ (Eight)</option>
                 <option value={4}>4+ (Four)</option>
+                <option value={2}>2- (Pair)</option>
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -305,7 +407,21 @@ export default function LineupBuilder() {
             flex: 1,
             paddingRight: '8px'
           }}>
-            {availableAthletes.length === 0 ? (
+            {loading ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#6b7280'
+              }}>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: '500' }}>
+                  Loading athletes...
+                </p>
+              </div>
+            ) : availableAthletes.length === 0 ? (
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -316,10 +432,10 @@ export default function LineupBuilder() {
                 color: '#6b7280'
               }}>
                 <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '500' }}>
-                  No athletes loaded
+                  No athletes found
                 </p>
                 <p style={{ margin: 0, fontSize: '14px' }}>
-                  Connect to Firebase to load your team's athletes
+                  Make sure athletes are added to your team
                 </p>
               </div>
             ) : (

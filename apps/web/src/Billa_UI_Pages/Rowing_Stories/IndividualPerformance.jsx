@@ -158,32 +158,6 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
     });
   };
 
-  // Calculate stats for selected athlete and test type
-  const calculateStats = () => {
-    if (filteredPerformances.length === 0) return null;
-
-    const times = filteredPerformances
-      .map(p => p.time)
-      .filter(t => t !== undefined && t !== null);
-
-    if (times.length === 0) return null;
-
-    const bestTime = Math.min(...times);
-    const avgTime = times.reduce((sum, t) => sum + t, 0) / times.length;
-    const recentPerformances = filteredPerformances.slice(0, 5);
-    const recentAvg = recentPerformances.length > 0
-      ? recentPerformances.reduce((sum, p) => sum + (p.time || 0), 0) / recentPerformances.length
-      : 0;
-
-    return {
-      bestTime,
-      avgTime,
-      recentAvg,
-      totalTests: times.length
-    };
-  };
-
-  const stats = calculateStats();
   const selectedAthleteName = athletes.find(a => a.id === selectedAthlete)?.name || "Athlete";
 
   return (
@@ -276,76 +250,6 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
           </select>
         </div>
       </div>
-
-      {/* Stats Summary */}
-      {stats && (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "16px",
-          marginBottom: "30px"
-        }}>
-          <div style={{
-            padding: "20px",
-            backgroundColor: "#fff",
-            borderRadius: "12px",
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-          }}>
-            <p style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#6b7280", fontWeight: "500" }}>
-              Best Time
-            </p>
-            <p style={{ margin: 0, fontSize: "28px", fontWeight: "700", color: "#10b981", fontFamily: "monospace" }}>
-              {formatTime(stats.bestTime)}
-            </p>
-          </div>
-
-          <div style={{
-            padding: "20px",
-            backgroundColor: "#fff",
-            borderRadius: "12px",
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-          }}>
-            <p style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#6b7280", fontWeight: "500" }}>
-              Average Time
-            </p>
-            <p style={{ margin: 0, fontSize: "28px", fontWeight: "700", color: "#3b82f6", fontFamily: "monospace" }}>
-              {formatTime(stats.avgTime)}
-            </p>
-          </div>
-
-          <div style={{
-            padding: "20px",
-            backgroundColor: "#fff",
-            borderRadius: "12px",
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-          }}>
-            <p style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#6b7280", fontWeight: "500" }}>
-              Recent Avg (Last 5)
-            </p>
-            <p style={{ margin: 0, fontSize: "28px", fontWeight: "700", color: "#8b5cf6", fontFamily: "monospace" }}>
-              {formatTime(stats.recentAvg)}
-            </p>
-          </div>
-
-          <div style={{
-            padding: "20px",
-            backgroundColor: "#fff",
-            borderRadius: "12px",
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-          }}>
-            <p style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#6b7280", fontWeight: "500" }}>
-              Total Tests
-            </p>
-            <p style={{ margin: 0, fontSize: "28px", fontWeight: "700", color: "#111827" }}>
-              {stats.totalTests}
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Performance History */}
       <div>

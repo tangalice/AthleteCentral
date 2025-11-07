@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { collection, query, getDocs, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, getDocs, orderBy, addDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 
 export default function SplitCalculator({ user, userRole, userSport }) {
@@ -90,6 +90,11 @@ export default function SplitCalculator({ user, userRole, userSport }) {
 
   // Calculate performances with splits
   const performancesWithSplits = testPerformances.map(perf => {
+    // Skip incomplete tests
+    if (perf.completed === false || perf.time === '--:--.-') {
+      return null;
+    }
+    
     // Extract distance from test type (e.g., "2k" -> 2000)
     let distance = null;
     if (perf.testType) {
@@ -103,14 +108,20 @@ export default function SplitCalculator({ user, userRole, userSport }) {
       }
     }
     
-    const split = distance ? calculateSplit(perf.time, distance) : null;
+    // Convert time string to seconds
+    const timeInSeconds = typeof perf.time === 'string' 
+      ? parseTimeToSeconds(perf.time) 
+      : perf.time;
+    
+    const split = distance && timeInSeconds ? calculateSplit(timeInSeconds, distance) : null;
     
     return {
       ...perf,
       distance,
+      timeInSeconds,
       split
     };
-  }).filter(p => p.split !== null);
+  }).filter(p => p !== null && p.split !== null);
 
   // Calculate predicted time from split
   const handleCalculateTime = () => {
@@ -140,18 +151,23 @@ export default function SplitCalculator({ user, userRole, userSport }) {
     // Save goal if checkbox is checked
     if (saveGoal) {
       try {
-        await addDoc(collection(db, "users", user.uid, "goals"), {
+        const distanceLabel = DISTANCES.find(d => d.value === goalDistance)?.label || goalDistance + "m";
+        await addDoc(collection(db, "users", user.uid, "goalsList"), {
+          title: `${distanceLabel} in ${goalTime} (${formatTime(splitSeconds)}/500m split)`,
+          category: "Practice",
+          completed: false,
+          createdAt: new Date(),
+          // Additional metadata for split goals
           type: "split-goal",
           distance: parseInt(goalDistance),
           goalTime: timeSeconds,
           neededSplit: splitSeconds,
-          createdAt: serverTimestamp(),
-          sharedWithCoach: true
+          description: `Target ${formatTime(splitSeconds)}/500m split to achieve ${goalTime} for ${distanceLabel}`
         });
         alert("Goal saved and shared with coach!");
       } catch (err) {
         console.error("Error saving goal:", err);
-        alert("Error saving goal");
+        alert("Error saving goal: " + err.message);
       }
     }
   };
@@ -300,7 +316,7 @@ export default function SplitCalculator({ user, userRole, userSport }) {
                         </span>
                       </td>
                       <td style={{ padding: "16px", fontSize: "16px", fontWeight: "600", color: "#111827", fontFamily: "monospace" }}>
-                        {formatTime(perf.time)}
+                        {perf.time}
                       </td>
                       <td style={{ padding: "16px", fontSize: "18px", fontWeight: "700", color: "#10b981", fontFamily: "monospace" }}>
                         {formatTime(perf.split)}
