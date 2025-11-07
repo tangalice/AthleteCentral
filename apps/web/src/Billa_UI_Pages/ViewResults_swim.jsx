@@ -35,7 +35,7 @@ function convertResult(result) {
       scmconvertedTime = result.time * 1.11;
       lcmconvertedTime = scmconvertedTime * 1.02;
     }
-    return {course1:"SCM Converted Time", course1Time: scmconvertedTime, course2: "LCM Converted Time", course2Time: lcmconvertedTime, convertedCourse: "SCY", convertedTime: result.time};
+    return {course1raw: 'scm', course1:"SCM Converted Time", course1Time: scmconvertedTime, course2raw: 'lcm', course2: "LCM Converted Time", course2Time: lcmconvertedTime, convertedCourse: "SCY", convertedTime: result.time};
   }
   else if (result.courseType === 'scm') {
     if (result.distance === '400' || result.distance === '800') {
@@ -50,7 +50,7 @@ function convertResult(result) {
       scyconvertedTime = result.time / 1.11;
       lcmconvertedTime = result.time * 1.02;
     }
-    return {course1:"SCY Converted Time", course1Time: scyconvertedTime, course2: "LCM Converted Time", course2Time: lcmconvertedTime, convertedCourse: "SCM", convertedTime: result.time};
+    return {course1raw: 'scy', course1:"SCY Converted Time", course1Time: scyconvertedTime, course2raw: 'lcm', course2: "LCM Converted Time", course2Time: lcmconvertedTime, convertedCourse: "SCM", convertedTime: result.time};
   }
   else if (result.courseType === 'lcm') {
     if (result.distance === '400' || result.distance === '800') {
@@ -65,10 +65,87 @@ function convertResult(result) {
       scmconvertedTime = result.time / 1.02;
       scyconvertedTime = scmconvertedTime / 1.11;
     }
-    return {course1:"SCM Converted Time", course1Time: scmconvertedTime, course2: "SCY Converted Time", course2Time: scyconvertedTime, convertedCourse: "LCM", convertedTime: result.time};
+    return {course1raw: 'scm', course1:"SCM Converted Time", course1Time: scmconvertedTime, course2raw: 'scy', course2: "SCY Converted Time", course2Time: scyconvertedTime, convertedCourse: "LCM", convertedTime: result.time, dist: result.distance};
   }
 
   return result;
+}
+
+function estimateResult(eventToEstimate, resultsList) {
+  const dist = Number(eventToEstimate.split('-')[0]);
+  const stroke = eventToEstimate.split('-')[1];
+  const course = eventToEstimate.split('-')[2];
+  console.log("Event: ", eventToEstimate, "dist:", dist, "stroke:", stroke, "course:", course)
+
+  // Group results by stroke type
+  const grouped = [];
+  for (let r of resultsList) {
+    if (r.stroke === stroke) grouped.push(r);;
+  }
+  if (grouped.length === 0) return null;
+
+  const groupedDist = {};
+  groupedDist[0] = [];
+  groupedDist[1] = [];
+  for (let r of grouped) {
+    if (Number(r.distance) === dist) {
+      groupedDist[0].push(r);
+    }
+    else {
+      groupedDist[1].push(r);
+    }
+  }
+
+  if (groupedDist[0].length != 0) {
+    // results found for event in other course
+    const convertedResults = [];
+    for (let r of groupedDist[0]) {
+      convertedResults.push(convertResult(r));
+    }
+    let minTime = Infinity
+    for (let r of convertedResults) {
+      if (r.course1raw === course && r.course1Time < minTime) {
+        minTime = r.course1Time;
+      }
+      else if (r.course2raw === course && r.course2Time < minTime) {
+        minTime = r.course2raw;
+      }
+    }
+    return minTime;
+  }
+
+  const convertedResults = [];
+  for (let r of groupedDist[1]) {
+    let currResult = convertResult(r);
+      if (currResult.course1raw === course) {
+        convertedResults.push({dist: Number(currResult.dist), time: currResult.course2Time});
+      }
+      else if (currResult.course2raw === course) {
+        convertedResults.push({dist: Number(currResult.dist), time: currResult.course2Time});
+      }
+      else {
+        convertedResults.push({dist: Number(r.distance), time: r.time});
+      }
+  }
+  console.log("converted results: ", convertedResults);
+
+  let nearestDist = Infinity;
+  let minDist = Infinity
+  let minTime = Infinity;
+  for (let r of convertedResults) {
+    if (Math.abs(r.dist - dist) < minDist) {
+      nearestDist = r.dist;
+      minDist = Math.abs(r.dist - dist);
+      minTime = r.time;
+    }
+    if ((r.dist === nearestDist) && (r.time < minTime)) {
+      minTime = r.time
+    }
+  }
+
+  let calculatedTime = minTime * Math.pow(dist / nearestDist, 1.06);
+
+  return calculatedTime;
 }
 
 function findPBs(resultsList) {
@@ -119,6 +196,21 @@ function findPBs(resultsList) {
   return pbList;
 }
 
+function findEventsWithoutResults(allEvents, resultsList) {
+  // Create a Set of all event keys that have at least one result
+  const eventsWithResults = new Set(resultsList.map(r => r.eventType));
+
+  // Filter allEvents by keys *not* in the results
+  const eventsWithoutResults = Object.keys(allEvents)
+    .filter(eventKey => !eventsWithResults.has(eventKey))
+    .reduce((acc, key) => {
+      acc[key] = allEvents[key];
+      return acc;
+    }, {});
+
+  return eventsWithoutResults;
+}
+
 export default function ViewResults_swim({ user }) {
   const [filter, setFilter] = useState('all');
   const [practiceResults, setPracticeResults] = useState([]);
@@ -133,6 +225,10 @@ export default function ViewResults_swim({ user }) {
   const [showChart, setShowChart] = useState(false);
   const [pbList, setPbList] = useState(null);
   const chartRef = useRef(null);
+  const [eventsWithoutResults, setEventsWithoutResults] = useState(null);
+  const [eventToEstimate, setEventToEstimate] = useState("")
+  const [showEstimatePopup, setShowEstimatePopup] = useState(false);
+  const [estimatedResult, setEstimatedResult] = useState(null);
 
   useEffect(() => {
   const fetchResults = async () => {
@@ -178,8 +274,13 @@ export default function ViewResults_swim({ user }) {
 
     const computed = findPBs(resultsList);
     setPbList(computed);
+
+    const computedEventsWithoutResults = findEventsWithoutResults(allEvents, resultsList);
+    setEventsWithoutResults(computedEventsWithoutResults);
+
     setLoading(false);
     console.log("PB List:", computed);
+    console.log("Events without results:", computedEventsWithoutResults);
   }, [resultsList]);
 
   // Combine and filter results
@@ -211,6 +312,11 @@ export default function ViewResults_swim({ user }) {
   };
 
   const filteredResults = getFilteredResults();
+
+  const handleChange = (e) => {
+    const value = e.target.value;
+    setEventToEstimate(value)
+  };
 
 
   if (loading || !pbList) {
@@ -465,10 +571,11 @@ export default function ViewResults_swim({ user }) {
 
             {/* isPB? */}
             <td style={{ padding: '12px 16px', fontSize: '14px', color: '#6b7280' }}>
-              {pbList[result.id]?.isPB ? (pbList[result.id]?.currPB ? 'current PB' : 'PB at time of performance') : 'Not a PB'}
+              {pbList[result.id]?.isPB ? (pbList[result.id]?.currPB ? 'Current PB' : 'PB at time of performance') : 'Not a PB'}
             </td>
 
-            {/* Options */}        
+            {/* Options */}     
+            <td style={{ padding: '12px 16px', fontSize: '14px', color: '#6b7280' }}>   
             <button 
               onClick={() => {
                 setConvertedResult(convertResult(result));
@@ -487,6 +594,7 @@ export default function ViewResults_swim({ user }) {
             >
             Convert
           </button>
+          </td>
         </tr>
 
 
@@ -527,6 +635,147 @@ export default function ViewResults_swim({ user }) {
           </div>
         </div>
       )}
+
+      {/* Result Estimate Popup */}
+      {showEstimatePopup && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+          }}>
+          <div className="card" style={{
+            width: 420,
+            maxWidth: 500,
+            padding: 20
+          }}>
+            <h3 style={{ marginTop: 0, marginBottom: 16, textAlign: 'center' }}>Estimated Result</h3>
+            {console.log("Estimated Result:", estimatedResult)}
+            {estimatedResult === null ? 'Not enough data to estimate a result in this event' : 
+            `Estimated result in ${eventToEstimate} based on related times: ${estimatedResult.toFixed(2)}`}
+            <br/><br/>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button className="btn btn-outline" onClick={() => setShowEstimatePopup(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <br/>
+      {/* Event Selection for time estimate */}
+      {eventsWithoutResults.length === 0 ? null : (
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{ 
+          display: 'block', 
+          marginBottom: '6px', 
+          fontWeight: 600, 
+          fontSize: '14px',
+          color: '#374151'
+        }}>
+        Select an Event with No Results to estimate a Time:
+        </label>
+        <select 
+          name="eventType"
+          value={eventToEstimate}
+          onChange={handleChange}
+          required
+          style={{          
+            width: '20%',
+            padding: '10px',
+            border: '1px solid #d1d5db',
+            borderRadius: '6px',
+            fontSize: '14px',
+            backgroundColor: 'white'
+          }}
+        >
+        <option value="">Select an event...</option>
+          {Object.entries(eventsWithoutResults).map(([eventKey, eventName]) => (
+          <option key={eventKey} value={eventKey}>
+            {eventName}
+          </option>
+        ))}
+        </select>
+
+        <button 
+          onClick={() => {
+            setEstimatedResult(estimateResult(eventToEstimate, resultsList));
+            setShowEstimatePopup(true);
+          }}
+          style={{ 
+            padding: '10px 20px', 
+            border: `2px solid ${filter === 'scm' ? '#10b981' : '#d1d5db'}`, 
+            borderRadius: '6px',
+            backgroundColor: '#10b981',
+            color: 'white',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+        Estimate Time
+        </button>
+      </div>
+      )}
     </div>
   );
+}
+
+
+const allEvents = {
+  '50-fr-scy': '50 Freestyle (SCY)',
+  '50-fr-scm': '50 Freestyle (SCM)',
+  '50-fr-lcm': '50 Freestyle (LCM)',
+  '100-fr-scy': '100 Freestyle (SCY)',
+  '100-fr-scm': '100 Freestyle (SCM)',
+  '100-fr-lcm': '100 Freestyle (LCM)',
+  '200-fr-scy': '200 Freestyle (SCY)',
+  '200-fr-scm': '200 Freestyle (SCM)',
+  '200-fr-lcm': '200 Freestyle (LCM)',
+  '500-fr-scy': '500 Freestyle (SCY)',
+  '400-fr-scm': '400 Freestyle (SCM)',
+  '400-fr-lcm': '400 Freestyle (LCM)',
+  '1000-fr-scy': '1000 Freestyle (SCY)',
+  '800-fr-scm': '800 Freestyle (SCM)',
+  '800-fr-lcm': '800 Freestyle (LCM)',
+  '1650-fr-scy': '1650 Freestyle (SCY)',
+  '1500-fr-scm': '1500 Freestyle (SCM)',
+  '1500-fr-lcm': '1500 Freestyle (LCM)',
+  '50-bk-scy': '50 Backstroke (SCY)',
+  '50-bk-scm': '50 Backstroke (SCM)',
+  '50-bk-lcm': '50 Backstroke (LCM)',
+  '100-bk-scy': '100 Backstroke (SCY)',
+  '100-bk-scm': '100 Backstroke (SCM)',
+  '100-bk-lcm': '100 Backstroke (LCM)',
+  '200-bk-scy': '200 Backstroke (SCY)',
+  '200-bk-scm': '200 Backstroke (SCM)',
+  '200-bk-lcm': '200 Backstroke (LCM)',
+  '50-br-scy': '50 Breaststroke (SCY)',
+  '50-br-scm': '50 Breaststroke (SCM)',
+  '50-br-lcm': '50 Breaststroke (LCM)',
+  '100-br-scy': '100 Breaststroke (SCY)',
+  '100-br-scm': '100 Breaststroke (SCM)',
+  '100-br-lcm': '100 Breaststroke (LCM)',
+  '200-br-scy': '200 Breaststroke (SCY)',
+  '200-br-scm': '200 Breaststroke (SCM)',
+  '200-br-lcm': '200 Breaststroke (LCM)',
+  '50-fl-scy': '50 Butterfly (SCY)',
+  '50-fl-scm': '50 Butterfly (SCM)',
+  '50-fl-lcm': '50 Butterfly (LCM)',
+  '100-fl-scy': '100 Butterfly (SCY)',
+  '100-fl-scm': '100 Butterfly (SCM)',
+  '100-fl-lcm': '100 Butterfly (LCM)',
+  '200-fl-scy': '200 Butterfly (SCY)',
+  '200-fl-scm': '200 Butterfly (SCM)',
+  '200-fl-lcm': '200 Butterfly (LCM)',
+  '200-im-scy': '200 Individual Medley (SCY)',
+  '200-im-scm': '200 Individual Medley (SCM)',
+  '200-im-lcm': '200 Individual Medley (LCM)',
+  '400-im-scy': '400 Individual Medley (SCY)',
+  '400-im-scm': '400 Individual Medley (SCM)',
+  '400-im-lcm': '400 Individual Medley (LCM)',
 }
