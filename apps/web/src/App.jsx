@@ -48,6 +48,8 @@ import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
 import SplitCalculator from './Billa_UI_Pages/Rowing_Stories/SplitCalculator';
 import CoachGoals from './Billa_UI_Pages/CoachGoals';
+import WeightInfo from "./Billa_UI_Pages/Rowing_Stories/WeightInfo";
+import CoachWeightInfo from "./Billa_UI_Pages/Rowing_Stories/CoachWeightInfo";
 import AthleteToolsPage from "./pages/AthleteToolsPage";
 import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
@@ -221,6 +223,8 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "view-athlete-practices" ? "view-athlete-practices" :
     root === "predict-results" ? "predict-results" :
     root === "compare-results" ? "compare-results" :
+    root === "weight-info" ? "weight-info" :
+root === "coach-weight-info" ? "coach-weight-info" :
     "dashboard";
 
   return (
@@ -736,6 +740,30 @@ const router = createBrowserRouter([
           <ProtectedRoute user={user}>
             {userRole === "coach" && userSport?.toLowerCase() === "rowing" ? (
               <LineupBuilder user={mergedUser} userRole={userRole} userSport={userSport} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "weight-info",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? (
+              <WeightInfo user={mergedUser} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "coach-weight-info",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? (
+              <CoachWeightInfo user={mergedUser} />
             ) : (
               <Navigate to="/dashboard" replace />
             )}

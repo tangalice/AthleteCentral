@@ -56,7 +56,7 @@ const getColumnsBySport = (sport) => {
 
 // Calculate split time from total time and distance
 const calculateSplit = (timeStr, testType, sport) => {
-  if (!timeStr || timeStr === '--:--.-') return null;
+  if (!timeStr || timeStr === '--:--.-' || timeStr === '--:--') return null;
   
   const sportLower = sport?.toLowerCase() || '';
   
@@ -101,7 +101,8 @@ const calculateSplit = (timeStr, testType, sport) => {
 
 // Calculate watts from split time (for rowing)
 const calculateWatts = (splitStr) => {
-  if (!splitStr) return 0;
+  // FIXED: Check for invalid split formats
+  if (!splitStr || splitStr === '-' || splitStr === '--:--.-' || splitStr === '--:--') return 0;
   
   try {
     // Convert split time to seconds
@@ -110,8 +111,15 @@ const calculateWatts = (splitStr) => {
     const seconds = parseFloat(parts[1]) || 0;
     const splitSeconds = minutes * 60 + seconds;
     
+    // FIXED: Check if splitSeconds is valid (not 0 or NaN)
+    if (!splitSeconds || splitSeconds <= 0 || isNaN(splitSeconds)) return 0;
+    
     // Watts formula: 2.80 / (pace/500)^3
     const watts = 2.80 / Math.pow(splitSeconds / 500, 3);
+    
+    // FIXED: Check if result is valid
+    if (!isFinite(watts) || isNaN(watts)) return 0;
+    
     return Math.round(watts);
   } catch (err) {
     console.error('Error calculating watts:', err);
@@ -197,7 +205,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
         // STEP 2: Fetch performances from each user's subcollection
         const performances = [];
         
-        // Query each user's testPerformances subcollection (not performances!)
+        // Query each user's testPerformances subcollection
         for (const userId of Array.from(teamMemberIds)) {
           try {
             console.log(`Fetching test performances for user: ${userId}`);
@@ -209,7 +217,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
               (userDoc.data().displayName || userDoc.data().name || 'Unknown Athlete') : 
               'Unknown Athlete';
             
-            // Query the user's testPerformances subcollection (changed from 'performances')
+            // Query the user's testPerformances subcollection
             const userPerformancesRef = collection(db, 'users', userId, 'testPerformances');
             const performancesSnapshot = await getDocs(userPerformancesRef);
             
@@ -221,19 +229,39 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
               
               // Calculate split from time and test type
               const calculatedSplit = calculateSplit(data.time, data.testType, data.sport || userSport);
-              const split = data.split || calculatedSplit;
               
-              // Calculate watts from split (or use stored watts)
+              // FIXED: Check for ALL invalid split formats
+              const isInvalidSplit = !data.split || 
+                                     data.split === '--:--.-' || 
+                                     data.split === '--:--' ||
+                                     data.split === '-' ||
+                                     data.split === '';
+              
+              // Only use stored split if it's valid, otherwise use calculated split
+              let split = calculatedSplit;
+              if (!isInvalidSplit) {
+                split = data.split;
+              }
+              
+              // Calculate watts from split (or use stored watts if valid)
               const calculatedWatts = split ? calculateWatts(split) : 0;
-              const watts = data.watts || calculatedWatts;
+              let watts = calculatedWatts;
+              if (data.watts && isFinite(data.watts) && data.watts > 0) {
+                watts = data.watts;
+              }
               
-              // FIXED: Determine if completed - a test is incomplete if time is '--:--.-' or missing
-              const isIncomplete = !data.time || data.time === '--:--.-' || data.completed === false;
+              // FIXED: Determine if completed - a test is incomplete if time is '--:--.-', '--:--' or missing
+              const isIncomplete = !data.time || 
+                                   data.time === '--:--.-' || 
+                                   data.time === '--:--' || 
+                                   data.completed === false;
               const isCompleted = !isIncomplete;
               
               console.log('Test completion check:', {
                 id: doc.id,
                 time: data.time,
+                split: split,
+                watts: watts,
                 completed: data.completed,
                 isCompleted
               });
@@ -241,7 +269,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
               performances.push({
                 id: doc.id,
                 athleteId: userId,
-                athleteName: data.athleteName || userName,
+                athleteName: userName, // FIXED: Always use the fetched userName
                 testType: data.testType || data.eventType || 'Unknown',
                 time: data.time || '--:--.-',
                 split: split || '-',
@@ -305,8 +333,8 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
         comparison = a.athleteName.localeCompare(b.athleteName);
       } else if (sortBy === 'time') {
         const timeToSeconds = (timeStr) => {
-          // Handle null, undefined, or '--:--.-'
-          if (!timeStr || timeStr === '--:--.-') return Infinity;
+          // Handle null, undefined, or '--:--.-' or '--:--'
+          if (!timeStr || timeStr === '--:--.-' || timeStr === '--:--') return Infinity;
           
           // Convert to string if it's not already
           const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
@@ -348,7 +376,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
     Object.keys(rankingsMap).forEach((testType) => {
       rankingsMap[testType].sort((a, b) => {
         const timeToSeconds = (timeStr) => {
-          if (!timeStr || timeStr === '--:--.-') return Infinity;
+          if (!timeStr || timeStr === '--:--.-' || timeStr === '--:--') return Infinity;
           const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
           if (!timeString.includes(':')) return Infinity;
           try {

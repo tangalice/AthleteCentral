@@ -71,6 +71,8 @@ function convertResult(result) {
   return result;
 }
 
+// estimate formula from https://www.swimbikerun.net.nz/Calculators/SwimmingExpectationsCalculator
+
 function estimateResult(eventToEstimate, resultsList) {
   const dist = Number(eventToEstimate.split('-')[0]);
   const stroke = eventToEstimate.split('-')[1];
@@ -209,6 +211,23 @@ function findEventsWithoutResults(allEvents, resultsList) {
     }, {});
 
   return eventsWithoutResults;
+}
+
+function formatTime(totalSeconds) {
+  if (isNaN(totalSeconds) || totalSeconds < 0) {
+    return "00:00.00"; // Or handle invalid input as needed
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  // Format minutes with leading zero if less than 10
+  const formattedMinutes = String(minutes).padStart(2, '0');
+
+  // Format seconds with leading zero and two decimal places
+  const formattedSeconds = remainingSeconds.toFixed(2).padStart(5, '0'); // e.g., "05.12" or "12.34"
+
+  return `${formattedMinutes}:${formattedSeconds}`;
 }
 
 export default function ViewResults_swim({ user }) {
@@ -561,7 +580,7 @@ export default function ViewResults_swim({ user }) {
              color: '#10b981'
             }}
             >
-            {result.time != null ? `${result.time}s` : '—'}
+            {result.time != null ? `${formatTime(result.time)}s` : '—'}
             </td>
 
             {/* Notes */}
@@ -624,9 +643,9 @@ export default function ViewResults_swim({ user }) {
           }}>
             <h3 style={{ marginTop: 0, marginBottom: 16, textAlign: 'center' }}>Converted Result</h3>
             {console.log("Converted Result:", convertedResult)}
-            Time Converted: {convertedResult.convertedTime.toFixed(2)}s in {convertedResult.convertedCourse}<br/>
-            {convertedResult.course1}: {convertedResult.course1Time.toFixed(2)}s<br/>
-            {convertedResult.course2}: {convertedResult.course2Time.toFixed(2)}s<br/><br/>
+            Time Converted: {formatTime(convertedResult.convertedTime.toFixed(2))}s in {convertedResult.convertedCourse}<br/>
+            {convertedResult.course1}: {formatTime(convertedResult.course1Time.toFixed(2))}s<br/>
+            {convertedResult.course2}: {formatTime(convertedResult.course2Time.toFixed(2))}s<br/><br/>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button className="btn btn-outline" onClick={() => setShowConvertPopup(false)}>
                 Close
@@ -655,7 +674,7 @@ export default function ViewResults_swim({ user }) {
             <h3 style={{ marginTop: 0, marginBottom: 16, textAlign: 'center' }}>Estimated Result</h3>
             {console.log("Estimated Result:", estimatedResult)}
             {estimatedResult === null ? 'Not enough data to estimate a result in this event' : 
-            `Estimated result in ${eventToEstimate} based on related times: ${estimatedResult.toFixed(2)}`}
+            `Estimated result in ${eventToEstimate} based on related times: ${formatTime(estimatedResult.toFixed(2))}`}
             <br/><br/>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button className="btn btn-outline" onClick={() => setShowEstimatePopup(false)}>
