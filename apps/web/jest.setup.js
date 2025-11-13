@@ -1,5 +1,8 @@
 import "@testing-library/jest-dom";
+import { expect } from "@jest/globals";
+
 global.fetch = require("node-fetch");
+
 class LocalStorageMock {
   constructor() {
     this.store = {};
@@ -19,8 +22,10 @@ class LocalStorageMock {
 }
 
 global.localStorage = new LocalStorageMock();
-
 global.window = global;
 global.document = {
   createElement: () => ({}),
 };
+
+// ✅ Make expect globally available for jest-dom
+global.expect = expect;

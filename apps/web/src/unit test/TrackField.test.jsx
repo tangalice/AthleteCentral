@@ -1,12 +1,11 @@
 /**
- * ✅ Fixed Unit Test for TrackField.jsx
- * Covers: headings, mode toggle, input validation, calculations, predictions
+ * @jest-environment jsdom
  */
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 
-import React from "react";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import TrackField from "../components/TrackField";
+
 jest.mock("firebase/app", () => ({
     initializeApp: jest.fn(() => ({})),
   }));
