@@ -28,6 +28,8 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const [healthStatus, setHealthStatus] = useState("Loading...");
   const [assignedOnly, setAssignedOnly] = useState(false);
   const [userCache, setUserCache] = useState(new Map());
+  const [expiredPoll, setExpiredPoll] = useState(null);
+  const [expiredDismissed, setExpiredDismissed] = useState(false);
   
 
 
@@ -73,57 +75,59 @@ useEffect(() => {
   const now = new Date();
 
   async function loadPoll() {
-    // 1. read all open polls
+
     const qRef = query(
       collection(db, "feedbackPolls"),
       where("status", "==", "open")
     );
-
+  
     const snap = await getDocs(qRef);
     if (snap.empty) {
       setOpenPoll(null);
+      setExpiredPoll(null);   // ⭐ NEW
       return;
     }
-
+  
     let candidates = [];
-
+    let expiredCandidates = [];   // ⭐ NEW
+  
     for (const d of snap.docs) {
       const poll = d.data();
       const pollId = d.id;
-      console.log("DEBUG: athlete teamIds =", teamIds);
-      console.log("DEBUG: poll doc =", poll);
-      console.log("DEBUG: overlap =", poll.teamIds.some(id => teamIds.includes(id)));
-
-      // 2. teamIds must overlap (Calendar-style filter)
+  
       if (!Array.isArray(poll.teamIds)) continue;
       const inMyTeam = poll.teamIds.some(id => teamIds.includes(id));
       if (!inMyTeam) continue;
-
-      // 3. deadline check
+  
       const deadline = poll.deadline?.toDate ? poll.deadline.toDate() : null;
       if (!deadline) continue;
-
-      if (deadline < now) {
-        // auto close
-        await updateDoc(doc(db, "feedbackPolls", pollId), {
-          status: "closed"
-        });
-        continue;
-      }
-
-      // 4. check if athlete has already responded
+  
       const respRef = doc(db, "feedbackPolls", pollId, "responses", me);
       const respSnap = await getDoc(respRef);
-      if (respSnap.exists()) {
-        continue; // already submitted → skip
+  
+      // 🟥 NEW: expired + not responded → expiredCandidates
+      if (deadline < now) {
+        if (!respSnap.exists()) {
+          expiredCandidates.push({ id: pollId, ...poll });  // ⭐ NEW
+        }
+        continue;
       }
-
-      candidates.push({ id: pollId, ...poll });
+  
+      // (unchanged) open poll but not responded
+      if (!respSnap.exists()) {
+        candidates.push({ id: pollId, ...poll });
+      }
     }
-
-    // take earliest by deadline
+  
+    // sort open polls
     candidates.sort((a, b) => a.deadline.toDate() - b.deadline.toDate());
     setOpenPoll(candidates[0] || null);
+  
+    // ⭐ NEW: sort expired polls (latest first)
+    expiredCandidates.sort((a, b) => b.deadline.toDate() - a.deadline.toDate());
+  
+    // ⭐ NEW: set the most recent expired poll
+    setExpiredPoll(expiredCandidates[0] || null);
   }
 
   loadPoll();
@@ -404,6 +408,34 @@ useEffect(() => {
           Dashboard
         </p>
         
+        {userRole === "athlete" && expiredPoll && !expiredDismissed && (
+          <div
+            style={{
+              background: "#ffe4e6",
+              padding: "1rem",
+              marginTop: "1.2rem",
+              borderRadius: 8,
+              border: "1px solid #fda4af",
+              width: "100%",
+              maxWidth: 600
+            }}
+          >
+            <p style={{ fontWeight: 600, color: "#b91c1c" }}>
+              Feedback closed — You missed the deadline.
+            </p>
+            <p style={{ marginTop: 4, color: "#7f1d1d" }}>
+              Poll: <strong>{expiredPoll.title}</strong>
+            </p>
+            <button
+              className="btn btn-secondary"
+              style={{ marginTop: "0.5rem" }}
+              onClick={() => setExpiredDismissed(true)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* ⭐⭐⭐ Athlete Poll Reminder (整合后的最终位置) */}
         {userRole === "athlete" && openPoll && (
           <div
@@ -430,6 +462,7 @@ useEffect(() => {
             </button>
           </div>
         )}
+        
         
         {userRole === "athlete" && (
           <p className="mb-2" style={{ fontSize: 16 }}>
