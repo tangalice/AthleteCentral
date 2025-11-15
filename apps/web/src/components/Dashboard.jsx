@@ -12,6 +12,7 @@ import {
   orderBy,
   doc,
   getDoc,
+  updateDoc
 } from "firebase/firestore";
 import { checkAndNotifyIncompleteProfile } from "../services/EmailNotificationService";
 
@@ -27,12 +28,15 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const [healthStatus, setHealthStatus] = useState("Loading...");
   const [assignedOnly, setAssignedOnly] = useState(false);
   const [userCache, setUserCache] = useState(new Map());
+  
 
 
   const teamIds = useMemo(
     () => teamsMeta.map((t) => t.id).sort(),
     [teamsMeta]
   );
+  
+
   const teamIdsKey = useMemo(() => teamIds.join(","), [teamIds]);
   const teamNameMap = useMemo(() => {
     const map = new Map();
@@ -51,7 +55,81 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
         .join(";"),
     [teamIds, teamsMeta]
   );
+
+  
   const eventsByTeamRef = useRef({});
+  // ⭐ New athlete poll loader (replacing useOpenPoll)
+const [openPoll, setOpenPoll] = useState(null);
+
+useEffect(() => {
+  if (userRole !== "athlete") return;         // only athletes
+  if (!auth.currentUser) return;
+  if (teamIds.length === 0) {
+    setOpenPoll(null);
+    return;
+  }
+
+  const me = auth.currentUser.uid;
+  const now = new Date();
+
+  async function loadPoll() {
+    // 1. read all open polls
+    const qRef = query(
+      collection(db, "feedbackPolls"),
+      where("status", "==", "open")
+    );
+
+    const snap = await getDocs(qRef);
+    if (snap.empty) {
+      setOpenPoll(null);
+      return;
+    }
+
+    let candidates = [];
+
+    for (const d of snap.docs) {
+      const poll = d.data();
+      const pollId = d.id;
+      console.log("DEBUG: athlete teamIds =", teamIds);
+      console.log("DEBUG: poll doc =", poll);
+      console.log("DEBUG: overlap =", poll.teamIds.some(id => teamIds.includes(id)));
+
+      // 2. teamIds must overlap (Calendar-style filter)
+      if (!Array.isArray(poll.teamIds)) continue;
+      const inMyTeam = poll.teamIds.some(id => teamIds.includes(id));
+      if (!inMyTeam) continue;
+
+      // 3. deadline check
+      const deadline = poll.deadline?.toDate ? poll.deadline.toDate() : null;
+      if (!deadline) continue;
+
+      if (deadline < now) {
+        // auto close
+        await updateDoc(doc(db, "feedbackPolls", pollId), {
+          status: "closed"
+        });
+        continue;
+      }
+
+      // 4. check if athlete has already responded
+      const respRef = doc(db, "feedbackPolls", pollId, "responses", me);
+      const respSnap = await getDoc(respRef);
+      if (respSnap.exists()) {
+        continue; // already submitted → skip
+      }
+
+      candidates.push({ id: pollId, ...poll });
+    }
+
+    // take earliest by deadline
+    candidates.sort((a, b) => a.deadline.toDate() - b.deadline.toDate());
+    setOpenPoll(candidates[0] || null);
+  }
+
+  loadPoll();
+}, [userRole, teamIds]);
+
+  
 
   // ========== Check profile completeness and send notification if needed ==========
   useEffect(() => {
@@ -326,6 +404,33 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
           Dashboard
         </p>
         
+        {/* ⭐⭐⭐ Athlete Poll Reminder (整合后的最终位置) */}
+        {userRole === "athlete" && openPoll && (
+          <div
+            style={{
+              background: "#fff4cc",
+              padding: "1rem",
+              marginTop: "1rem",
+              marginBottom: "1.5rem",
+              borderRadius: "8px",
+              border: "1px solid #f2d98c",
+              width: "100%",
+              maxWidth: 600,
+            }}
+          >
+            <p style={{ fontWeight: 600 }}>
+              You have a feedback poll to fill!
+            </p>
+            <button
+              onClick={() => navigate(`/feedback/submit/${openPoll.id}`)}
+              className="btn btn-primary"
+              style={{ marginTop: "0.5rem" }}
+            >
+              Fill Now
+            </button>
+          </div>
+        )}
+        
         {userRole === "athlete" && (
           <p className="mb-2" style={{ fontSize: 16 }}>
             <strong>Health Status:</strong>{" "}
@@ -344,6 +449,8 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
             </span>
           </p>
         )}
+        
+
 
         {/* --- REFACTOR: Use CSS margin class --- */}
         {userRole === "athlete" && (
@@ -551,6 +658,41 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
             <p className="text-muted">{statusText}</p>
           </div>
         </div>
+        {/* Coach create feedback poll + view summary buttons */}
+        {userRole === "coach" && teamsMeta.length > 0 && (
+          <div
+            className="mt-3"
+            style={{
+              width: "100%",
+              maxWidth: 1000,
+              display: "flex",
+              gap: "1rem",
+            }}
+          >
+            {/* Create Poll Button */}
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate("/create-feedback")}
+              style={{ flex: 1 }}
+            >
+              ➕ Create Feedback Poll
+            </button>
+
+            {/* View Summary Button */}
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate("/feedback-summary")}
+              style={{
+                flex: 1,
+                background: "#4b5563",
+                color: "white",
+                border: "none",
+              }}
+            >
+              📊 View Feedback Summary
+            </button>
+          </div>
+        )}
 
         {/* --- REFACTOR: Use CSS margin classes --- */}
         <div className="mt-4" style={{ width: "100%", maxWidth: 1000 }}>

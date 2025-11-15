@@ -42,6 +42,9 @@ import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
 import CoachFeedbackPage from "./components/CoachFeedbackPage";
 import PredictResultsPage from "./pages/PredictResultsPage";
 import CompareResultsPage from "./pages/CompareResultsPage";
+import CreateFeedbackPoll from "./pages/CreateFeedbackPoll";
+import FeedbackSummaryPage from "./pages/FeedbackSummaryPage";
+import AthleteFeedback from "./pages/AthleteFeedback";
 
 import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
@@ -487,6 +490,62 @@ const router = createBrowserRouter([
       {
         index: true,
         element: user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />,
+      },
+      {
+        path: "coach-feedback",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? (
+              <CoachFeedbackPage coach={user} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "feedback-summary",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? (
+              <FeedbackSummaryPage coach={user} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "create-feedback",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? (
+              <CreateFeedbackPoll />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "feedback/submit/:pollId",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? (
+              <AthleteFeedback />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "coach-feedback",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? <FeedbackSummaryPage coach={user} /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
       },
       {
         path: "dashboard",
