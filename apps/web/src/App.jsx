@@ -45,6 +45,7 @@ import CompareResultsPage from "./pages/CompareResultsPage";
 import CreateFeedbackPoll from "./pages/CreateFeedbackPoll";
 import FeedbackSummaryPage from "./pages/FeedbackSummaryPage";
 import AthleteFeedback from "./pages/AthleteFeedback";
+import SimilarTeammatesPage from "./components/SimilarTeammatesPage";
 
 import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
@@ -226,6 +227,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "view-athlete-practices" ? "view-athlete-practices" :
     root === "predict-results" ? "predict-results" :
     root === "compare-results" ? "compare-results" :
+    root === "similar-teammates" ? "similar-teammates" :
     root === "weight-info" ? "weight-info" :
 root === "coach-weight-info" ? "coach-weight-info" :
     "dashboard";
@@ -585,6 +587,18 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <CompareResultsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "similar-teammates",
+        element: (
+          <ProtectedRoute user={user}>
+          {userRole === "athlete" ? (
+          <SimilarTeammatesPage />
+          ) : (
+          <Navigate to="/dashboard" replace />
+        )}
           </ProtectedRoute>
         ),
       },

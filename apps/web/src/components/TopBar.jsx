@@ -48,6 +48,7 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "lineup-builder" ||
     activeTab === "split-calculator" || 
     activeTab === "data-reports" ||
+    activeTab === "similar-teammates" ||
     activeTab === "view-athlete-practices" ||
     activeTab === "weight-info" ||
     activeTab === "coach-weight-info";
@@ -120,6 +121,7 @@ function DropdownMenu({ user, activeTab }) {
     menuItems.push({ path: "/athlete-tools", label: "Tools", activeTab: "athlete-tools" });
     menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
     menuItems.push({ path: "/compare-results", label: "Compare Results", activeTab: "compare-results" });
+    menuItems.push({ path: "/similar-teammates", label: "Similar Teammates", activeTab: "similar-teammates" });
   }
   
   // Results - Available to both

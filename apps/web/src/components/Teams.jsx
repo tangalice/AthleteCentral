@@ -133,8 +133,23 @@ export default function Teams() {
         athletes: newTeam.selectedUsers.map(u => u.id)
       };
 
-      await addDoc(collection(db, "teams"), teamData);
+       // Create team
+      const teamRef = await addDoc(collection(db, "teams"), teamData);
+      const teamId = teamRef.id;
+
+      // Update coach (creator)
+      await updateDoc(doc(db, "users", user.uid), {
+        teamId,
+      });
       
+      // Update selected athletes
+      await Promise.all(
+        newTeam.selectedUsers.map((athlete) =>
+          updateDoc(doc(db, "users", athlete.id), {
+          teamId,
+          })
+        )
+      );
       // Send email notifications to athletes who were added to the team (fire and forget)
       newTeam.selectedUsers.forEach(async (athlete) => {
         try {
@@ -197,6 +212,11 @@ export default function Teams() {
       }
 
       await updateDoc(doc(db, "teams", teamDoc.id), updateData);
+
+      // Assign teamId to the user
+      await updateDoc(doc(db, "users", user.uid), {
+        teamId: teamDoc.id,
+      });
 
       setMessage("Successfully joined team!");
       setJoinCode("");
@@ -266,6 +286,14 @@ export default function Teams() {
         athletes: arrayRemove(user.uid),
         coaches: arrayRemove(user.uid)
       });
+
+      // Remove teamId from user if this is their current team
+      const userDocSnap = await getDoc(doc(db, "users", user.uid));
+      if (userDocSnap.exists() && userDocSnap.data().teamId === teamId) {
+        await updateDoc(doc(db, "users", user.uid), {
+        teamId: null,
+        });
+      }
       
       setMessage("Left team successfully");
     } catch (error) {
