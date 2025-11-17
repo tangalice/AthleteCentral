@@ -210,6 +210,48 @@ service cloud.firestore {
         }
       }
     }
+    
+        match /workouts/{workoutId} {
+      // Allow read if user is part of the same team as the workout
+      // For collection queries, Firestore evaluates this rule for each document
+      allow read: if isVerifiedUser() &&
+                  (
+                    // User is the owner of the workout
+                    request.auth.uid == resource.data.userId ||
+                    // User is part of the same team (check members, athletes, or coaches arrays)
+                    (
+                      resource.data.teamId != null &&
+                      exists(/databases/$(database)/documents/teams/$(resource.data.teamId)) &&
+                      (
+                        request.auth.uid in get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.members ||
+                        request.auth.uid in get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.athletes ||
+                        request.auth.uid in get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.coaches
+                      )
+                    )
+                  );
+
+      // Allow athletes to create workouts for themselves
+      allow create: if isVerifiedUser() &&
+                    !isCoach(request.auth.uid) &&
+                    request.auth.uid == request.resource.data.userId &&
+                    request.resource.data.teamId != null &&
+                    (
+                      // User must be part of the team they're logging the workout for
+                      (
+                        exists(/databases/$(database)/documents/teams/$(request.resource.data.teamId)) &&
+                        (
+                          request.auth.uid in get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.members ||
+                          request.auth.uid in get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.athletes
+                        )
+                      )
+                    );
+
+      // Allow athletes to update/delete their own workouts
+      allow update, delete: if isVerifiedUser() &&
+                             request.auth.uid == resource.data.userId;
+
+      // Allow coaches to read workouts from their teams (already covered in read rule above)
+    }
 
     match /feedbackPolls/{pollId} {
       allow read: if isVerifiedUser();

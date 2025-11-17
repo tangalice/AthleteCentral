@@ -51,7 +51,8 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "similar-teammates" ||
     activeTab === "view-athlete-practices" ||
     activeTab === "weight-info" ||
-    activeTab === "coach-weight-info";
+    activeTab === "coach-weight-info" ||
+    activeTab === "log-workout";
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -115,6 +116,11 @@ function DropdownMenu({ user, activeTab }) {
   
   // Activity - Available to both
   menuItems.push({ path: "/activity", label: "Activity", activeTab: "activity" });
+  
+  // Log Workout - Athlete only
+  if (user?.role === "athlete") {
+    menuItems.push({ path: "/log-workout", label: "Log Workout", activeTab: "log-workout" });
+  }
   
   // Tools - Athlete only
   if (user?.role === "athlete") {

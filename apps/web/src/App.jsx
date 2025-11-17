@@ -59,6 +59,7 @@ import Activity from "./components/Activity";
 import CoachDataReports from "./components/CoachDataReports";
 import HealthAndAvailability from "./components/HealthAndAvailability";
 import AttendanceHistory from "./components/AttendanceHistory";
+import LogWorkout from "./components/LogWorkout";
 
 import GroupPerformance from './Billa_UI_Pages/Rowing_Stories/GroupPerformance';
 import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
@@ -230,6 +231,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "similar-teammates" ? "similar-teammates" :
     root === "weight-info" ? "weight-info" :
 root === "coach-weight-info" ? "coach-weight-info" :
+    root === "log-workout" ? "log-workout" :
     "dashboard";
 
   return (
@@ -696,6 +698,18 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <Activity userRole={userRole} user={mergedUser} />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "log-workout",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? (
+              <LogWorkout userRole={userRole} user={mergedUser} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
           </ProtectedRoute>
         ),
       },

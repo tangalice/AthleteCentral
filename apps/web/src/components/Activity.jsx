@@ -157,61 +157,50 @@ export default function Activity({ userRole, user }) {
           }
         }
 
-        // Add mock workout logs for Alice Tang of Team Alice so the feed has workout examples
-        const aliceEmail = "tang.alice.000@gmail.com";
-        const aliceUser = users.find(
-          (u) => (u.email || "").toLowerCase() === aliceEmail.toLowerCase()
-        );
-        const aliceUserId = aliceUser?.id || "mock-alice-tang";
-        const aliceUserName = aliceUser?.displayName || aliceUser?.name || "Alice Tang";
-        const aliceTeam = teams.find(
-          (team) => (team.name || "").toLowerCase() === "team alice"
-        );
-        const aliceTeamId = aliceTeam?.id || "mock-team-alice";
-        const aliceTeamName = aliceTeam?.name || "Team Alice";
-
-        const mockWorkoutTemplates = [
-          {
-            id: "sprint",
-            name: "Sprint Workout",
-            notes: "Explosive 6x200m sprints with full recovery.",
-            duration: 30,
-            daysAgo: 1,
-          },
-          {
-            id: "tempo",
-            name: "Tempo Run",
-            notes: "4 mile tempo run at threshold pace.",
-            duration: 40,
-            daysAgo: 3,
-          },
-          {
-            id: "strength",
-            name: "Strength Session",
-            notes: "Lower-body strength circuit with plyometrics.",
-            duration: 50,
-            daysAgo: 5,
-          },
-        ];
-
-        mockWorkoutTemplates.forEach((template) => {
-          const activityDate = new Date();
-          activityDate.setDate(activityDate.getDate() - template.daysAgo);
-          activitiesList.push({
-            id: `mock-workout-${template.id}-${aliceUserId}`,
-            userId: aliceUserId,
-            userName: aliceUserName,
-            userEmail: aliceEmail,
-            teamId: aliceTeamId,
-            teamName: aliceTeamName,
-            activityType: "workout",
-            activityName: template.name,
-            duration: template.duration,
-            date: activityDate,
-            status: "completed",
-            notes: template.notes,
-          });
-        });
+        // Fetch real workout data from Firestore
+        try {
+          // Get team IDs the user is part of
+          const teamIds = teams.map(t => t.id);
+          
+          // Fetch workouts for teams the user is part of
+          // We'll query workouts where teamId is in the user's teams
+          const workoutsQuery = query(
+            collection(db, "workouts"),
+            orderBy("dateTime", "desc")
+          );
+          const workoutsSnapshot = await getDocs(workoutsQuery);
+          
+          for (const workoutDoc of workoutsSnapshot.docs) {
+            const workoutData = workoutDoc.data();
+            
+            // Only include workouts from teams the user is part of
+            if (teamIds.includes(workoutData.teamId)) {
+              const workoutDate = workoutData.dateTime?.toDate?.() || workoutData.dateTime || null;
+              
+              if (!workoutDate) continue; // Skip workouts without dates
+              
+              // Get user details (use cached data if available, otherwise fetch)
+              const userDetails = await getUserDetails(workoutData.userId);
+              
+              activitiesList.push({
+                id: `workout-${workoutDoc.id}`,
+                userId: workoutData.userId,
+                userName: workoutData.userName || userDetails.userName,
+                userEmail: workoutData.userEmail || userDetails.userEmail,
+                teamId: workoutData.teamId,
+                teamName: workoutData.teamName || 'Team',
+                activityType: "workout",
+                activityName: workoutData.workoutType || 'Workout',
+                duration: workoutData.duration || 0,
+                date: workoutDate,
+                status: workoutData.status || "completed",
+                notes: workoutData.notes || "",
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching workouts:", error);
+        }
 
         // Sort by date (most recent first)
         activitiesList.sort((a, b) => new Date(b.date) - new Date(a.date));
