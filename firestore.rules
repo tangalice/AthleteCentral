@@ -21,6 +21,12 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(uid)).data.role == "coach";
     }
 
+    function isParticipant(participants) {
+      return isAuthed() &&
+             participants != null &&
+             participants.hasAny([request.auth.uid]);
+    }
+
     /* Can only check team membership INSIDE a match block — cannot use function args */
 
     /* ======================= USERS COLLECTION ======================= */
@@ -165,19 +171,18 @@ service cloud.firestore {
     }
 
     match /chats/{chatId} {
-      allow read: if isVerifiedUser() && isParticipant(resource.data.participants);
-      allow create: if isVerifiedUser() &&
-                    isParticipant(request.resource.data.participants) &&
+      allow read: if isParticipant(resource.data.participants);
+      allow create: if isParticipant(request.resource.data.participants) &&
                     request.resource.data.participants.size() >= 2;
-      allow update, delete: if isVerifiedUser() && isParticipant(resource.data.participants);
+      allow update, delete: if isParticipant(resource.data.participants);
     }
 
     match /messages/{messageId} {
-      allow read: if isVerifiedUser();
-      allow create: if isVerifiedUser() &&
+      allow read: if isAuthed();
+      allow create: if isAuthed() &&
                     request.auth.uid == request.resource.data.senderId &&
                     request.resource.data.timestamp != null;
-      allow update, delete: if isVerifiedUser() &&
+      allow update, delete: if isAuthed() &&
                              request.auth.uid == resource.data.senderId;
     }
 
@@ -208,13 +213,41 @@ service cloud.firestore {
         match /attendance/{attendanceId} {
           allow read, create, update, delete: if isCoach(request.auth.uid);
         }
+        
+        match /reflections/{athleteId} {
+        allow read: if exists(/databases/$(database)/documents/teams/$(teamId)) &&
+                    request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members &&
+                    (
+                        athleteId == request.auth.uid || 
+                        isCoach(request.auth.uid)
+                    );
+
+        allow create, update: if isVerifiedUser() && 
+                              !isCoach(request.auth.uid) && 
+                              athleteId == request.auth.uid;
+
+        allow update: if isVerifiedUser() && 
+                      isCoach(request.auth.uid) &&
+                      request.auth.uid != athleteId &&
+                      request.resource.data.keys().hasOnly(['coachFeedbackUpdatedAt']); 
+    
+        
+        match /coachFeedback/{coachId} {
+            allow read: if exists(/databases/$(database)/documents/teams/$(teamId)) &&
+                        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members;
+
+            allow write: if isVerifiedUser() && 
+                         isCoach(request.auth.uid) &&
+                         coachId == request.auth.uid;
+        }
+    	}
       }
     }
     
         match /workouts/{workoutId} {
       // Allow read if user is part of the same team as the workout
       // For collection queries, Firestore evaluates this rule for each document
-      allow read: if isVerifiedUser() &&
+      allow read: if isAuthed() &&
                   (
                     // User is the owner of the workout
                     request.auth.uid == resource.data.userId ||
@@ -231,7 +264,7 @@ service cloud.firestore {
                   );
 
       // Allow athletes to create workouts for themselves
-      allow create: if isVerifiedUser() &&
+      allow create: if isAuthed() &&
                     !isCoach(request.auth.uid) &&
                     request.auth.uid == request.resource.data.userId &&
                     request.resource.data.teamId != null &&
@@ -247,7 +280,7 @@ service cloud.firestore {
                     );
 
       // Allow athletes to update/delete their own workouts
-      allow update, delete: if isVerifiedUser() &&
+      allow update, delete: if isAuthed() &&
                              request.auth.uid == resource.data.userId;
 
       // Allow coaches to read workouts from their teams (already covered in read rule above)

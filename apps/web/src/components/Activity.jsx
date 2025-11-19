@@ -30,7 +30,9 @@ export default function Activity({ userRole, user }) {
       if (!auth.currentUser) return;
 
       try {
-        const teamsQuery = query(
+        const teamsData = [];
+
+        const primaryQuery = query(
           collection(db, "teams"),
           where(
             userRole === "coach" ? "coaches" : "athletes",
@@ -38,8 +40,25 @@ export default function Activity({ userRole, user }) {
             auth.currentUser.uid
           )
         );
-        const snapshot = await getDocs(teamsQuery);
-        const teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const primarySnapshot = await getDocs(primaryQuery);
+        primarySnapshot.forEach(docSnap => {
+          teamsData.push({ id: docSnap.id, ...docSnap.data() });
+        });
+
+        // Some teams still use `members` for athlete membership, so check that as well
+        if (userRole === "athlete") {
+          const membersQuery = query(
+            collection(db, "teams"),
+            where("members", "array-contains", auth.currentUser.uid)
+          );
+          const membersSnapshot = await getDocs(membersQuery);
+          membersSnapshot.forEach(docSnap => {
+            if (!teamsData.find(team => team.id === docSnap.id)) {
+              teamsData.push({ id: docSnap.id, ...docSnap.data() });
+            }
+          });
+        }
+
         setTeams(teamsData);
       } catch (error) {
         console.error("Error fetching teams:", error);
@@ -157,38 +176,31 @@ export default function Activity({ userRole, user }) {
           }
         }
 
-        // Fetch real workout data from Firestore
+        // Fetch real workout data from Firestore per team to satisfy security rules
         try {
-          // Get team IDs the user is part of
-          const teamIds = teams.map(t => t.id);
-          
-          // Fetch workouts for teams the user is part of
-          // We'll query workouts where teamId is in the user's teams
-          const workoutsQuery = query(
-            collection(db, "workouts"),
-            orderBy("dateTime", "desc")
-          );
-          const workoutsSnapshot = await getDocs(workoutsQuery);
-          
-          for (const workoutDoc of workoutsSnapshot.docs) {
-            const workoutData = workoutDoc.data();
-            
-            // Only include workouts from teams the user is part of
-            if (teamIds.includes(workoutData.teamId)) {
+          for (const team of teams) {
+            const workoutsQuery = query(
+              collection(db, "workouts"),
+              where("teamId", "==", team.id)
+            );
+            const workoutsSnapshot = await getDocs(workoutsQuery);
+
+            for (const workoutDoc of workoutsSnapshot.docs) {
+              const workoutData = workoutDoc.data();
               const workoutDate = workoutData.dateTime?.toDate?.() || workoutData.dateTime || null;
-              
+
               if (!workoutDate) continue; // Skip workouts without dates
-              
+
               // Get user details (use cached data if available, otherwise fetch)
               const userDetails = await getUserDetails(workoutData.userId);
-              
+
               activitiesList.push({
                 id: `workout-${workoutDoc.id}`,
                 userId: workoutData.userId,
                 userName: workoutData.userName || userDetails.userName,
                 userEmail: workoutData.userEmail || userDetails.userEmail,
                 teamId: workoutData.teamId,
-                teamName: workoutData.teamName || 'Team',
+                teamName: workoutData.teamName || team.name || 'Team',
                 activityType: "workout",
                 activityName: workoutData.workoutType || 'Workout',
                 duration: workoutData.duration || 0,
