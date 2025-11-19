@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { sendEmailNotificationToMultiple } from "../services/EmailNotificationService";
 import EventAttendance from "./EventAttendance"; // Preserved Attendance Component
+import PracticeDurationTracker from "./PracticeDurationTracker";
 
 // Import centralized services/constants
 import { ATTENDANCE_CONFIG } from "../constants/constants";
@@ -66,6 +67,8 @@ export default function Calendar({ userRole }) {
   // --- Attendance State (Preserved) ---
   const [showAttendance, setShowAttendance] = useState(false);
   const [attendanceEvent, setAttendanceEvent] = useState(null);
+  const [showDurationTracker, setShowDurationTracker] = useState(false);
+  const [durationEvent, setDurationEvent] = useState(null);
 
   // --- Reflection Log & Comment State ---
   const [showReflection, setShowReflection] = useState(false);
@@ -206,6 +209,7 @@ export default function Calendar({ userRole }) {
         title: createForm.title.trim(), description: createForm.description.trim(), type: createForm.type, datetime: Timestamp.fromDate(dt),
         assignedMemberIds: createAssigned.slice(), createdBy: me, createdAt: Timestamp.fromDate(new Date()),
         attendanceSummary: { present: 0, total: attendanceTotal, rate: 0 }, attendanceRecords: {},
+        durationRecords: {}, durationSummary: { totalDuration: 0, athleteCount: 0 },
       });
       
       closeCreate();
@@ -246,6 +250,8 @@ export default function Calendar({ userRole }) {
   // --- Attendance Functions (Preserved) ---
   const openAttendance = (ev) => { setAttendanceEvent(ev); setShowAttendance(true); };
   const closeAttendance = () => setShowAttendance(false);
+  const openDurationTracker = (ev) => { setDurationEvent(ev); setShowDurationTracker(true); };
+  const closeDurationTracker = () => setShowDurationTracker(false);
 
   /* ========== Reflection & Feedback Logic ========== */
 
@@ -482,10 +488,13 @@ export default function Calendar({ userRole }) {
                   {ev.description && <p style={{ margin:0, color:"#4b5563", fontSize:14 }}>{ev.description}</p>}
                 </div>
                 
-                <div style={{ display:"flex", gap:8 }}>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                   {isCoach && (
                     <>
                       <button className="btn" onClick={()=>openAttendance(ev)} style={{ border:"1px solid var(--border)", background:"var(--surface)" }}>Track Attendance</button>
+                      {(ev.type || "").toLowerCase() === "practice" && (
+                        <button className="btn" onClick={()=>openDurationTracker(ev)} style={{ border:"1px solid var(--border)", background:"var(--surface)" }}>Track Duration</button>
+                      )}
                       <button className="btn" onClick={()=>openEdit(ev)} style={{ border:"1px solid var(--border)", background:"var(--surface)" }}>Edit</button>
                       <button className="btn" onClick={()=>deleteEvent(ev)} style={{ border:"1px solid #ef4444", color:"#ef4444", background:"var(--surface)" }}>Delete</button>
                     </>
@@ -509,9 +518,12 @@ export default function Calendar({ userRole }) {
                 {ev.datetime && <p className="text-muted" style={{ margin:"6px 0 0", fontSize:14 }}>{ev.datetime.toLocaleString()}</p>}
               </div>
               
-              <div style={{ display:"flex", gap:8 }}>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {isCoach ? (
                   <>
+                    {(ev.type || "").toLowerCase() === "practice" && (
+                      <button className="btn" onClick={()=>openDurationTracker(ev)} style={{ border:"1px solid var(--border)", background:"var(--surface)" }}>Track Duration</button>
+                    )}
                     <button className="btn btn-primary" onClick={() => openReflectionOverview(ev)} style={{ fontSize: 14 }}>View Reflections</button>
                     <button className="btn" onClick={()=>openAttendance(ev)} style={{ border:"1px solid var(--border)", background:"var(--surface)" }}>View Attendance</button>
                     <button className="btn" onClick={()=>deleteEvent(ev)} style={{ border:"1px solid #ef4444", color:"#ef4444", background:"var(--surface)" }}>Delete</button>
@@ -594,6 +606,19 @@ export default function Calendar({ userRole }) {
           </div>
           <div style={{ overflow:"auto" }}>
             <EventAttendance isCoach={isCoach} teamId={teamId} eventId={attendanceEvent.id} />
+          </div>
+        </div>
+      )}
+
+      {/* Duration Tracker Drawer */}
+      {showDurationTracker && durationEvent && (
+        <div style={{ position:"fixed", top:0, right:0, bottom:0, width:"min(520px, 100%)", background:"var(--surface)", borderLeft:"1px solid var(--border)", boxShadow:"-8px 0 24px rgba(0,0,0,.08)", zIndex:41, display:"flex", flexDirection:"column" }}>
+          <div style={{ padding:12, borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <strong>Practice Duration Tracker</strong>
+            <button className="btn" onClick={closeDurationTracker} style={{ border:"1px solid var(--border)", background:"var(--surface)" }}>Close</button>
+          </div>
+          <div style={{ overflow:"auto" }}>
+            <PracticeDurationTracker isCoach={isCoach} teamId={teamId} eventId={durationEvent.id} />
           </div>
         </div>
       )}
