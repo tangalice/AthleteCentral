@@ -45,6 +45,7 @@ import CompareResultsPage from "./pages/CompareResultsPage";
 import CreateFeedbackPoll from "./pages/CreateFeedbackPoll";
 import FeedbackSummaryPage from "./pages/FeedbackSummaryPage";
 import AthleteFeedback from "./pages/AthleteFeedback";
+import CoachViewPredictions from "./pages/CoachViewPredictions";
 import SimilarTeammatesPage from "./components/SimilarTeammatesPage";
 
 import Results from './Billa_UI_Pages/Results';
@@ -219,6 +220,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "coach-feedback" ? "coach-feedback" :
     root === "split-calculator" ? "split-calculator" : 
     root === "data-reports" ? "data-reports" :
+    root === "coach-view-predictions" ? "coach-view-predictions" :
     root === "athlete-feedback" ? "athlete-feedback" :
     root === "suggest-goals" ? "suggest-goals" :
     root === "health-availability" ? "health-availability" :
@@ -548,6 +550,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             {userRole === "coach" ? <FeedbackSummaryPage coach={user} /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "coach-view-predictions",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? (<CoachViewPredictions />) : (<Navigate to="/dashboard" replace />)}
           </ProtectedRoute>
         ),
       },
