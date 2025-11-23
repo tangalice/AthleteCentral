@@ -5,18 +5,26 @@ import {
   query,
   orderBy,
   getDocs,
+  doc,
+  deleteDoc,
 } from "firebase/firestore";
 
 import { Bar } from "react-chartjs-2";
 import "chart.js/auto";
+import { useNavigate } from "react-router-dom";
 
 export default function FeedbackSummaryPage() {
   const [polls, setPolls] = useState([]);
   const [filter, setFilter] = useState("all");
+  const [loadingDelete, setLoadingDelete] = useState(null); // pollId 正在删除
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function loadPolls() {
-      const qPolls = query(collection(db, "feedbackPolls"), orderBy("deadline", "desc"));
+      const qPolls = query(
+        collection(db, "feedbackPolls"),
+        orderBy("deadline", "desc")
+      );
       const snap = await getDocs(qPolls);
 
       const allPolls = [];
@@ -25,7 +33,7 @@ export default function FeedbackSummaryPage() {
         const poll = { id: docSnap.id, ...docSnap.data() };
 
         // Load responses
-        const responses = await getDocs(
+        const responsesSnap = await getDocs(
           collection(db, "feedbackPolls", poll.id, "responses")
         );
 
@@ -36,25 +44,30 @@ export default function FeedbackSummaryPage() {
         };
         const comments = [];
 
-        responses.forEach((r) => {
+        responsesSnap.forEach((r) => {
           const ans = r.data().answers;
           if (!ans) return;
 
           if (ans.trainingQuality) ratings.training.push(ans.trainingQuality);
           if (ans.teamMorale) ratings.morale.push(ans.teamMorale);
-          if (ans.coachingEffectiveness) ratings.coaching.push(ans.coachingEffectiveness);
+          if (ans.coachingEffectiveness)
+            ratings.coaching.push(ans.coachingEffectiveness);
 
-          if (ans.additionalComments) {
+          // ⭐ 这里改：兼容 openComment / additionalComments
+          const commentText = ans.additionalComments || ans.openComment;
+          if (commentText && commentText.trim() !== "") {
             comments.push({
-              text: ans.additionalComments,
-              date: r.data().submittedAt?.toDate() || null
+              text: commentText,
+              date: r.data().submittedAt?.toDate() || null,
             });
           }
         });
 
         // compute avg
         function avg(arr) {
-          return arr.length === 0 ? null : (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2);
+          return arr.length === 0
+            ? null
+            : (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2);
         }
 
         allPolls.push({
@@ -63,7 +76,7 @@ export default function FeedbackSummaryPage() {
           avgMorale: avg(ratings.morale),
           avgCoaching: avg(ratings.coaching),
           comments,
-          responseCount: responses.size
+          responseCount: responsesSnap.size,
         });
       }
 
@@ -72,6 +85,50 @@ export default function FeedbackSummaryPage() {
 
     loadPolls();
   }, []);
+
+  // 删除 poll（包括 responses 子集合）
+  const handleDeletePoll = async (pollId) => {
+    const ok = window.confirm(
+      "Are you sure you want to delete this poll and all its responses?"
+    );
+    if (!ok) return;
+
+    try {
+      setLoadingDelete(pollId);
+
+      // 1. 删除 responses 子集合
+      const responsesRef = collection(
+        db,
+        "feedbackPolls",
+        pollId,
+        "responses"
+      );
+      const responsesSnap = await getDocs(responsesRef);
+      const deletePromises = [];
+      responsesSnap.forEach((r) => {
+        deletePromises.push(deleteDoc(r.ref));
+      });
+      await Promise.all(deletePromises);
+
+      // 2. 删除 poll 本身
+      await deleteDoc(doc(db, "feedbackPolls", pollId));
+
+      // 3. 从前端 state 移除
+      setPolls((prev) => prev.filter((p) => p.id !== pollId));
+    } catch (err) {
+      console.error("Error deleting poll:", err);
+      alert("Failed to delete poll. Please try again.");
+    } finally {
+      setLoadingDelete(null);
+    }
+  };
+
+  // 编辑 poll：跳转到编辑页面（按你的路由改这行）
+  const handleEditPoll = (pollId) => {
+    // 假设你有一个 /feedback/edit/:pollId 的路由：
+    navigate(`/feedback/edit/${pollId}`);
+    // 如果你的项目是别的路由，比如 /coach/feedback/edit/:id，就改成对应路径
+  };
 
   // 过滤
   const filteredPolls = polls.filter((p) => {
@@ -132,7 +189,14 @@ export default function FeedbackSummaryPage() {
         </select>
       </div>
 
-      <div style={{ marginTop: "2rem", background: "white", padding: "1rem", borderRadius: "12px" }}>
+      <div
+        style={{
+          marginTop: "2rem",
+          background: "white",
+          padding: "1rem",
+          borderRadius: "12px",
+        }}
+      >
         <Bar data={chartData} />
       </div>
 
@@ -169,7 +233,12 @@ export default function FeedbackSummaryPage() {
                   {poll.comments.map((c, idx) => (
                     <div
                       key={idx}
-                      style={{ padding: "0.7rem", background: "white", borderRadius: "6px", marginTop: "0.5rem" }}
+                      style={{
+                        padding: "0.7rem",
+                        background: "white",
+                        borderRadius: "6px",
+                        marginTop: "0.5rem",
+                      }}
                     >
                       <p>{c.text}</p>
                       {c.date && (
@@ -181,6 +250,48 @@ export default function FeedbackSummaryPage() {
                   ))}
                 </>
               )}
+
+              {/* Edit / Delete Buttons */}
+              <div
+                style={{
+                  marginTop: "1rem",
+                  display: "flex",
+                  gap: "0.5rem",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleEditPoll(poll.id)}
+                  style={{
+                    padding: "0.4rem 0.8rem",
+                    borderRadius: "6px",
+                    border: "1px solid #007bff",
+                    background: "white",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  ✏️ Edit Poll
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeletePoll(poll.id)}
+                  disabled={loadingDelete === poll.id}
+                  style={{
+                    padding: "0.4rem 0.8rem",
+                    borderRadius: "6px",
+                    border: "1px solid #dc3545",
+                    background:
+                      loadingDelete === poll.id ? "#f8d7da" : "white",
+                    cursor:
+                      loadingDelete === poll.id ? "not-allowed" : "pointer",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {loadingDelete === poll.id ? "Deleting..." : "🗑 Delete Poll"}
+                </button>
+              </div>
             </div>
           ))
         )}

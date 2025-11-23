@@ -1,13 +1,16 @@
 // src/pages/CreateFeedbackPoll.jsx
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { db, auth } from "../firebase";
 import {
-    collection,
-    addDoc,
-    serverTimestamp,
-    getDocs
-  } from "firebase/firestore";
+  collection,
+  addDoc,
+  serverTimestamp,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+} from "firebase/firestore";
 
 const DEFAULT_QUESTIONS = [
   {
@@ -33,8 +36,9 @@ const DEFAULT_QUESTIONS = [
 ];
 
 export default function CreateFeedbackPoll() {
-
   const navigate = useNavigate();
+  const { pollId } = useParams();          // 从路由拿 pollId
+  const isEdit = !!pollId;                 // 有 pollId 就是编辑模式
 
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -42,12 +46,41 @@ export default function CreateFeedbackPoll() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // ---------- 编辑模式：载入原来的 poll 数据 ----------
+  useEffect(() => {
+    if (!isEdit) return;
 
+    async function loadPoll() {
+      try {
+        const ref = doc(db, "feedbackPolls", pollId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) {
+          alert("Poll not found.");
+          navigate("/feedback");
+          return;
+        }
+        const data = snap.data();
+        setTitle(data.title || "");
+        setQuestions(data.questions || DEFAULT_QUESTIONS);
 
+        const d = data.deadline?.toDate() || new Date();
+        const iso = d.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:mm"
+        setDeadline(iso);
+      } catch (err) {
+        console.error("Error loading poll:", err);
+        alert("Failed to load poll.");
+        navigate("/feedback");
+      }
+    }
+
+    loadPoll();
+  }, [isEdit, pollId, navigate]);
+
+  // ---------- 提交：根据 isEdit 决定是 create 还是 update ----------
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-  
+
     if (!title.trim()) {
       setError("Please enter a poll title.");
       return;
@@ -56,51 +89,60 @@ export default function CreateFeedbackPoll() {
       setError("Please select a deadline.");
       return;
     }
-  
+
     const deadlineDate = new Date(deadline);
-  
+
     try {
       setSaving(true);
-  
-      const coachUid = auth.currentUser.uid;
-  
-      // 取得 coach 所有教的队伍
-      const teamsSnap = await getDocs(collection(db, "teams"));
-      const myTeams = [];
-  
-      teamsSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (
-          (Array.isArray(data.coaches) && data.coaches.includes(coachUid)) ||
-          (Array.isArray(data.coachIds) && data.coachIds.includes(coachUid)) ||
-          (Array.isArray(data.members) && data.members.includes(coachUid))
-        ) {
-          myTeams.push(docSnap.id);
+
+      if (isEdit) {
+        // 📝 编辑模式：只更新必要字段
+        await updateDoc(doc(db, "feedbackPolls", pollId), {
+          title: title.trim(),
+          deadline: deadlineDate,
+          questions,
+        });
+      } else {
+        // 🆕 创建模式：保持你原来的逻辑
+        const coachUid = auth.currentUser.uid;
+
+        // 找出这个 coach 负责的 team
+        const teamsSnap = await getDocs(collection(db, "teams"));
+        const myTeams = [];
+
+        teamsSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (
+            (Array.isArray(data.coaches) && data.coaches.includes(coachUid)) ||
+            (Array.isArray(data.coachIds) && data.coachIds.includes(coachUid)) ||
+            (Array.isArray(data.members) && data.members.includes(coachUid))
+          ) {
+            myTeams.push(docSnap.id);
+          }
+        });
+
+        if (myTeams.length === 0) {
+          setError("You are not a coach of any team.");
+          setSaving(false);
+          return;
         }
-      });
-  
-      if (myTeams.length === 0) {
-        setError("You are not a coach of any team.");
-        setSaving(false);
-        return;
+
+        await addDoc(collection(db, "feedbackPolls"), {
+          title: title.trim(),
+          questions,
+          deadline: deadlineDate,
+          createdAt: serverTimestamp(),
+          createdBy: coachUid,
+          status: "open",
+          teamIds: myTeams,
+        });
       }
-  
-      // ⭐⭐⭐ 最重要：写入 Firestore
-      await addDoc(collection(db, "feedbackPolls"), {
-        title: title.trim(),
-        questions,
-        deadline: deadlineDate,
-        createdAt: serverTimestamp(),
-        createdBy: coachUid,
-        status: "open",
-        teamIds: myTeams,
-      });
-  
-      // 成功后跳走
-      navigate("/dashboard");
+
+      // 成功后回到 summary，看见更新后的 poll
+      navigate("/feedback");
     } catch (err) {
-      console.error("Error creating poll:", err);
-      setError("Failed to create poll. Please try again.");
+      console.error("Error saving poll:", err);
+      setError("Failed to save poll. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -108,7 +150,9 @@ export default function CreateFeedbackPoll() {
 
   return (
     <div style={{ maxWidth: "700px", margin: "0 auto", padding: "1.5rem" }}>
-      <h2 style={{ marginBottom: "1rem" }}>Create Feedback Poll</h2>
+      <h2 style={{ marginBottom: "1rem" }}>
+        {isEdit ? "Edit Feedback Poll" : "Create Feedback Poll"}
+      </h2>
       <p style={{ marginBottom: "1rem", color: "#555" }}>
         This poll will be visible to all athletes on this team. Their responses
         will be anonymous.
@@ -174,7 +218,7 @@ export default function CreateFeedbackPoll() {
           />
         </div>
 
-        {/* 问题预览（简单展示，暂时不做编辑逻辑） */}
+        {/* 问题预览 */}
         <div style={{ marginBottom: "1rem" }}>
           <p style={{ fontWeight: "bold", marginBottom: "0.5rem" }}>
             Questions (preview)
@@ -189,7 +233,6 @@ export default function CreateFeedbackPoll() {
               </li>
             ))}
           </ul>
-          {/* 如果以后要做自定义问题，就在这里加“Add question” UI */}
         </div>
 
         {/* 按钮区 */}
@@ -214,7 +257,13 @@ export default function CreateFeedbackPoll() {
               fontWeight: 600,
             }}
           >
-            {saving ? "Creating..." : "Create Poll"}
+            {saving
+              ? isEdit
+                ? "Saving..."
+                : "Creating..."
+              : isEdit
+              ? "Save Changes"
+              : "Create Poll"}
           </button>
 
           <button

@@ -546,6 +546,18 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "feedback/edit/:pollId",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? (
+              <CreateFeedbackPoll />  
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "coach-feedback",
         element: (
           <ProtectedRoute user={user}>

@@ -12,7 +12,9 @@ import {
   orderBy,
   doc,
   getDoc,
-  updateDoc
+  updateDoc,
+  setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { checkAndNotifyIncompleteProfile } from "../services/EmailNotificationService";
 
@@ -429,7 +431,25 @@ useEffect(() => {
             <button
               className="btn btn-secondary"
               style={{ marginTop: "0.5rem" }}
-              onClick={() => setExpiredDismissed(true)}
+              onClick={async () => {
+                try {
+                  const uid = auth.currentUser?.uid;
+                  if (uid && expiredPoll) {
+                    await setDoc(
+                      doc(db, "feedbackPolls", expiredPoll.id, "responses", uid),
+                      {
+                        dismissed: true,
+                        dismissedAt: serverTimestamp(),
+                      },
+                      { merge: true } 
+                    );
+                  }
+                } catch (e) {
+                  console.error("Failed to dismiss expired poll:", e);
+                } finally {
+                  setExpiredDismissed(true);
+                }
+              }}
             >
               Dismiss
             </button>
