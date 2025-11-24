@@ -61,8 +61,9 @@ import CoachDataReports from "./components/CoachDataReports";
 import HealthAndAvailability from "./components/HealthAndAvailability";
 import AttendanceHistory from "./components/AttendanceHistory";
 import LogWorkout from "./components/LogWorkout";
-
+import TeammateComparison from './Billa_UI_Pages/TeammateComparison';
 import GroupPerformance from './Billa_UI_Pages/Rowing_Stories/GroupPerformance';
+import TeamRankings from './Billa_UI_Pages/TeamRankings';
 import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
 import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
 
@@ -230,9 +231,11 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "view-athlete-practices" ? "view-athlete-practices" :
     root === "predict-results" ? "predict-results" :
     root === "compare-results" ? "compare-results" :
+    root === "teammate-comparison" ? "teammate-comparison" :
     root === "similar-teammates" ? "similar-teammates" :
     root === "weight-info" ? "weight-info" :
-root === "coach-weight-info" ? "coach-weight-info" :
+    root === "team-rankings" ? "team-rankings" :
+    root === "coach-weight-info" ? "coach-weight-info" :
     root === "log-workout" ? "log-workout" :
     "dashboard";
 
@@ -611,6 +614,30 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <CompareResultsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "teammate-comparison",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? (
+              <TeammateComparison user={mergedUser} userSport={userSport} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "team-rankings",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? (
+              <TeamRankings user={mergedUser} userSport={userSport} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
           </ProtectedRoute>
         ),
       },

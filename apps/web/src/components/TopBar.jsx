@@ -49,6 +49,8 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "split-calculator" || 
     activeTab === "data-reports" ||
     activeTab === "coach-view-predictions" ||
+    activeTab === "teammate-comparison" ||
+    activeTab === "team-rankings" ||
     activeTab === "similar-teammates" ||
     activeTab === "view-athlete-practices" ||
     activeTab === "weight-info" ||
@@ -133,6 +135,9 @@ function DropdownMenu({ user, activeTab }) {
   
   // Results - Available to both
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
+
+  menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
+
   
   // Goals - Different for coach vs athlete
   if (user?.role === "athlete") {
@@ -166,6 +171,14 @@ function DropdownMenu({ user, activeTab }) {
     if (user?.sport?.toLowerCase() === "rowing") {
       menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
     }
+  }
+
+  if (user?.role === "athlete") {
+    menuItems.push({ path: "/athlete-tools", label: "Tools", activeTab: "athlete-tools" });
+    menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
+    menuItems.push({ path: "/compare-results", label: "Compare Results", activeTab: "compare-results" });
+    menuItems.push({ path: "/similar-teammates", label: "Similar Teammates", activeTab: "similar-teammates" });
+    menuItems.push({ path: "/teammate-comparison", label: "Teammate Comparison", activeTab: "teammate-comparison" }); // ADD THIS LINE
   }
 
   
