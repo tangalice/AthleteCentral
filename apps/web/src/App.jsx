@@ -48,6 +48,7 @@ import AthleteFeedback from "./pages/AthleteFeedback";
 import CoachViewPredictions from "./pages/CoachViewPredictions";
 import SimilarTeammatesPage from "./components/SimilarTeammatesPage";
 
+import CreatePoll from "./components/CreatePoll";
 import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
@@ -237,6 +238,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "team-rankings" ? "team-rankings" :
     root === "coach-weight-info" ? "coach-weight-info" :
     root === "log-workout" ? "log-workout" :
+    root === "create-poll" ? "dashboard" :
     "dashboard";
 
   return (
@@ -509,6 +511,14 @@ const router = createBrowserRouter([
             ) : (
               <Navigate to="/dashboard" replace />
             )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "create-poll",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? <CreatePoll /> : <Navigate to="/dashboard" replace />}
           </ProtectedRoute>
         ),
       },
