@@ -106,17 +106,19 @@ useEffect(() => {
   
       const respRef = doc(db, "feedbackPolls", pollId, "responses", me);
       const respSnap = await getDoc(respRef);
+      const respData = respSnap.exists() ? respSnap.data() : null;
+      const dismissed = respData?.dismissed === true;
   
       // 🟥 NEW: expired + not responded → expiredCandidates
       if (deadline < now) {
-        if (!respSnap.exists()) {
-          expiredCandidates.push({ id: pollId, ...poll });  // ⭐ NEW
+        if (!respSnap.exists() && !dismissed) {
+          expiredCandidates.push({ id: pollId, ...poll });
         }
         continue;
       }
   
       // (unchanged) open poll but not responded
-      if (!respSnap.exists()) {
+      if (!respSnap.exists() || dismissed) {
         candidates.push({ id: pollId, ...poll });
       }
     }

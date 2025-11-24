@@ -50,10 +50,11 @@ export default function AthleteFeedback() {
   }, [pollId]);
 
   // Already submitted? (by checking responses count)
+  // Already submitted? (by checking real answers)
   useEffect(() => {
     async function checkSubmission() {
       if (!auth.currentUser) return;
-  
+
       const respRef = doc(
         db,
         "feedbackPolls",
@@ -61,14 +62,27 @@ export default function AthleteFeedback() {
         "responses",
         auth.currentUser.uid
       );
-  
+
       const respSnap = await getDoc(respRef);
-  
+
       if (respSnap.exists()) {
-        setSubmitted(true);   // ⭐ 某个 poll 已提交 → 不显示该 poll
+        const data = respSnap.data() || {};
+        const hasAnswers =
+          data.answers &&
+          typeof data.answers === "object" &&
+          Object.keys(data.answers).length > 0;
+
+        // 只有真正提交过答案才算 submitted
+        if (hasAnswers) {
+          setSubmitted(true);
+        } else {
+          setSubmitted(false); // 例如只存了 dismissed:true 的情况
+        }
+      } else {
+        setSubmitted(false);
       }
     }
-  
+
     checkSubmission();
   }, [pollId]);
 
