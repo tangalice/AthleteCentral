@@ -89,37 +89,121 @@ export default function CompareResultsPage() {
   }, [user, selectedEvent]);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Compare Predicted vs Actual Results</h1>
+    <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "20px" }}>
+      {/* Page Header */}
+      <h2 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "8px", color: "#111827" }}>
+        Compare Predicted vs Actual Results
+      </h2>
+      <p style={{ color: "#6b7280", marginBottom: "30px", fontSize: "15px" }}>
+        View how your predicted times compare to your actual performance results over time.
+      </p>
 
-      {/* Event Selector */}
-      <label className="block font-medium mb-2">Select Event:</label>
-      <select
-        value={selectedEvent}
-        onChange={(e) => setSelectedEvent(e.target.value)}
-        className="border p-2 rounded w-full mb-6"
-      >
-        <option value="">Select Event</option>
-        {events.map((event) => (
-          <option key={event}>{event}</option>
-        ))}
-      </select>
+      {/* Filters */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gap: "16px",
+        marginBottom: "30px",
+        padding: "20px",
+        backgroundColor: "#fff",
+        borderRadius: "12px",
+        border: "1px solid #e5e7eb",
+        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+      }}>
+        <div>
+          <label style={{ 
+            display: "block", 
+            marginBottom: "8px", 
+            fontWeight: "500",
+            color: "#374151",
+            fontSize: "14px"
+          }}>
+            Select Event
+          </label>
+          <select
+            value={selectedEvent}
+            onChange={(e) => setSelectedEvent(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: "8px",
+              border: "1px solid #d1d5db",
+              backgroundColor: "#fff",
+              color: "#111827",
+              fontSize: "14px",
+              outline: "none",
+              cursor: "pointer"
+            }}
+          >
+            <option value="">Select Event</option>
+            {events.map((event) => (
+              <option key={event} value={event}>{event}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Summary Stats */}
+        {comparisons.length > 0 && (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+            backgroundColor: "#f0fdf4",
+            borderRadius: "8px",
+            border: "2px solid #10b981"
+          }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "4px" }}>
+                Comparisons
+              </div>
+              <div style={{ fontSize: "32px", fontWeight: "800", color: "#10b981" }}>
+                {comparisons.length}
+              </div>
+              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>
+                data points
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Chart */}
       {comparisons.length > 0 && (
-        <div
-        className="w-full min-h-[350px] mb-6 bg-white border border-gray-200 rounded-md shadow-sm p-3"
-        style={{ display: "block" }}
-  >
-        <ResponsiveContainer width="100%" height={300}>
+        <div style={{
+          marginBottom: "30px",
+          padding: "20px",
+          backgroundColor: "#fff",
+          borderRadius: "12px",
+          border: "1px solid #e5e7eb",
+          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+        }}>
+          <h3 style={{ fontSize: "18px", fontWeight: "600", marginBottom: "16px", color: "#111827" }}>
+            Performance Trend
+          </h3>
+          <ResponsiveContainer width="100%" height={300}>
             <LineChart data={comparisons} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
-              <CartesianGrid stroke="#eee" strokeDasharray="5 5" />
-              <XAxis dataKey="competitionDate" />
-              <YAxis domain={["auto", "auto"]} />
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="5 5" />
+              <XAxis 
+                dataKey="competitionDate" 
+                tick={{ fontSize: 12, fill: "#6b7280" }}
+                axisLine={{ stroke: "#e5e7eb" }}
+              />
+              <YAxis 
+                domain={["auto", "auto"]} 
+                tick={{ fontSize: 12, fill: "#6b7280" }}
+                axisLine={{ stroke: "#e5e7eb" }}
+              />
               <Tooltip
                 formatter={(value, name) =>
                   [`${value.toFixed(2)}s`, name === "predictedTime" ? "Predicted" : "Actual"]
                 }
+                contentStyle={{
+                  backgroundColor: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "8px",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)"
+                }}
               />
               <Legend />
               <Line
@@ -127,7 +211,7 @@ export default function CompareResultsPage() {
                 dataKey="predictedTime"
                 stroke="#3b82f6"
                 strokeWidth={2}
-                dot={{ r: 4 }}
+                dot={{ r: 4, fill: "#3b82f6" }}
                 name="Predicted"
               />
               <Line
@@ -135,7 +219,7 @@ export default function CompareResultsPage() {
                 dataKey="actualTime"
                 stroke="#10b981"
                 strokeWidth={2}
-                dot={{ r: 4 }}
+                dot={{ r: 4, fill: "#10b981" }}
                 name="Actual"
               />
             </LineChart>
@@ -145,44 +229,96 @@ export default function CompareResultsPage() {
 
       {/* Table */}
       {comparisons.length === 0 ? (
-        <p className="text-gray-600">
-          {selectedEvent
-            ? "No comparisons found for this event yet."
-            : "Select an event to see comparisons."}
-        </p>
+        <div style={{
+          textAlign: "center",
+          padding: "48px 24px",
+          backgroundColor: "#fff",
+          borderRadius: "12px",
+          border: "1px solid #e5e7eb",
+        }}>
+          <p style={{ color: "#111827", fontSize: "16px", fontWeight: "500", marginBottom: "8px" }}>
+            {selectedEvent ? "No Comparisons Found" : "Select an Event"}
+          </p>
+          <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>
+            {selectedEvent
+              ? "No comparisons found for this event yet."
+              : "Select an event to see comparisons between predicted and actual times."}
+          </p>
+        </div>
       ) : (
-        <table className="min-w-full border border-gray-300 rounded-md">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="p-2 text-left border-b">Date</th>
-              <th className="p-2 text-left border-b">Event</th>
-              <th className="p-2 text-left border-b">Predicted Time (s)</th>
-              <th className="p-2 text-left border-b">Actual Time (s)</th>
-              <th className="p-2 text-left border-b">Difference (%)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {comparisons.map((c, idx) => (
-              <tr key={idx} className="hover:bg-gray-50">
-                <td className="p-2 border-b">{c.competitionDate}</td>
-                <td className="p-2 border-b">{c.eventType}</td>
-                <td className="p-2 border-b">{c.predictedTime.toFixed(2)}</td>
-                <td className="p-2 border-b">{c.actualTime.toFixed(2)}</td>
-                <td
-                  className={`p-2 border-b font-semibold ${
-                    c.percentDiff < 3
-                      ? "text-green-600"
-                      : c.percentDiff < 7
-                      ? "text-yellow-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  {c.percentDiff.toFixed(2)}%
-                </td>
+        <div style={{ 
+          backgroundColor: "#fff",
+          borderRadius: "12px",
+          border: "1px solid #e5e7eb",
+          overflow: "hidden"
+        }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ backgroundColor: "#f9fafb", borderBottom: "2px solid #e5e7eb" }}>
+                <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                  Date
+                </th>
+                <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                  Event
+                </th>
+                <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                  Predicted Time
+                </th>
+                <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                  Actual Time
+                </th>
+                <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                  Difference
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {comparisons.map((c, idx) => (
+                <tr 
+                  key={idx}
+                  style={{ 
+                    borderBottom: idx < comparisons.length - 1 ? "1px solid #e5e7eb" : "none",
+                    transition: "background-color 0.2s"
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f9fafb"}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                >
+                  <td style={{ padding: "16px", fontSize: "14px", color: "#6b7280" }}>
+                    {c.competitionDate}
+                  </td>
+                  <td style={{ padding: "16px" }}>
+                    <span style={{
+                      padding: "4px 12px",
+                      backgroundColor: "#e0f2fe",
+                      color: "#0369a1",
+                      borderRadius: "16px",
+                      fontSize: "13px",
+                      fontWeight: "600"
+                    }}>
+                      {c.eventType}
+                    </span>
+                  </td>
+                  <td style={{ padding: "16px", fontSize: "16px", fontWeight: "600", color: "#3b82f6", fontFamily: "monospace" }}>
+                    {c.predictedTime.toFixed(2)}s
+                  </td>
+                  <td style={{ padding: "16px", fontSize: "16px", fontWeight: "600", color: "#10b981", fontFamily: "monospace" }}>
+                    {c.actualTime.toFixed(2)}s
+                  </td>
+                  <td style={{ padding: "16px" }}>
+                    <span style={{
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      color: c.percentDiff < 3 ? "#10b981" : c.percentDiff < 7 ? "#f59e0b" : "#dc2626",
+                      fontFamily: "monospace"
+                    }}>
+                      {c.percentDiff.toFixed(2)}%
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

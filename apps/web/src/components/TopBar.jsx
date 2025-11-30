@@ -50,6 +50,7 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "data-reports" ||
     activeTab === "coach-view-predictions" ||
     activeTab === "teammate-comparison" ||
+    activeTab === "improvement-rates" ||
     activeTab === "team-rankings" ||
     activeTab === "similar-teammates" ||
     activeTab === "view-athlete-practices" ||
@@ -123,6 +124,11 @@ function DropdownMenu({ user, activeTab }) {
   // Log Workout - Athlete only
   if (user?.role === "athlete") {
     menuItems.push({ path: "/log-workout", label: "Log Workout", activeTab: "log-workout" });
+  }
+
+  //Athlete only
+  if (user?.role === "athlete") {
+    menuItems.push({ path: "/improvement-rates", label: "Improvement Rates", activeTab: "improvement-rates" });
   }
   
   // Tools - Athlete only
