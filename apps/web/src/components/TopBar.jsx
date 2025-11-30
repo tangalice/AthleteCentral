@@ -104,6 +104,8 @@ function DropdownMenu({ user, activeTab }) {
     display: isOpen ? "flex" : "none",
     flexDirection: "column",
     padding: "4px 0",
+    maxHeight: "400px",
+    overflowY: "auto",
   };
 
   const dropdownItemStyle = {
