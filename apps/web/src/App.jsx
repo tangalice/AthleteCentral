@@ -67,6 +67,7 @@ import AttendanceHistory from "./components/AttendanceHistory";
 import LogWorkout from "./components/LogWorkout";
 import TeammateComparison from './Billa_UI_Pages/TeammateComparison';
 import GroupPerformance from './Billa_UI_Pages/Rowing_Stories/GroupPerformance';
+import ImprovementRates from './Billa_UI_Pages/ImprovementRates';
 import TeamRankings from './Billa_UI_Pages/TeamRankings';
 import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
 import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
@@ -239,6 +240,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "similar-teammates" ? "similar-teammates" :
     root === "weight-info" ? "weight-info" :
     root === "team-rankings" ? "team-rankings" :
+    root === "improvement-rates" ? "improvement-rates" :
     root === "coach-weight-info" ? "coach-weight-info" :
     root === "log-workout" ? "log-workout" :
     root === "create-team-poll" ? "dashboard" :
@@ -784,6 +786,18 @@ const router = createBrowserRouter([
           <ProtectedRoute user={user}>
             {userRole === "athlete" ? (
               <LogWorkout userRole={userRole} user={mergedUser} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "improvement-rates",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? (
+              <ImprovementRates user={mergedUser} userSport={userSport} />
             ) : (
               <Navigate to="/dashboard" replace />
             )}

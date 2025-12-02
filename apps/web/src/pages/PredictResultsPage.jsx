@@ -124,97 +124,318 @@ export default function PredictResultsPage() {
   const formatDate = (dateString) => {
     if (!dateString) return "";
     const d = new Date(dateString);
-    return d.toLocaleDateString("en-US", { timeZone: "UTC" });
+    return d.toLocaleDateString("en-US", { 
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
   };
 
   /* ------------------- Render UI ------------------- */
   return (
-    <div className="p-6 flex flex-col lg:flex-row gap-6">
-      {/* Left Column: Predictor */}
-      <div className="flex-1 max-w-lg">
-        <h1 className="text-2xl font-bold mb-4">Predict Future Results</h1>
+    <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "20px" }}>
+      {/* Page Header */}
+      <h2 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "8px", color: "#111827" }}>
+        Predict Future Results
+      </h2>
+      <p style={{ color: "#6b7280", marginBottom: "30px", fontSize: "15px" }}>
+        Use your past performance data to predict future competition times with our exponential plateau model.
+      </p>
 
-        <label className="block font-medium">Event:</label>
-        <select
-          value={selectedEvent}
-          onChange={(e) => setSelectedEvent(e.target.value)}
-          className="border p-2 w-full mb-4 rounded"
-        >
-          <option value="">Select Event</option>
-          {events.map((event) => (
-            <option key={event}>{event}</option>
-          ))}
-        </select>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 400px", gap: "24px" }}>
+        {/* Left Column: Predictor */}
+        <div>
+          {/* Input Form */}
+          <div style={{
+            padding: "20px",
+            backgroundColor: "#fff",
+            borderRadius: "12px",
+            border: "1px solid #e5e7eb",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+            marginBottom: "24px"
+          }}>
+            <h3 style={{ fontSize: "18px", fontWeight: "600", marginBottom: "20px", color: "#111827" }}>
+              Create Prediction
+            </h3>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+              <div>
+                <label style={{ 
+                  display: "block", 
+                  marginBottom: "8px", 
+                  fontWeight: "500",
+                  color: "#374151",
+                  fontSize: "14px"
+                }}>
+                  Event
+                </label>
+                <select
+                  value={selectedEvent}
+                  onChange={(e) => setSelectedEvent(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    backgroundColor: "#fff",
+                    color: "#111827",
+                    fontSize: "14px",
+                    outline: "none",
+                    cursor: "pointer"
+                  }}
+                >
+                  <option value="">Select Event</option>
+                  {events.map((event) => (
+                    <option key={event} value={event}>{event}</option>
+                  ))}
+                </select>
+              </div>
 
-        <label className="block font-medium">Competition Date:</label>
-        <input
-          type="date"
-          value={competitionDate}
-          onChange={(e) => setCompetitionDate(e.target.value)}
-          className="border p-2 w-full mb-4 rounded"
-        />
+              <div>
+                <label style={{ 
+                  display: "block", 
+                  marginBottom: "8px", 
+                  fontWeight: "500",
+                  color: "#374151",
+                  fontSize: "14px"
+                }}>
+                  Competition Date
+                </label>
+                <input
+                  type="date"
+                  value={competitionDate}
+                  onChange={(e) => setCompetitionDate(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    backgroundColor: "#fff",
+                    color: "#111827",
+                    fontSize: "14px",
+                    outline: "none"
+                  }}
+                />
+              </div>
+            </div>
 
-        <button
-          onClick={handlePredict}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-        >
-          Predict
-        </button>
+            <button
+              onClick={handlePredict}
+              disabled={!selectedEvent || !competitionDate}
+              style={{
+                padding: "10px 20px",
+                backgroundColor: !selectedEvent || !competitionDate ? "#9ca3af" : "#3b82f6",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "14px",
+                fontWeight: "600",
+                cursor: !selectedEvent || !competitionDate ? "not-allowed" : "pointer",
+                transition: "background-color 0.2s"
+              }}
+              onMouseEnter={(e) => {
+                if (selectedEvent && competitionDate) {
+                  e.currentTarget.style.backgroundColor = "#2563eb";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (selectedEvent && competitionDate) {
+                  e.currentTarget.style.backgroundColor = "#3b82f6";
+                }
+              }}
+            >
+              Generate Prediction
+            </button>
+          </div>
 
-        {prediction && (
-          <div className="mt-6 p-4 bg-gray-100 rounded">
-            <h2 className="text-lg font-semibold">Predicted Result:</h2>
-            <p>
-              For <strong>{selectedEvent}</strong> on{" "}
-              <strong>{formatDate(competitionDate)}</strong>, your predicted time
-              is <strong>{prediction.toFixed(2)} seconds</strong>.
-            </p>
-            <p className="text-sm text-gray-600 mt-1">
-              Modeled with an exponential plateau — improvements flatten as you
-              approach your best possible performance (confidence ±5%).
+          {/* Prediction Result */}
+          {prediction && (
+            <div style={{
+              padding: "24px",
+              backgroundColor: "#f0fdf4",
+              borderRadius: "12px",
+              border: "2px solid #10b981",
+            }}>
+              <h3 style={{ fontSize: "18px", fontWeight: "600", marginBottom: "16px", color: "#111827" }}>
+                Predicted Result
+              </h3>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "16px" }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Event</div>
+                  <span style={{
+                    padding: "4px 12px",
+                    backgroundColor: "#e0f2fe",
+                    color: "#0369a1",
+                    borderRadius: "16px",
+                    fontSize: "13px",
+                    fontWeight: "600"
+                  }}>
+                    {selectedEvent}
+                  </span>
+                </div>
+                
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Date</div>
+                  <div style={{ fontSize: "16px", fontWeight: "600", color: "#111827" }}>
+                    {formatDate(competitionDate)}
+                  </div>
+                </div>
+                
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Predicted Time</div>
+                  <div style={{ fontSize: "24px", fontWeight: "700", color: "#10b981", fontFamily: "monospace" }}>
+                    {prediction.toFixed(2)}s
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                padding: "12px",
+                backgroundColor: "#fff",
+                borderRadius: "8px",
+                border: "1px solid #e5e7eb"
+              }}>
+                <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>
+                  Modeled with an exponential plateau — improvements flatten as you approach your best possible performance (confidence ±5%).
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Empty State when no prediction yet */}
+          {!prediction && (
+            <div style={{
+              textAlign: "center",
+              padding: "48px 24px",
+              backgroundColor: "#fff",
+              borderRadius: "12px",
+              border: "1px solid #e5e7eb",
+            }}>
+              <p style={{ color: "#111827", fontSize: "16px", fontWeight: "500", marginBottom: "8px" }}>
+                No Prediction Generated
+              </p>
+              <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>
+                Select an event and competition date to generate a prediction.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Past Predictions */}
+        <div style={{
+          backgroundColor: "#fff",
+          borderRadius: "12px",
+          border: "1px solid #e5e7eb",
+          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+          overflow: "hidden",
+          maxHeight: "calc(100vh - 200px)",
+          display: "flex",
+          flexDirection: "column"
+        }}>
+          <div style={{
+            padding: "16px 20px",
+            borderBottom: "2px solid #e5e7eb",
+            backgroundColor: "#f9fafb"
+          }}>
+            <h3 style={{ fontSize: "16px", fontWeight: "600", color: "#111827", margin: 0 }}>
+              Past Predictions
+            </h3>
+            <p style={{ fontSize: "13px", color: "#6b7280", margin: "4px 0 0 0" }}>
+              {pastPredictions.length} prediction{pastPredictions.length !== 1 ? 's' : ''} saved
             </p>
           </div>
-        )}
-      </div>
 
-      {/* Right Column: Past Predictions */}
-      <div className="w-full lg:w-1/3 bg-gray-50 p-4 rounded shadow-sm overflow-y-auto max-h-[70vh]">
-        <h2 className="text-lg font-bold mb-2">Past Predictions</h2>
-        {pastPredictions.length === 0 ? (
-          <p className="text-gray-500 text-sm">No predictions yet.</p>
-        ) : (
-          <ul className="divide-y divide-gray-200">
-            {pastPredictions.map((p) => (
-              <li
-                key={p.id}
-                className="py-2 flex justify-between items-center hover:bg-gray-100 rounded px-2"
-              >
-                <div>
-                  <p className="text-sm font-medium">
-                    {p.eventType} – {formatDate(p.competitionDate)}
-                  </p>
-                  <p className="text-gray-700 text-sm">
-                    Predicted:{" "}
-                    <strong>{p.predictedValue?.toFixed(2)}s</strong>
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Saved{" "}
-                    {p.timestamp?.toDate?.().toLocaleDateString?.("en-US", {
-                      timeZone: "UTC",
-                    }) || ""}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDeletePrediction(p.id)}
-                  className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1"
-                  title="Delete prediction"
-                >
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {pastPredictions.length === 0 ? (
+              <div style={{ padding: "32px 20px", textAlign: "center" }}>
+                <p style={{ color: "#6b7280", fontSize: "14px", margin: 0 }}>
+                  No predictions yet.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {pastPredictions.map((p, index) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      padding: "16px 20px",
+                      borderBottom: index < pastPredictions.length - 1 ? "1px solid #e5e7eb" : "none",
+                      transition: "background-color 0.2s"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f9fafb"}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                          <span style={{
+                            padding: "4px 10px",
+                            backgroundColor: "#e0f2fe",
+                            color: "#0369a1",
+                            borderRadius: "12px",
+                            fontSize: "12px",
+                            fontWeight: "600"
+                          }}>
+                            {p.eventType}
+                          </span>
+                          <span style={{ fontSize: "13px", color: "#6b7280" }}>
+                            {formatDate(p.competitionDate)}
+                          </span>
+                        </div>
+                        
+                        <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+                          <span style={{ fontSize: "18px", fontWeight: "700", color: "#111827", fontFamily: "monospace" }}>
+                            {p.predictedValue?.toFixed(2)}s
+                          </span>
+                          <span style={{ fontSize: "12px", color: "#6b7280" }}>
+                            predicted
+                          </span>
+                        </div>
+                        
+                        <p style={{ fontSize: "11px", color: "#9ca3af", marginTop: "4px", margin: "4px 0 0 0" }}>
+                          Saved {p.timestamp?.toDate?.().toLocaleDateString?.("en-US", {
+                            timeZone: "UTC",
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric"
+                          }) || ""}
+                        </p>
+                      </div>
+                      
+                      <button
+                        onClick={() => handleDeletePrediction(p.id)}
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: "transparent",
+                          color: "#dc2626",
+                          border: "1px solid #fecaca",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "500",
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "#fef2f2";
+                          e.currentTarget.style.borderColor = "#dc2626";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                          e.currentTarget.style.borderColor = "#fecaca";
+                        }}
+                        title="Delete prediction"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

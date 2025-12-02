@@ -1,7 +1,4 @@
 // src/components/Dashboard.jsx
-// Enhanced with User Story #42 - Team Polls for Athletes
-// Keeps existing feedbackPolls functionality intact
-
 import { useLoaderData, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, db } from "../firebase";

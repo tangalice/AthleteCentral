@@ -96,12 +96,19 @@ export default function CreateFeedbackPoll() {
       setSaving(true);
 
       if (isEdit) {
-        // 📝 编辑模式：只更新必要字段
-        await updateDoc(doc(db, "feedbackPolls", pollId), {
+        const now = new Date();
+        const updateData = {
           title: title.trim(),
           deadline: deadlineDate,
           questions,
-        });
+        };
+      
+        // ⭐ 如果 coach 把 deadline 改到将来，就重新把 poll 打开
+        if (deadlineDate > now) {
+          updateData.status = "open";
+        }
+      
+        await updateDoc(doc(db, "feedbackPolls", pollId), updateData);
       } else {
         // 🆕 创建模式：保持你原来的逻辑
         const coachUid = auth.currentUser.uid;
