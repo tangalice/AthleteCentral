@@ -48,7 +48,10 @@ import AthleteFeedback from "./pages/AthleteFeedback";
 import CoachViewPredictions from "./pages/CoachViewPredictions";
 import SimilarTeammatesPage from "./components/SimilarTeammatesPage";
 
-import CreatePoll from "./components/CreatePoll";
+import CreateTeamPoll from "./components/CreateTeamPoll";
+import TeamPollList from "./components/TeamPollList";
+import TeamPollVote from "./components/TeamPollVote";
+
 import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
@@ -238,7 +241,9 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "team-rankings" ? "team-rankings" :
     root === "coach-weight-info" ? "coach-weight-info" :
     root === "log-workout" ? "log-workout" :
-    root === "create-poll" ? "dashboard" :
+    root === "create-team-poll" ? "dashboard" :
+    root === "team-polls" ? "dashboard" :
+    root === "team-poll" ? "dashboard" :
     "dashboard";
 
   return (
@@ -515,14 +520,6 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "create-poll",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <CreatePoll /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-      {
         path: "feedback-summary",
         element: (
           <ProtectedRoute user={user}>
@@ -570,11 +567,32 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // Coach: Create new team poll
       {
-        path: "coach-feedback",
+        path: "create-team-poll",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "coach" ? <FeedbackSummaryPage coach={user} /> : <Navigate to="/dashboard" replace />}
+            {userRole === "coach" ? <CreateTeamPoll /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+      },
+      
+      // Coach: View all team polls with results
+      {
+        path: "team-polls",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? <TeamPollList /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+      },
+      
+      // Athlete: Vote on a team poll
+      {
+        path: "team-poll/:pollId",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? <TeamPollVote /> : <Navigate to="/dashboard" replace />}
           </ProtectedRoute>
         ),
       },
@@ -831,16 +849,6 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-
-      {
-        path: "coach-feedback",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <CoachFeedbackPage coach={user} /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-
       {
         path: "data-reports",
         element: (

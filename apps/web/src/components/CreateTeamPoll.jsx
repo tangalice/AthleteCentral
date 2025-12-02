@@ -1,3 +1,7 @@
+// src/components/CreateTeamPoll.jsx
+// User Story #68 - Coach creates polling activities for teams
+// This is a NEW polling system using 'teamPolls' collection, separate from feedbackPolls
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
@@ -11,7 +15,7 @@ import {
   Timestamp 
 } from "firebase/firestore";
 
-export default function CreateFeedbackPoll() {
+export default function CreateTeamPoll() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [teams, setTeams] = useState([]);
@@ -115,25 +119,27 @@ export default function CreateFeedbackPoll() {
     setLoading(true);
 
     try {
+      // Using 'teamPolls' collection - separate from feedbackPolls
       const pollData = {
         title: title.trim(),
         description: description.trim(),
         options: cleanOptions,
         deadline: Timestamp.fromDate(new Date(deadline)),
-        teamIds: selectedTeamIds, // Critical for Dashboard filtering
+        teamIds: selectedTeamIds, 
         createdBy: auth.currentUser.uid,
         createdAt: serverTimestamp(),
         status: "open",
+        // Store vote counts per option for real-time results
+        voteCounts: cleanOptions.map(() => 0),
         totalVotes: 0
       };
 
-      await addDoc(collection(db, "feedbackPolls"), pollData);
+      await addDoc(collection(db, "teamPolls"), pollData);
 
       setMessage({ type: "success", text: "Poll created successfully!" });
       
-      // Navigate back to dashboard after a short delay
       setTimeout(() => {
-        navigate("/");
+        navigate("/team-polls");
       }, 1500);
 
     } catch (error) {
@@ -149,46 +155,56 @@ export default function CreateFeedbackPoll() {
       <div style={{ maxWidth: 700, margin: "0 auto" }}>
         
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <h2>Create New Poll</h2>
+          <h2>Create Team Poll</h2>
           <button className="btn btn-outline" onClick={() => navigate(-1)}>Cancel</button>
         </div>
 
         {message.text && (
-          <div className={`alert ${message.type === "error" ? "alert-danger" : "alert-success"}`} style={{ marginBottom: 20 }}>
+          <div 
+            className={`alert ${message.type === "error" ? "alert-danger" : "alert-success"}`} 
+            style={{ marginBottom: 20 }}
+          >
             {message.text}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="card" style={{ padding: 24 }}>
           
-          {/* 1. Basic Info */}
+          {/* Title */}
           <div className="form-group" style={{ marginBottom: 20 }}>
-            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>Poll Title *</label>
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>
+              Poll Title *
+            </label>
             <input
               type="text"
               className="form-control"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Next Practice Time?"
+              placeholder="e.g., Saturday Practice Time?"
               style={{ width: "100%", padding: 10, borderRadius: 6, border: "1px solid #ccc" }}
             />
           </div>
 
+          {/* Description */}
           <div className="form-group" style={{ marginBottom: 20 }}>
-            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>Description (Optional)</label>
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>
+              Description (Optional)
+            </label>
             <textarea
               className="form-control"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add context for the athletes..."
+              placeholder="Add context for the team..."
               rows={3}
               style={{ width: "100%", padding: 10, borderRadius: 6, border: "1px solid #ccc" }}
             />
           </div>
 
-          {/* 2. Options Logic */}
+          {/* Options */}
           <div className="form-group" style={{ marginBottom: 20 }}>
-            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>Poll Options *</label>
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>
+              Poll Options *
+            </label>
             {options.map((option, index) => (
               <div key={index} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                 <input
@@ -202,8 +218,8 @@ export default function CreateFeedbackPoll() {
                   <button
                     type="button"
                     onClick={() => removeOption(index)}
-                    className="btn btn-outline text-danger"
-                    style={{ padding: "0 15px" }}
+                    className="btn btn-outline"
+                    style={{ padding: "0 15px", color: "#dc2626" }}
                   >
                     ✕
                   </button>
@@ -216,13 +232,15 @@ export default function CreateFeedbackPoll() {
               className="btn btn-secondary"
               style={{ fontSize: 14 }}
             >
-              + Add Another Option
+              + Add Option
             </button>
           </div>
 
-          {/* 3. Deadline */}
+          {/* Deadline */}
           <div className="form-group" style={{ marginBottom: 20 }}>
-            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>Voting Deadline *</label>
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>
+              Voting Deadline *
+            </label>
             <input
               type="datetime-local"
               value={deadline}
@@ -231,15 +249,32 @@ export default function CreateFeedbackPoll() {
             />
           </div>
 
-          {/* 4. Target Teams */}
+          {/* Target Teams */}
           <div className="form-group" style={{ marginBottom: 24 }}>
-            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>Target Teams *</label>
-            <div style={{ border: "1px solid #eee", padding: 12, borderRadius: 8, maxHeight: 150, overflowY: "auto" }}>
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>
+              Target Teams *
+            </label>
+            <div style={{ 
+              border: "1px solid #eee", 
+              padding: 12, 
+              borderRadius: 8, 
+              maxHeight: 150, 
+              overflowY: "auto" 
+            }}>
               {teams.length === 0 ? (
                 <p className="text-muted">No teams found. You need to create a team first.</p>
               ) : (
                 teams.map(team => (
-                  <label key={team.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, cursor: "pointer" }}>
+                  <label 
+                    key={team.id} 
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: 10, 
+                      marginBottom: 8, 
+                      cursor: "pointer" 
+                    }}
+                  >
                     <input
                       type="checkbox"
                       checked={selectedTeamIds.includes(team.id)}
