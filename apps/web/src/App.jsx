@@ -71,6 +71,7 @@ import ImprovementRates from './Billa_UI_Pages/ImprovementRates';
 import TeamRankings from './Billa_UI_Pages/TeamRankings';
 import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
 import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
+import CoachTeamRankings from './Billa_UI_Pages/CoachTeamRankings';
 
 /* ---------------- Protected wrapper ---------------- */
 
@@ -237,6 +238,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "predict-results" ? "predict-results" :
     root === "compare-results" ? "compare-results" :
     root === "teammate-comparison" ? "teammate-comparison" :
+    root === "coach-team-rankings" ? "coach-team-rankings" :
     root === "similar-teammates" ? "similar-teammates" :
     root === "weight-info" ? "weight-info" :
     root === "team-rankings" ? "team-rankings" :
@@ -539,6 +541,18 @@ const router = createBrowserRouter([
           <ProtectedRoute user={user}>
             {userRole === "coach" ? (
               <CreateFeedbackPoll />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "coach-team-rankings",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? (
+              <CoachTeamRankings user={mergedUser} userSport={userSport} />
             ) : (
               <Navigate to="/dashboard" replace />
             )}
