@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   onSnapshot,
   arrayUnion,
+  runTransaction,
 } from "firebase/firestore";
 
 export default function TeamPollVote() {
@@ -118,7 +119,6 @@ export default function TeamPollVote() {
       const pollRef = doc(db, "teamPolls", pollId);
       const responseRef = doc(db, "teamPolls", pollId, "responses", uid);
 
-      // Save the user's response
       await setDoc(responseRef, {
         selectedOption: selectedOption,
         optionText: poll.options[selectedOption],
@@ -126,14 +126,29 @@ export default function TeamPollVote() {
         odUserId: uid,
       });
 
-      // Update poll document: increment vote count for selected option and total
-      const newVoteCounts = [...(poll.voteCounts || poll.options.map(() => 0))];
-      newVoteCounts[selectedOption] = (newVoteCounts[selectedOption] || 0) + 1;
+      await runTransaction(db, async (transaction) => {
+        const pollSnap = await transaction.get(pollRef);
+        if (!pollSnap.exists()) {
+          throw new Error("Poll not found when updating vote counts.");
+        }
 
-      await updateDoc(pollRef, {
-        voteCounts: newVoteCounts,
-        totalVotes: increment(1),
-        voters: arrayUnion(uid),
+        const pollData = pollSnap.data();
+        const optionsArray = pollData.options || [];
+
+        let voteCounts;
+        if (Array.isArray(pollData.voteCounts) && pollData.voteCounts.length === optionsArray.length) {
+          voteCounts = [...pollData.voteCounts];
+        } else {
+          voteCounts = optionsArray.map(() => 0);
+        }
+
+        voteCounts[selectedOption] = (voteCounts[selectedOption] || 0) + 1;
+
+        transaction.update(pollRef, {
+          voteCounts,
+          totalVotes: (pollData.totalVotes || 0) + 1,
+          voters: arrayUnion(uid),
+        });
       });
 
       setHasVoted(true);
