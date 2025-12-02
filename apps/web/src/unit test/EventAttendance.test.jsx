@@ -1,7 +1,6 @@
 /**
- * ✅ Comprehensive Unit Test for EventAttendance.jsx (matches your full component)
+ * ✅ Vitest version of unit tests for EventAttendance.jsx (pure JS)
  * Covers:
- *   - Snapshot & live updates
  *   - Loading & error state
  *   - Member fetching via fetchTeamAthletes
  *   - Coach interaction (status change, note change)
@@ -10,54 +9,57 @@
  */
 
 import React from "react";
-import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
-import "@testing-library/jest-dom";
+import {
+  render,
+  screen,
+  act,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import EventAttendance from "../components/EventAttendance";
 
-// ---------- 🧩 Global mocks ----------
-Object.defineProperty(window, "alert", {
-  writable: true,
-  value: jest.fn(),
-});
+// ---------- 🧩 window.alert mock ----------
+if (!window.alert) {
+  // jsdom 里一般有，这句只是兜底
+  // @ts-ignore  // 这个只是注释，不会出 TS 报错
+  window.alert = () => {};
+}
+vi.spyOn(window, "alert").mockImplementation(() => {});
 
 // ---------- 🔧 Mock firebase + Firestore ----------
-jest.mock("../firebase", () => ({
+
+// mock ../firebase
+vi.mock("../firebase", () => ({
   db: {},
   auth: { currentUser: { uid: "U1", email: "coach@example.com" } },
 }));
 
-const mockOnSnapshot = jest.fn((ref, cb) => {
-  // simulate one event doc snapshot
-  cb({
-    exists: () => true,
-    data: () => ({
-      title: "Morning Practice",
-      datetime: { toDate: () => new Date("2025-11-06T08:00:00") },
-      assignedMemberIds: ["A1", "A2"],
-      attendanceRecords: {
-        A1: { status: "present", note: "On time" },
-        A2: { status: "late", note: "" },
-      },
-    }),
-  });
-  return () => {};
+// 用一个可控的 onSnapshot mock，方便 per-test 改实现
+const mockOnSnapshot = vi.fn();
+
+// Firestore 函数 mock（全部改成没有类型的 JS 写法）
+vi.mock("firebase/firestore", () => {
+  return {
+    doc: vi.fn(() => ({})),
+    getDoc: vi.fn(),
+    setDoc: vi.fn(),
+    getDocs: vi.fn(),
+    query: vi.fn(),
+    where: vi.fn(),
+    collection: vi.fn(),
+    updateDoc: vi.fn(() => Promise.resolve()),
+    // ⬇⬇⬇ 去掉 : any[]
+    onSnapshot: (...args) => mockOnSnapshot(...args),
+  };
 });
 
-jest.mock("firebase/firestore", () => ({
-  doc: jest.fn(() => ({})),
-  getDoc: jest.fn(),
-  setDoc: jest.fn(),
-  getDocs: jest.fn(),
-  query: jest.fn(),
-  where: jest.fn(),
-  collection: jest.fn(),
-  updateDoc: jest.fn(() => Promise.resolve()),
-  onSnapshot: (...args) => mockOnSnapshot(...args),
-}));
-
 // ---------- 👥 Mock teamService ----------
-jest.mock("../services/teamService", () => ({
-  fetchTeamAthletes: jest.fn(() =>
+import { fetchTeamAthletes } from "../services/teamService";
+vi.mock("../services/teamService", () => ({
+  fetchTeamAthletes: vi.fn(() =>
     Promise.resolve([
       { id: "A1", name: "Alice", email: "alice@example.com" },
       { id: "A2", name: "Bob", email: "bob@example.com" },
@@ -66,7 +68,7 @@ jest.mock("../services/teamService", () => ({
 }));
 
 // ---------- 📊 Mock constants ----------
-jest.mock("../constants/constants", () => ({
+vi.mock("../constants/constants", () => ({
   ATTENDANCE_STATUS: {
     PRESENT: "present",
     ABSENT: "absent",
@@ -82,32 +84,59 @@ jest.mock("../constants/constants", () => ({
   },
 }));
 
+// ---------- 🔁 默认的 onSnapshot 实现：返回一个正常的 event ----------
+// ⬇⬇⬇ 去掉 (ref: any, cb: any)
+const defaultOnSnapshotImpl = (ref, cb) => {
+  cb({
+    exists: () => true,
+    data: () => ({
+      title: "Morning Practice",
+      datetime: { toDate: () => new Date("2025-11-06T08:00:00") },
+      assignedMemberIds: ["A1", "A2"],
+      attendanceRecords: {
+        A1: { status: "present", note: "On time" },
+        A2: { status: "late", note: "" },
+      },
+    }),
+  });
+  return () => {};
+};
+
 // ---------- 🧼 beforeEach ----------
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   window.alert.mockClear();
+
+  mockOnSnapshot.mockImplementation(defaultOnSnapshotImpl);
 });
 
 // ---------- 🧪 Tests ----------
+
 describe("📋 EventAttendance Component", () => {
-  test("renders loading state", () => {
-    render(<EventAttendance />);
-    expect(screen.getByText(/Loading event and member details/i)).toBeInTheDocument();
+  it("renders loading state", () => {
+    // 对这个测试，我们让 onSnapshot 不立刻回调，保证 loading 文本可见
+    mockOnSnapshot.mockImplementationOnce(() => () => {});
+
+    render(<EventAttendance eventId="E1" teamId="T1" isCoach={true} />);
+
+    expect(
+      screen.getByText(/Loading event and member details/i)
+    ).toBeInTheDocument();
   });
 
-  test("renders event details and attendance stats", async () => {
+  it("renders event details and attendance stats", async () => {
     render(<EventAttendance eventId="E1" teamId="T1" isCoach={true} />);
 
     await waitFor(() => {
       expect(screen.getByText("Morning Practice")).toBeInTheDocument();
-      expect(screen.getByText(/Assigned Athletes/)).toBeInTheDocument();
-      expect(screen.getByText("Present")).toBeInTheDocument();
-      expect(screen.getByText("Late")).toBeInTheDocument();
+      expect(screen.getByText(/Assigned Athletes/i)).toBeInTheDocument();
+      // 下面两个根据你的组件的具体文案：这里假设有 Present / Late 文字
+      expect(screen.getByText(/Present/i)).toBeInTheDocument();
+      expect(screen.getByText(/Late/i)).toBeInTheDocument();
     });
   });
 
-  test("fetches team athletes through fetchTeamAthletes", async () => {
-    const { fetchTeamAthletes } = require("../services/teamService");
+  it("fetches team athletes through fetchTeamAthletes", async () => {
     render(<EventAttendance eventId="E1" teamId="T1" isCoach={true} />);
 
     await waitFor(() => {
@@ -117,22 +146,51 @@ describe("📋 EventAttendance Component", () => {
     });
   });
 
-  test("coach can change athlete status and add note", async () => {
+  it("coach can change athlete status and add note", async () => {
     render(<EventAttendance eventId="E1" teamId="T1" isCoach={true} />);
 
+    // 等待列表渲染出 Bob
     await waitFor(() => screen.getByText("Bob"));
 
-    const lateBtn = screen.getAllByTitle("Late")[1];
-    act(() => fireEvent.click(lateBtn));
+    // 假设每个状态按钮上有 title="Late" 这样的 tooltip 文案
+    const lateBtnList = screen.getAllByTitle("Late");
+    // 第二个是 Bob 的
+    const lateBtn = lateBtnList[1];
 
-    const noteInput = screen.getAllByPlaceholderText("Note...")[1];
-    act(() => fireEvent.change(noteInput, { target: { value: "Traffic" } }));
+    await act(async () => {
+      fireEvent.click(lateBtn);
+    });
 
+    const noteInputs = screen.getAllByPlaceholderText("Note...");
+    const noteInput = noteInputs[1];
+
+    await act(async () => {
+      fireEvent.change(noteInput, { target: { value: "Traffic" } });
+    });
+
+    // ⬇⬇⬇ 去掉 (noteInput as HTMLInputElement)
     expect(noteInput.value).toBe("Traffic");
   });
 
-  test("calls updateDoc when saving attendance", async () => {
-    const { updateDoc } = require("firebase/firestore");
+  it("calls updateDoc when saving attendance", async () => {
+    const { updateDoc } = await import("firebase/firestore");
+
+    render(<EventAttendance eventId="E1" teamId="T1" isCoach={true} />);
+
+    await waitFor(() => screen.getByText("Save Attendance"));
+
+    const saveBtn = screen.getByText("Save Attendance");
+
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("shows alert when attendance saved successfully", async () => {
     render(<EventAttendance eventId="E1" teamId="T1" isCoach={true} />);
 
     await waitFor(() => screen.getByText("Save Attendance"));
@@ -142,38 +200,25 @@ describe("📋 EventAttendance Component", () => {
       fireEvent.click(saveBtn);
     });
 
-    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1));
+    expect(window.alert).toHaveBeenCalledWith(
+      "Attendance saved successfully!"
+    );
   });
 
-  test("shows alert when attendance saved successfully", async () => {
-    render(<EventAttendance eventId="E1" teamId="T1" isCoach={true} />);
-
-    await waitFor(() => screen.getByText("Save Attendance"));
-    const saveBtn = screen.getByText("Save Attendance");
-
-    await act(async () => fireEvent.click(saveBtn));
-
-    expect(window.alert).toHaveBeenCalledWith("Attendance saved successfully!");
-  });
-
-  test("renders error state if event not found", async () => {
-    // Override the default mock manually — works even if onSnapshot isn't jest.fn()
-    const firestore = require("firebase/firestore");
-    const originalOnSnapshot = firestore.onSnapshot;
-  
-    // Temporarily replace implementation
-    firestore.onSnapshot = (ref, cb) => {
+  it("renders error state if event not found", async () => {
+    // 这次让 onSnapshot 返回不存在的文档
+    // ⬇⬇⬇ 去掉 (ref: any, cb: any)
+    mockOnSnapshot.mockImplementationOnce((ref, cb) => {
       cb({ exists: () => false });
       return () => {};
-    };
-  
-    render(<EventAttendance eventId="bad" teamId="T1" />);
-  
-    await waitFor(() => {
-      expect(screen.getByText(/Error: Event not found/i)).toBeInTheDocument();
     });
-  
-    // Restore original after test
-    firestore.onSnapshot = originalOnSnapshot;
+
+    render(<EventAttendance eventId="bad" teamId="T1" isCoach={true} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Error: Event not found/i)
+      ).toBeInTheDocument();
+    });
   });
 });

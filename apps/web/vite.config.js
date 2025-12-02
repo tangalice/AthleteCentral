@@ -10,4 +10,11 @@ export default defineConfig({
       },
     }),
   ],
+
+  // ⭐ Vitest 配置
+  test: {
+    environment: 'jsdom',           // 让 vitest 有 document / window
+    globals: true,                  // describe / it / expect 变成全局（可选）
+    setupFiles: './src/setupTests.js', // 跑测试前先执行这个文件
+  },
 })
