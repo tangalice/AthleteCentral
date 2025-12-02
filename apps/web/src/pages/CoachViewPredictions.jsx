@@ -132,7 +132,7 @@ export default function CoachViewPredictions() {
                 new Date(ts).toISOString().split("T")[0]
               }
             />
-            <YAxis domain={["dataMin - 5", "dataMax + 5"]} />
+            <YAxis domain={["dataMin - 2", "dataMax + 2"]} />
             <Tooltip
               formatter={(value) => Number(value).toFixed(2)}
               labelFormatter={(ts) =>
