@@ -50,7 +50,9 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "data-reports" ||
     activeTab === "coach-view-predictions" ||
     activeTab === "teammate-comparison" ||
+    activeTab === "improvement-rates" ||
     activeTab === "team-rankings" ||
+    activeTab === "coach-team-rankings" ||
     activeTab === "similar-teammates" ||
     activeTab === "view-athlete-practices" ||
     activeTab === "weight-info" ||
@@ -104,6 +106,8 @@ function DropdownMenu({ user, activeTab }) {
     display: isOpen ? "flex" : "none",
     flexDirection: "column",
     padding: "4px 0",
+    maxHeight: "400px",
+    overflowY: "auto",
   };
 
   const dropdownItemStyle = {
@@ -125,20 +129,21 @@ function DropdownMenu({ user, activeTab }) {
   if (user?.role === "athlete") {
     menuItems.push({ path: "/log-workout", label: "Log Workout", activeTab: "log-workout" });
   }
-  
-  // Tools - Athlete only
+
+  //Athlete only
   if (user?.role === "athlete") {
-    menuItems.push({ path: "/athlete-tools", label: "Tools", activeTab: "athlete-tools" });
-    menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
-    menuItems.push({ path: "/compare-results", label: "Compare Results", activeTab: "compare-results" });
-    menuItems.push({ path: "/similar-teammates", label: "Similar Teammates", activeTab: "similar-teammates" });
+    menuItems.push({ path: "/improvement-rates", label: "Improvement Rates", activeTab: "improvement-rates" });
   }
   
   // Results - Available to both
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
   menuItems.push({ path: "/resources", label: "Resources", activeTab: "resources" });
 
-  menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
+  if (user?.role === "athlete") {
+    menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
+  } else if (user?.role === "coach") {
+    menuItems.push({ path: "/coach-team-rankings", label: "Team Rankings", activeTab: "coach-team-rankings" });
+  }
 
   
   // Goals - Different for coach vs athlete

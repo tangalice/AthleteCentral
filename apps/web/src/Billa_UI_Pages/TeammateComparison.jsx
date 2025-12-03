@@ -272,14 +272,6 @@ export default function TeammateComparison({ user, userSport }) {
   const myTestTypes = [...new Set(myPerformances.map(p => p.testType))].filter(Boolean);
   const teammateTestTypes = [...new Set(teammatePerformances.map(p => p.testType))].filter(Boolean);
   const allTestTypes = [...new Set([...myTestTypes, ...teammateTestTypes])].sort();
-  
-  // Get test types that both athletes have completed WITH VALID TIMES
-  const commonTestTypes = allTestTypes.filter(testType => {
-    const myBest = getPersonalBest(myPerformances, testType);
-    const teammateBest = getPersonalBest(teammatePerformances, testType);
-    // Check if both exist AND have valid time data
-    return myBest && teammateBest && isValidTime(myBest.time) && isValidTime(teammateBest.time);
-  });
 
   const formatTime = (timeValue) => {
     if (!timeValue) return "N/A";
@@ -347,7 +339,7 @@ export default function TeammateComparison({ user, userSport }) {
             teammateCount: teammatePerformances.filter(p => p.testType === testType).length,
           };
         })
-        .filter(row => row.myBest && row.teammateBest && isValidTime(row.myBest.time) && isValidTime(row.teammateBest.time)); // Only show if both have valid time data
+        .filter(row => row.myBest && row.teammateBest && isValidTime(row.myBest.time) && isValidTime(row.teammateBest.time));
     } else {
       // Show recent performances for selected test type
       const myTests = myPerformances.filter(p => p.testType === selectedTestType);
@@ -380,7 +372,7 @@ export default function TeammateComparison({ user, userSport }) {
   }
 
   return (
-    <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "20px" }}>
+    <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "20px" }}>
       {/* Page Header */}
       <h2 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "8px", color: "#111827" }}>
         Teammate Comparison
@@ -392,7 +384,7 @@ export default function TeammateComparison({ user, userSport }) {
       {/* Filters */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
         gap: "16px",
         marginBottom: "30px",
         padding: "20px",
@@ -443,7 +435,7 @@ export default function TeammateComparison({ user, userSport }) {
             color: "#374151",
             fontSize: "14px"
           }}>
-            Test Piece
+            Filter by Test Piece
           </label>
           <select
             value={selectedTestType}
@@ -461,7 +453,7 @@ export default function TeammateComparison({ user, userSport }) {
             }}
           >
             <option value="all">All Test Types (Personal Bests)</option>
-            {commonTestTypes.map(type => (
+            {sportTestTypes.map(type => (
               <option key={type} value={type}>
                 {type}
               </option>
@@ -659,7 +651,7 @@ export default function TeammateComparison({ user, userSport }) {
             <div style={{
               backgroundColor: "#fff",
               borderRadius: "12px",
-              border: "2px solid #10b981",
+              border: "1px solid #e5e7eb",
               padding: "20px"
             }}>
               <h4 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "16px", color: "#111827" }}>
@@ -685,7 +677,7 @@ export default function TeammateComparison({ user, userSport }) {
                           key={perf.id}
                           style={{
                             padding: "12px",
-                            backgroundColor: isBest ? "#d1fae5" : "#f9fafb",
+                            backgroundColor: isBest ? "#f0fdf4" : "#f9fafb",
                             borderRadius: "8px",
                             border: isBest ? "2px solid #10b981" : "1px solid #e5e7eb"
                           }}
@@ -728,7 +720,7 @@ export default function TeammateComparison({ user, userSport }) {
             <div style={{
               backgroundColor: "#fff",
               borderRadius: "12px",
-              border: "2px solid #3b82f6",
+              border: "1px solid #e5e7eb",
               padding: "20px"
             }}>
               <h4 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "16px", color: "#111827" }}>
@@ -754,7 +746,7 @@ export default function TeammateComparison({ user, userSport }) {
                           key={perf.id}
                           style={{
                             padding: "12px",
-                            backgroundColor: isBest ? "#dbeafe" : "#f9fafb",
+                            backgroundColor: isBest ? "#eff6ff" : "#f9fafb",
                             borderRadius: "8px",
                             border: isBest ? "2px solid #3b82f6" : "1px solid #e5e7eb"
                           }}

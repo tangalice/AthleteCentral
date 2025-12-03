@@ -1,5 +1,4 @@
 // src/components/Dashboard.jsx
-// Refactored to use CSS classes from index.css for spacing and alerts.
 import { useLoaderData, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, db } from "../firebase";
@@ -23,7 +22,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const navigate = useNavigate();
   const displayName = data?.displayName || user?.email || "";
 
-  // ... (All state definitions remain the same) ...
+  // Existing state definitions
   const [inTeam, setInTeam] = useState(true);
   const [teamsMeta, setTeamsMeta] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -33,13 +32,16 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const [expiredPoll, setExpiredPoll] = useState(null);
   const [expiredDismissed, setExpiredDismissed] = useState(false);
   
+  // Existing feedbackPolls state (keep as-is)
+  const [openPoll, setOpenPoll] = useState(null);
 
+  // ========== NEW: Team Polls State (User Story #42) ==========
+  const [pendingTeamPolls, setPendingTeamPolls] = useState([]);
 
   const teamIds = useMemo(
     () => teamsMeta.map((t) => t.id).sort(),
     [teamsMeta]
   );
-  
 
   const teamIdsKey = useMemo(() => teamIds.join(","), [teamIds]);
   const teamNameMap = useMemo(() => {
@@ -60,90 +62,162 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
     [teamIds, teamsMeta]
   );
 
-  
   const eventsByTeamRef = useRef({});
-  // ⭐ New athlete poll loader (replacing useOpenPoll)
-const [openPoll, setOpenPoll] = useState(null);
 
-useEffect(() => {
-  if (userRole !== "athlete") return;         // only athletes
-  if (!auth.currentUser) return;
-  if (teamIds.length === 0) {
-    setOpenPoll(null);
-    return;
-  }
-
-  const me = auth.currentUser.uid;
-  const now = new Date();
-
-  async function loadPoll() {
-
-    const qRef = query(
-      collection(db, "feedbackPolls"),
-      where("status", "==", "open")
-    );
-  
-    const snap = await getDocs(qRef);
-    if (snap.empty) {
-      setOpenPoll(null);
-      setExpiredPoll(null);   // ⭐ NEW
+  // ========== NEW: Load Team Polls for Athletes (User Story #42) ==========
+  useEffect(() => {
+    if (userRole !== "athlete") return;
+    if (!auth.currentUser) return;
+    if (teamIds.length === 0) {
+      setPendingTeamPolls([]);
       return;
     }
-  
-    let candidates = [];
-    let expiredCandidates = [];   // ⭐ NEW
-  
-    for (const d of snap.docs) {
-      const poll = d.data();
-      const pollId = d.id;
-  
-      if (!Array.isArray(poll.teamIds)) continue;
-      const inMyTeam = poll.teamIds.some(id => teamIds.includes(id));
-      if (!inMyTeam) continue;
-  
-      const deadline = poll.deadline?.toDate ? poll.deadline.toDate() : null;
-      if (!deadline) continue;
-  
-      const respRef = doc(db, "feedbackPolls", pollId, "responses", me);
-      const respSnap = await getDoc(respRef);
-      const respData = respSnap.exists() ? respSnap.data() : null;
-      const dismissed = respData?.dismissed === true;
-  
-      // 🟥 NEW: expired + not responded → expiredCandidates
-      if (deadline < now) {
-        if (!respSnap.exists() && !dismissed) {
-          expiredCandidates.push({ id: pollId, ...poll });
-        }
-        continue;
+
+    const me = auth.currentUser.uid;
+    const now = new Date();
+
+    // Real-time listener for teamPolls
+    const pollsRef = collection(db, "teamPolls");
+    // Ensure you created the index for 'status' if needed, or query simply and filter in memory if dataset is small
+    const q = query(pollsRef, where("status", "==", "open"));
+
+    const unsub = onSnapshot(q, async (snapshot) => {
+      const pending = [];
+
+      for (const d of snapshot.docs) {
+        const poll = { id: d.id, ...d.data() };
+
+        // Check if poll is for user's team
+        if (!Array.isArray(poll.teamIds)) continue;
+        const inMyTeam = poll.teamIds.some(id => teamIds.includes(id));
+        if (!inMyTeam) continue;
+
+        // Check deadline
+        const deadline = poll.deadline?.toDate ? poll.deadline.toDate() : null;
+        if (!deadline || deadline < now) continue;
+
+        // Check if user has already voted
+        const voters = poll.voters || [];
+        if (voters.includes(me)) continue;
+
+        pending.push(poll);
       }
-  
-      // (unchanged) open poll but not responded
-      if (!respSnap.exists() || dismissed) {
-        candidates.push({ id: pollId, ...poll });
-      }
+
+      // Sort by deadline (earliest first)
+      pending.sort((a, b) => {
+        const aDeadline = a.deadline?.toDate ? a.deadline.toDate() : new Date();
+        const bDeadline = b.deadline?.toDate ? b.deadline.toDate() : new Date();
+        return aDeadline - bDeadline;
+      });
+
+      setPendingTeamPolls(pending);
+    });
+
+    return () => unsub();
+  }, [userRole, teamIds]);
+
+  // ========== Helper: Check if poll is urgent (within 24 hours) ==========
+  const isPollUrgent = (poll) => {
+    if (!poll?.deadline) return false;
+    const deadline = poll.deadline.toDate ? poll.deadline.toDate() : new Date(poll.deadline);
+    const now = new Date();
+    const diffMs = deadline - now;
+    const diffHours = diffMs / (1000 * 60 * 60);
+    return diffHours > 0 && diffHours <= 24;
+  };
+
+  // ========== Helper: Format remaining time ==========
+  const formatTimeRemaining = (poll) => {
+    if (!poll?.deadline) return "";
+    const deadline = poll.deadline.toDate ? poll.deadline.toDate() : new Date(poll.deadline);
+    const now = new Date();
+    const diffMs = deadline - now;
+    
+    if (diffMs <= 0) return "Expired";
+    
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffHours < 24) {
+      return `${diffHours}h ${diffMins}m remaining`;
     }
-  
-    // sort open polls
-    candidates.sort((a, b) => a.deadline.toDate() - b.deadline.toDate());
-    setOpenPoll(candidates[0] || null);
-  
-    // ⭐ NEW: sort expired polls (latest first)
-    expiredCandidates.sort((a, b) => b.deadline.toDate() - a.deadline.toDate());
-  
-    // ⭐ NEW: set the most recent expired poll
-    setExpiredPoll(expiredCandidates[0] || null);
-  }
+    
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} remaining`;
+  };
 
-  loadPoll();
-}, [userRole, teamIds]);
+  // ========== Existing: feedbackPolls loader (keep as-is) ==========
+  useEffect(() => {
+    if (userRole !== "athlete") return;
+    if (!auth.currentUser) return;
+    if (teamIds.length === 0) {
+      setOpenPoll(null);
+      return;
+    }
 
-  
+    const me = auth.currentUser.uid;
+    const now = new Date();
 
-  // ========== Check profile completeness and send notification if needed ==========
+    async function loadPoll() {
+      const qRef = query(
+        collection(db, "feedbackPolls"),
+        where("status", "==", "open")
+      );
+    
+      const snap = await getDocs(qRef);
+      if (snap.empty) {
+        setOpenPoll(null);
+        setExpiredPoll(null);
+        return;
+      }
+    
+      let candidates = [];
+      let expiredCandidates = [];
+    
+      for (const d of snap.docs) {
+        const poll = d.data();
+        const pollId = d.id;
+    
+        if (!Array.isArray(poll.teamIds)) continue;
+        const inMyTeam = poll.teamIds.some(id => teamIds.includes(id));
+        if (!inMyTeam) continue;
+    
+        const deadline = poll.deadline?.toDate ? poll.deadline.toDate() : null;
+        if (!deadline) continue;
+    
+        const respRef = doc(db, "feedbackPolls", pollId, "responses", me);
+        const respSnap = await getDoc(respRef);
+    
+        if (deadline < now) {
+          if (!respSnap.exists()) {
+            expiredCandidates.push({ id: pollId, ...poll });
+          }
+          continue;
+        }
+    
+        if (!respSnap.exists()) {
+          candidates.push({ id: pollId, ...poll });
+        }
+      }
+    
+      candidates.sort((a, b) => a.deadline.toDate() - b.deadline.toDate());
+      setOpenPoll(candidates[0] || null);
+    
+      expiredCandidates.sort((a, b) => b.deadline.toDate() - a.deadline.toDate());
+      setExpiredPoll(expiredCandidates[0] || null);
+    }
+
+    loadPoll();
+  }, [userRole, teamIds]);
+
+  // ========== Check profile completeness ==========
   useEffect(() => {
     if (!auth.currentUser) return;
     
     const checkProfile = async () => {
+      // 安全检查：防止用户登出后 current user 为 null 导致报错
+      if (!auth.currentUser) return;
+
       try {
         const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
         if (userDoc.exists()) {
@@ -155,17 +229,14 @@ useEffect(() => {
       }
     };
     
-    // Check profile completeness on mount (with a small delay to avoid blocking initial render)
     const timeoutId = setTimeout(checkProfile, 2000);
     return () => clearTimeout(timeoutId);
   }, []);
 
-  /* ========== Athlete health live updates ========== */
+  // ========== Athlete health live updates ==========
   useEffect(() => {
-    // ... (logic unchanged)
     if (userRole !== "athlete" || !auth.currentUser) return;
 
-    // Read health status directly from user document
     const userRef = doc(db, "users", auth.currentUser.uid);
     const unsub = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -182,9 +253,8 @@ useEffect(() => {
     return () => unsub();
   }, [userRole]);
 
-  /* ========== Check team membership (unchanged) ========== */
+  // ========== Check team membership ==========
   useEffect(() => {
-    // ... (logic unchanged)
     if (!auth.currentUser || !userRole) return;
 
     const checkTeamMembership = async () => {
@@ -206,9 +276,8 @@ useEffect(() => {
     return () => clearTimeout(t);
   }, [userRole]);
 
-  /* ========== Fetch Teams Meta (unchanged) ========== */
+  // ========== Fetch Teams Meta ==========
   useEffect(() => {
-    // ... (logic unchanged)
     if (!auth.currentUser || !userRole) return;
 
     (async () => {
@@ -256,10 +325,8 @@ useEffect(() => {
     })();
   }, [userRole]);
 
-
-  /* ========== Fetch Events (unchanged) ========== */
+  // ========== Fetch Events ==========
   useEffect(() => {
-    // ... (logic unchanged)
     if (!teamIdsKey) return;
 
     const now = new Date();
@@ -281,7 +348,7 @@ useEffect(() => {
           const dt =
             data?.datetime?.toDate?.() ??
             (data.datetime instanceof Date ? data.datetime : null);
-        return { id: docSnap.id, teamId: id, ...data, datetime: dt }; 
+          return { id: docSnap.id, teamId: id, ...data, datetime: dt }; 
         });
 
         let upcoming = all.filter(
@@ -312,9 +379,8 @@ useEffect(() => {
     };
   }, [teamIdsKey, coachKey, userRole, assignedOnly]);
 
-  /* ========== Fetch User Names (unchanged) ========== */
+  // ========== Fetch User Names ==========
   useEffect(() => {
-    // ... (logic unchanged)
     if (reminders.length === 0) return;
 
     const fetchNames = async () => {
@@ -355,8 +421,7 @@ useEffect(() => {
     fetchNames();
   }, [reminders, userCache]);
 
-
-  /* ========== UI Rendering Styles (unchanged) ========== */
+  // ========== UI Rendering Styles ==========
   const brand = "var(--brand-primary)";
   const brandTint = "var(--brand-primary-50)";
   const ink900 = "#111827";
@@ -371,7 +436,6 @@ useEffect(() => {
       "background .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease",
   };
 
-  // JS-based hover effects (left as-is)
   const onHover = (e) => {
     e.currentTarget.style.background = brandTint;
     e.currentTarget.style.borderColor = "#a7f3d0";
@@ -379,7 +443,6 @@ useEffect(() => {
     e.currentTarget.style.boxShadow = "0 2px 6px rgba(16,185,129,.12)";
   };
   const offHover = (e) => {
-    // Resetting to cardBase styles
     Object.assign(e.currentTarget.style, cardBase);
   };
 
@@ -388,7 +451,7 @@ useEffect(() => {
   const statusText = profileDone ? "Complete" : "Incomplete";
   const statusMark = profileDone ? "✓" : "!";
 
-  // ========== JSX (Refactored with CSS classes) ==========
+  // ========== JSX ==========
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
       <div
@@ -399,7 +462,6 @@ useEffect(() => {
           minHeight: 300,
         }}
       >
-        {/* --- REFACTOR: Use CSS margin classes --- */}
         <h2 className="mb-1" style={{ color: ink900 }}>
           Welcome back, {displayName}!
         </h2>
@@ -412,6 +474,7 @@ useEffect(() => {
           Dashboard
         </p>
         
+        {/* ========== Existing: Expired feedbackPoll Notice (keep as-is) ========== */}
         {userRole === "athlete" && expiredPoll && !expiredDismissed && (
           <div
             style={{
@@ -458,7 +521,7 @@ useEffect(() => {
           </div>
         )}
 
-        {/* ⭐⭐⭐ Athlete Poll Reminder (整合后的最终位置) */}
+        {/* ========== Existing: feedbackPoll Reminder (keep as-is) ========== */}
         {userRole === "athlete" && openPoll && (
           <div
             style={{
@@ -484,20 +547,102 @@ useEffect(() => {
             </button>
           </div>
         )}
+
+        {/* ========== NEW: Team Polls Widget (User Story #42) ========== */}
+        {userRole === "athlete" && pendingTeamPolls.length > 0 && (
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 600,
+              marginTop: "1rem",
+              marginBottom: "1.5rem",
+            }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: ink900 }}>
+              🗳️ Pending Team Polls ({pendingTeamPolls.length})
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {pendingTeamPolls.map((poll) => {
+                const urgent = isPollUrgent(poll);
+                return (
+                  <div
+                    key={poll.id}
+                    style={{
+                      background: urgent ? "#fef2f2" : "#f0f9ff",
+                      padding: "1rem",
+                      borderRadius: "8px",
+                      border: urgent ? "2px solid #ef4444" : "1px solid #bae6fd",
+                      position: "relative",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Urgent Badge */}
+                    {urgent && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          right: 0,
+                          background: "#ef4444",
+                          color: "white",
+                          padding: "4px 12px",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          borderBottomLeftRadius: 8,
+                        }}
+                      >
+                        ⏰ URGENT
+                      </div>
+                    )}
+
+                    <p style={{ 
+                      fontWeight: 600, 
+                      color: urgent ? "#dc2626" : "#0369a1",
+                      marginBottom: 4,
+                      paddingRight: urgent ? 70 : 0,
+                    }}>
+                      {poll.title}
+                    </p>
+                    
+                    <p style={{ 
+                      fontSize: 13, 
+                      color: urgent ? "#b91c1c" : "#64748b",
+                      marginBottom: 8,
+                    }}>
+                      {formatTimeRemaining(poll)}
+                    </p>
+
+                    <button
+                      onClick={() => navigate(`/team-poll/${poll.id}`)}
+                      className="btn btn-primary"
+                      style={{ 
+                        fontSize: 14,
+                        padding: "6px 16px",
+                        background: urgent ? "#dc2626" : undefined,
+                        borderColor: urgent ? "#dc2626" : undefined,
+                      }}
+                    >
+                      {urgent ? "Vote Now!" : "Vote"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         
-        
+        {/* Health Status for Athletes */}
         {userRole === "athlete" && (
           <p className="mb-2" style={{ fontSize: 16 }}>
             <strong>Health Status:</strong>{" "}
-            {/* Data-driven colors must stay inline */}
             <span
               style={{
                 color:
                   healthStatus === "injured"
-                    ? "#dc2626" // .text-danger
+                    ? "#dc2626"
                     : healthStatus === "unavailable"
-                    ? "#f59e0b" // ~ .text-warning
-                    : "#16a34a", // .text-success
+                    ? "#f59e0b"
+                    : "#16a34a",
               }}
             >
               {healthStatus}
@@ -505,9 +650,7 @@ useEffect(() => {
           </p>
         )}
         
-
-
-        {/* --- REFACTOR: Use CSS margin class --- */}
+        {/* Assigned Only Filter */}
         {userRole === "athlete" && (
           <div className="mt-1">
             <label
@@ -528,7 +671,7 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Decorative element, left as-is */}
+        {/* Decorative element */}
         <div
           style={{
             height: 4,
@@ -540,7 +683,7 @@ useEffect(() => {
           }}
         />
 
-        {/* --- REFACTOR: Use CSS margin classes --- */}
+        {/* Upcoming Events */}
         <div
           className="mt-3 mb-3"
           style={{
@@ -583,7 +726,6 @@ useEffect(() => {
                     {event.title}
                   </h4>
 
-                  {/* --- REFACTOR: Use CSS variable for color --- */}
                   {teamNameMap.has(event.teamId) && (
                     <p className="mt-1" style={{ color: "var(--brand-primary-dark)", fontSize: 13, fontWeight: 600 }}>
                       Team: {teamNameMap.get(event.teamId)}
@@ -622,17 +764,17 @@ useEffect(() => {
           )}
         </div>
 
-        {/* --- REFACTOR: Replaced inline styles with .alert class --- */}
+        {/* No Team Warning */}
         {!inTeam && (
           <div
             className="alert alert-warning text-center mb-3"
-            style={{ maxWidth: 600 }} // Keep layout constraint
+            style={{ maxWidth: 600 }}
           >
             <p className="mb-2">
               You are not in any team yet — please join or create one.
             </p>
             <button
-              className="btn btn-primary" // Already uses classes
+              className="btn btn-primary"
               onClick={() => navigate("/teams")}
             >
               Go to Teams Page
@@ -651,7 +793,6 @@ useEffect(() => {
             maxWidth: 1000,
           }}
         >
-          {/* Card styles are driven by JS hover, left as-is */}
           <div
             className="card"
             style={{ ...cardBase }}
@@ -713,7 +854,8 @@ useEffect(() => {
             <p className="text-muted">{statusText}</p>
           </div>
         </div>
-        {/* Coach create feedback poll + view summary buttons */}
+
+        {/* ========== Existing: Coach feedback poll buttons (keep as-is) ========== */}
         {userRole === "coach" && teamsMeta.length > 0 && (
           <div
             className="mt-3"
@@ -724,7 +866,6 @@ useEffect(() => {
               gap: "1rem",
             }}
           >
-            {/* Create Poll Button */}
             <button
               className="btn btn-primary"
               onClick={() => navigate("/create-feedback")}
@@ -733,7 +874,6 @@ useEffect(() => {
               ➕ Create Feedback Poll
             </button>
 
-            {/* View Summary Button */}
             <button
               className="btn btn-secondary"
               onClick={() => navigate("/feedback-summary")}
@@ -749,7 +889,41 @@ useEffect(() => {
           </div>
         )}
 
-        {/* --- REFACTOR: Use CSS margin classes --- */}
+        {/* ========== NEW: Coach Team Polls buttons (User Story #68) ========== */}
+        {userRole === "coach" && teamsMeta.length > 0 && (
+          <div
+            className="mt-2"
+            style={{
+              width: "100%",
+              maxWidth: 1000,
+              display: "flex",
+              gap: "1rem",
+            }}
+          >
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate("/create-team-poll")}
+              style={{ flex: 1, background: "#0ea5e9", borderColor: "#0ea5e9" }}
+            >
+              🗳️ Create Team Poll
+            </button>
+
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate("/team-polls")}
+              style={{
+                flex: 1,
+                background: "#0284c7",
+                color: "white",
+                border: "none",
+              }}
+            >
+              📊 View Team Polls
+            </button>
+          </div>
+        )}
+
+        {/* Recent Activity */}
         <div className="mt-4" style={{ width: "100%", maxWidth: 1000 }}>
           <h3
             className="mb-2"
@@ -761,7 +935,6 @@ useEffect(() => {
           >
             Recent Activity
           </h3>
-          {/* --- REFACTOR: Removed redundant inline style --- */}
           <div className="card">
             <p className="text-muted text-center">
               No recent activity to display
