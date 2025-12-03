@@ -34,6 +34,8 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const [expiredDismissed, setExpiredDismissed] = useState(false);
   const [coachNotifications, setCoachNotifications] = useState([]);
   const [loadingCoachNotifications, setLoadingCoachNotifications] = useState(true);
+  const [athleteNotifications, setAthleteNotifications] = useState([]);
+  const [loadingAthleteNotifications, setLoadingAthleteNotifications] = useState(true);
   
   // Existing feedbackPolls state (keep as-is)
   const [openPoll, setOpenPoll] = useState(null);
@@ -96,6 +98,41 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
         console.error("Error loading coach notifications:", err);
         setCoachNotifications([]);
         setLoadingCoachNotifications(false);
+      }
+    );
+
+    return () => unsub();
+  }, [userRole]);
+
+  // ========== Athlete Notifications (coach suggestions & feedback) ==========
+  useEffect(() => {
+    if (userRole !== "athlete") {
+      setAthleteNotifications([]);
+      setLoadingAthleteNotifications(false);
+      return;
+    }
+    if (!auth.currentUser) return;
+
+    const athleteId = auth.currentUser.uid;
+    const notificationsRef = collection(
+      db,
+      "users",
+      athleteId,
+      "notifications"
+    );
+    const qRef = query(notificationsRef, orderBy("createdAt", "desc"));
+
+    const unsub = onSnapshot(
+      qRef,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setAthleteNotifications(list);
+        setLoadingAthleteNotifications(false);
+      },
+      (err) => {
+        console.error("Error loading athlete notifications:", err);
+        setAthleteNotifications([]);
+        setLoadingAthleteNotifications(false);
       }
     );
 
@@ -1077,6 +1114,107 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
                         <p style={{ margin: 0, fontSize: 14 }}>
                           {n.message || "New activity"}
                         </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : userRole === "athlete" ? (
+            <div className="card" style={{ padding: 16 }}>
+              {loadingAthleteNotifications ? (
+                <p className="text-muted text-center">Loading activity…</p>
+              ) : athleteNotifications.length === 0 ? (
+                <p className="text-muted text-center">No activity to display</p>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  {athleteNotifications.map((n) => {
+                    const created =
+                      n.createdAt?.toDate?.() ??
+                      (n.createdAt instanceof Date ? n.createdAt : null);
+
+                    let text = "New activity";
+                    if (n.type === "coachSuggestedGoal") {
+                      text = `${
+                        n.coachName || "Your coach"
+                      } suggested a goal: "${n.goalTitle || "Goal"}".`;
+                    } else if (n.type === "coachFeedback") {
+                      text = `${
+                        n.coachName || "Your coach"
+                      } sent you feedback${
+                        n.category ? ` about ${n.category}` : ""
+                      }: "${n.message || ""}"`;
+                    } else if (n.message) {
+                      text = n.message;
+                    }
+
+                    return (
+                      <div
+                        key={n.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "#eff6ff",
+                          border: "1px solid #bfdbfe",
+                        }}
+                      >
+                        <div>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: "#1d4ed8",
+                            }}
+                          >
+                            {text}
+                          </p>
+                          {created && (
+                            <p
+                              className="text-muted"
+                              style={{ margin: "4px 0 0", fontSize: 12 }}
+                            >
+                              {created.toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const uid = auth.currentUser?.uid;
+                              if (!uid) return;
+                              await deleteDoc(
+                                doc(db, "users", uid, "notifications", n.id)
+                              );
+                            } catch (e) {
+                              console.error(
+                                "Error dismissing notification:",
+                                e
+                              );
+                            }
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#6b7280",
+                            cursor: "pointer",
+                            fontSize: 16,
+                            lineHeight: 1,
+                          }}
+                          aria-label="Dismiss notification"
+                        >
+                          ✕
+                        </button>
                       </div>
                     );
                   })}

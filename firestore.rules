@@ -69,14 +69,22 @@ service cloud.firestore {
         allow create, read, delete: if isVerifiedUser() && isCoach(request.auth.uid);
       }
       
-      /* ---- Notifications (Coach in-app alerts) ---- */
+      /* ---- Notifications (In-app alerts) ---- */
       match /notifications/{notificationId} {
         allow read, delete: if isOwner(userId);
 
         allow create: if isAuthed() && (
-          request.auth.uid == userId || (
+          // user writing their own notification doc (rare)
+          request.auth.uid == userId ||
+          // athlete creating a goalCompleted notification for their coach
+          (
             request.resource.data.type == "goalCompleted" &&
             request.resource.data.athleteId == request.auth.uid
+          ) ||
+          // coach creating notifications for an athlete (suggested goal / feedback)
+          (
+            isCoach(request.auth.uid) &&
+            request.resource.data.athleteId == userId
           )
         );
       }
@@ -174,7 +182,7 @@ service cloud.firestore {
     }
 
 
-    /* ======================= REMAINDER OF YOUR RULES (unchanged) ======================= */
+    /* ======================= REST OF RULES ======================= */
 
     match /performances/{performanceId} {
     	allow read: if isAuthed();
