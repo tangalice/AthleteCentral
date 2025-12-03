@@ -55,7 +55,8 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "view-athlete-practices" ||
     activeTab === "weight-info" ||
     activeTab === "coach-weight-info" ||
-    activeTab === "log-workout";
+    activeTab === "log-workout" ||
+    activeTab === "resources";
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -135,6 +136,7 @@ function DropdownMenu({ user, activeTab }) {
   
   // Results - Available to both
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
+  menuItems.push({ path: "/resources", label: "Resources", activeTab: "resources" });
 
   menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
 
