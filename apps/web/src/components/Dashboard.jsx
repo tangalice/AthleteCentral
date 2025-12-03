@@ -14,6 +14,7 @@ import {
   updateDoc,
   setDoc,
   serverTimestamp,
+  deleteDoc,
 } from "firebase/firestore";
 import { checkAndNotifyIncompleteProfile } from "../services/EmailNotificationService";
 
@@ -31,6 +32,8 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   const [userCache, setUserCache] = useState(new Map());
   const [expiredPoll, setExpiredPoll] = useState(null);
   const [expiredDismissed, setExpiredDismissed] = useState(false);
+  const [coachNotifications, setCoachNotifications] = useState([]);
+  const [loadingCoachNotifications, setLoadingCoachNotifications] = useState(true);
   
   // Existing feedbackPolls state (keep as-is)
   const [openPoll, setOpenPoll] = useState(null);
@@ -63,6 +66,41 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
   );
 
   const eventsByTeamRef = useRef({});
+
+  // ========== Coach Notifications (Goal completions) ==========
+  useEffect(() => {
+    if (userRole !== "coach") {
+      setCoachNotifications([]);
+      setLoadingCoachNotifications(false);
+      return;
+    }
+    if (!auth.currentUser) return;
+
+    const coachId = auth.currentUser.uid;
+    const notificationsRef = collection(
+      db,
+      "users",
+      coachId,
+      "notifications"
+    );
+    const qRef = query(notificationsRef, orderBy("createdAt", "desc"));
+
+    const unsub = onSnapshot(
+      qRef,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setCoachNotifications(list);
+        setLoadingCoachNotifications(false);
+      },
+      (err) => {
+        console.error("Error loading coach notifications:", err);
+        setCoachNotifications([]);
+        setLoadingCoachNotifications(false);
+      }
+    );
+
+    return () => unsub();
+  }, [userRole]);
 
   // ========== NEW: Load Team Polls for Athletes (User Story #42) ==========
   useEffect(() => {
@@ -923,7 +961,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
           </div>
         )}
 
-        {/* Recent Activity */}
+        {/* Recent Activity / In‑App Notifications */}
         <div className="mt-4" style={{ width: "100%", maxWidth: 1000 }}>
           <h3
             className="mb-2"
@@ -935,11 +973,123 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
           >
             Recent Activity
           </h3>
-          <div className="card">
-            <p className="text-muted text-center">
-              No recent activity to display
-            </p>
-          </div>
+
+          {/* Coach: goal completion notifications */}
+          {userRole === "coach" ? (
+            <div className="card" style={{ padding: 16 }}>
+              {loadingCoachNotifications ? (
+                <p className="text-muted text-center">Loading activity…</p>
+              ) : coachNotifications.length === 0 ? (
+                <p className="text-muted text-center">
+                  No activity to display
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {coachNotifications.map((n) => {
+                    if (n.type === "goalCompleted") {
+                      const created =
+                        n.createdAt?.toDate?.() ??
+                        (n.createdAt instanceof Date ? n.createdAt : null);
+
+                      return (
+                        <div
+                          key={n.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: 8,
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            background: "#ecfdf5",
+                            border: "1px solid #bbf7d0",
+                          }}
+                        >
+                          <div>
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: 14,
+                                fontWeight: 600,
+                                color: "#065f46",
+                              }}
+                            >
+                              {n.athleteName || "An athlete"} completed your
+                              suggested goal "{n.goalTitle || "Goal"}".
+                            </p>
+                            {created && (
+                              <p
+                                className="text-muted"
+                                style={{ margin: "4px 0 0", fontSize: 12 }}
+                              >
+                                {created.toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const uid = auth.currentUser?.uid;
+                                if (!uid) return;
+                                await deleteDoc(
+                                  doc(
+                                    db,
+                                    "users",
+                                    uid,
+                                    "notifications",
+                                    n.id
+                                  )
+                                );
+                              } catch (e) {
+                                console.error(
+                                  "Error dismissing notification:",
+                                  e
+                                );
+                              }
+                            }}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "#6b7280",
+                              cursor: "pointer",
+                              fontSize: 16,
+                              lineHeight: 1,
+                            }}
+                            aria-label="Dismiss notification"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    // Fallback for any future notification types
+                    return (
+                      <div
+                        key={n.id}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "var(--surface-alt)",
+                          border: "1px solid var(--border)",
+                        }}
+                      >
+                        <p style={{ margin: 0, fontSize: 14 }}>
+                          {n.message || "New activity"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="card">
+              <p className="text-muted text-center">
+                No recent activity to display
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

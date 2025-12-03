@@ -68,6 +68,18 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
         allow create, read, delete: if isVerifiedUser() && isCoach(request.auth.uid);
       }
+      
+      /* ---- Notifications (Coach in-app alerts) ---- */
+      match /notifications/{notificationId} {
+        allow read, delete: if isOwner(userId);
+
+        allow create: if isAuthed() && (
+          request.auth.uid == userId || (
+            request.resource.data.type == "goalCompleted" &&
+            request.resource.data.athleteId == request.auth.uid
+          )
+        );
+      }
 
       /* ---- Feedback ---- */
       match /feedbackList/{feedbackId} {
@@ -291,16 +303,37 @@ service cloud.firestore {
       allow create, update, delete: if isCoach(request.auth.uid);
 
       match /responses/{responseId} {
-        allow create: if isVerifiedUser() &&
-                       !isCoach(request.auth.uid) &&
-                       request.auth.uid == responseId;
+        allow create, update: if isVerifiedUser() &&
+                              !isCoach(request.auth.uid) &&
+                              request.auth.uid == responseId;
 
         allow read: if isVerifiedUser() &&
                     (request.auth.uid == responseId || isCoach(request.auth.uid));
 
-        allow update, delete: if false;
+        allow delete: if isCoach(request.auth.uid);
       }
     }
+    
+    match /teamPolls/{pollId} {
+      allow read: if isVerifiedUser();
+
+      allow create, update, delete: if isVerifiedUser() && isCoach(request.auth.uid);
+
+      allow update: if isVerifiedUser() && !isCoach(request.auth.uid);
+
+      match /responses/{odUserId} {
+        allow read: if isVerifiedUser() &&
+                    (request.auth.uid == odUserId || isCoach(request.auth.uid));
+
+        allow create, update: if isVerifiedUser() &&
+                              !isCoach(request.auth.uid) &&
+                              request.auth.uid == odUserId;
+
+        allow delete: if isCoach(request.auth.uid);
+      }
+    }
+
+
 
     match /athleteAvailability/{availabilityId} {
       allow read: if isVerifiedUser();
