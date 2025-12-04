@@ -52,6 +52,7 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "teammate-comparison" ||
     activeTab === "improvement-rates" ||
     activeTab === "team-rankings" ||
+    activeTab === "team-personal-bests" || 
     activeTab === "coach-team-rankings" ||
     activeTab === "similar-teammates" ||
     activeTab === "view-athlete-practices" ||
@@ -137,12 +138,8 @@ function DropdownMenu({ user, activeTab }) {
   // Results - Available to both
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
 
-  if (user?.role === "athlete") {
-    menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
-  } else if (user?.role === "coach") {
-    menuItems.push({ path: "/coach-team-rankings", label: "Team Rankings", activeTab: "coach-team-rankings" });
-  }
-
+  menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
+  menuItems.push({ path: "/team-personal-bests", label: "Team Personal Bests", activeTab: "team-personal-bests" }); 
   
   // Goals - Different for coach vs athlete
   if (user?.role === "athlete") {

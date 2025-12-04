@@ -78,9 +78,28 @@ const teamDocs = [
 ];
 
 const userProfiles = {
-  u1: { displayName: 'Alice Runner', email: 'alice@example.com', healthStatus: 'active' },
-  u2: { displayName: 'Bob Sprinter',  email: 'bob@example.com',   healthStatus: 'injured' },
-  u3: { displayName: 'Cara Miler',    email: 'cara@example.com',  healthStatus: 'active' },
+  // All profile health statuses are considered "today" by seeding
+  // healthStatusUpdatedAt with FIXED_NOW. This lets the component's
+  // "only use profile health for today if updated today" logic still
+  // treat these as current for the fixed test date.
+  u1: {
+    displayName: 'Alice Runner',
+    email: 'alice@example.com',
+    healthStatus: 'active',
+    healthStatusUpdatedAt: FIXED_NOW,
+  },
+  u2: {
+    displayName: 'Bob Sprinter',
+    email: 'bob@example.com',
+    healthStatus: 'injured',
+    healthStatusUpdatedAt: FIXED_NOW,
+  },
+  u3: {
+    displayName: 'Cara Miler',
+    email: 'cara@example.com',
+    healthStatus: 'active',
+    healthStatusUpdatedAt: FIXED_NOW,
+  },
 };
 
 let availabilityStore;

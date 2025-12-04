@@ -26,24 +26,13 @@ const TEST_PIECE_TYPES = {
 
 export default function TeamRankings({ user, userSport }) {
   const [teamMembers, setTeamMembers] = useState([]);
-  const [selectedTestType, setSelectedTestType] = useState("all");
-  const [selectedDateRange, setSelectedDateRange] = useState("all");
+  const [selectedTestType, setSelectedTestType] = useState("overall");
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [teamId, setTeamId] = useState(null);
+  const [allPerformances, setAllPerformances] = useState({});
 
   // Get sport-specific test types
   const sportTestTypes = TEST_PIECE_TYPES[userSport?.toLowerCase()] || TEST_PIECE_TYPES.default;
-
-  // Date range options
-  const dateRangeOptions = [
-    { value: "all", label: "All Time" },
-    { value: "7", label: "Last 7 Days" },
-    { value: "30", label: "Last 30 Days" },
-    { value: "90", label: "Last 3 Months" },
-    { value: "180", label: "Last 6 Months" },
-    { value: "365", label: "Last Year" },
-  ];
 
   // Load team and members
   useEffect(() => {
@@ -62,11 +51,11 @@ export default function TeamRankings({ user, userSport }) {
         if (!teamsSnapshot.empty) {
           const team = teamsSnapshot.docs[0];
           const teamData = team.data();
-          setTeamId(team.id);
           
           // Get all team members
           const memberIds = teamData.members || [];
           const membersList = [];
+          const performancesMap = {};
           
           for (const memberId of memberIds) {
             try {
@@ -82,6 +71,17 @@ export default function TeamRankings({ user, userSport }) {
                     name: userData.displayName || userData.email || "Unknown",
                     email: userData.email,
                   });
+                  
+                  // Load performances for this member
+                  const performancesQuery = query(
+                    collection(db, "users", memberId, "testPerformances"),
+                    orderBy("date", "desc")
+                  );
+                  const perfSnapshot = await getDocs(performancesQuery);
+                  performancesMap[memberId] = perfSnapshot.docs.map(d => ({
+                    id: d.id,
+                    ...d.data()
+                  }));
                 }
               }
             } catch (err) {
@@ -90,6 +90,7 @@ export default function TeamRankings({ user, userSport }) {
           }
           
           setTeamMembers(membersList);
+          setAllPerformances(performancesMap);
         }
       } catch (err) {
         console.error("Error loading team:", err);
@@ -101,72 +102,13 @@ export default function TeamRankings({ user, userSport }) {
     loadTeamAndMembers();
   }, [user]);
 
-  // Load all performances and calculate rankings
+  // Calculate rankings when test type changes
   useEffect(() => {
     if (teamMembers.length === 0) return;
-
-    const loadPerformancesAndRank = async () => {
-      setLoading(true);
-      
-      try {
-        const allPerformances = [];
-        
-        // Load test performances for each team member
-        for (const member of teamMembers) {
-          try {
-            const performancesQuery = query(
-              collection(db, "users", member.id, "testPerformances"),
-              orderBy("date", "desc")
-            );
-            
-            const snapshot = await getDocs(performancesQuery);
-            const performances = snapshot.docs.map(d => ({
-              id: d.id,
-              athleteId: member.id,
-              athleteName: member.name,
-              ...d.data()
-            }));
-            
-            // Filter by date range
-            const filteredPerformances = filterByDateRange(performances, selectedDateRange);
-            
-            allPerformances.push({
-              athleteId: member.id,
-              athleteName: member.name,
-              performances: filteredPerformances
-            });
-          } catch (err) {
-            console.error(`Error loading performances for ${member.name}:`, err);
-          }
-        }
-        
-        // Calculate rankings
-        const calculated = calculateRankings(allPerformances, selectedTestType);
-        setRankings(calculated);
-      } catch (err) {
-        console.error("Error loading performances:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadPerformancesAndRank();
-  }, [teamMembers, selectedTestType, selectedDateRange]);
-
-  // Filter performances by date range
-  const filterByDateRange = (performances, dateRange) => {
-    if (dateRange === "all") return performances;
     
-    const days = parseInt(dateRange);
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-    
-    return performances.filter(perf => {
-      if (!perf.date) return false;
-      const perfDate = perf.date.toDate ? perf.date.toDate() : new Date(perf.date);
-      return perfDate >= cutoffDate;
-    });
-  };
+    const calculated = calculateRankings();
+    setRankings(calculated);
+  }, [teamMembers, allPerformances, selectedTestType]);
 
   // Parse time string to seconds for comparison
   const parseTime = (timeValue) => {
@@ -175,8 +117,11 @@ export default function TeamRankings({ user, userSport }) {
     if (typeof timeValue === 'number') return timeValue;
     
     if (typeof timeValue === 'string') {
-      // Handle format like "6:40.5" or "1:30:45.2"
-      const parts = timeValue.split(':');
+      const trimmed = timeValue.trim();
+      if (!trimmed || trimmed === '-' || trimmed === 'N/A') return Infinity;
+      if (trimmed.includes('--') || trimmed.match(/^-+:?-+\.?-+$/)) return Infinity;
+
+      const parts = trimmed.split(':');
       if (parts.length === 2) {
         const mins = parseInt(parts[0]) || 0;
         const secs = parseFloat(parts[1]) || 0;
@@ -195,26 +140,36 @@ export default function TeamRankings({ user, userSport }) {
   // Check if a time value is valid
   const isValidTime = (timeValue) => {
     if (!timeValue) return false;
+    const parsed = parseTime(timeValue);
+    return parsed !== Infinity && parsed > 0;
+  };
+
+  // Format seconds back to time string
+  const formatSecondsToTime = (totalSeconds) => {
+    if (!totalSeconds || totalSeconds === Infinity) return "—";
     
-    if (typeof timeValue === 'number') {
-      return timeValue > 0 && timeValue !== Infinity;
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = (totalSeconds % 60).toFixed(1);
+    
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.padStart(4, '0')}`;
     }
+    return `${mins}:${secs.padStart(4, '0')}`;
+  };
+
+  // Calculate average time from an array of performances
+  const calculateAverageTime = (performances) => {
+    const validPerfs = performances.filter(p => isValidTime(p.time));
+    if (validPerfs.length === 0) return null;
     
-    if (typeof timeValue === 'string') {
-      const trimmed = timeValue.trim();
-      if (!trimmed || trimmed === '-' || trimmed === 'N/A') return false;
-      if (trimmed.includes('--') || trimmed.match(/^-+:?-+\.?-+$/)) return false;
-      
-      const parsed = parseTime(trimmed);
-      return parsed !== Infinity && parsed > 0;
-    }
-    
-    return false;
+    const totalSeconds = validPerfs.reduce((sum, p) => sum + parseTime(p.time), 0);
+    return totalSeconds / validPerfs.length;
   };
 
   // Get personal best for a specific test type
   const getPersonalBest = (performances, testType) => {
-    const testsOfType = performances.filter(p => p.testType === testType);
+    const testsOfType = performances.filter(p => p.testType === testType && isValidTime(p.time));
     if (testsOfType.length === 0) return null;
     
     return testsOfType.reduce((best, current) => {
@@ -224,104 +179,75 @@ export default function TeamRankings({ user, userSport }) {
     });
   };
 
-  // Calculate overall ranking (average percentile across all test types)
-  const calculateOverallRanking = (allPerformances) => {
-    // Get all unique test types
-    const allTestTypes = new Set();
-    allPerformances.forEach(athlete => {
-      athlete.performances.forEach(p => {
-        if (p.testType && isValidTime(p.time)) {
-          allTestTypes.add(p.testType);
-        }
-      });
-    });
-
-    const testTypesArray = Array.from(allTestTypes);
-    
-    // For each athlete, calculate their average ranking across test types
-    const athleteScores = allPerformances.map(athlete => {
-      let totalPercentile = 0;
-      let testsRanked = 0;
-      
-      testTypesArray.forEach(testType => {
-        const athleteBest = getPersonalBest(athlete.performances, testType);
-        if (!athleteBest || !isValidTime(athleteBest.time)) return;
-        
-        // Get all athletes' best times for this test type
-        const allBestsForTest = allPerformances
-          .map(a => {
-            const best = getPersonalBest(a.performances, testType);
-            return best && isValidTime(best.time) ? parseTime(best.time) : null;
-          })
-          .filter(t => t !== null)
-          .sort((a, b) => a - b); // Sort ascending (fastest first)
-        
-        if (allBestsForTest.length === 0) return;
-        
-        // Find athlete's rank in this test
-        const athleteTime = parseTime(athleteBest.time);
-        const rank = allBestsForTest.findIndex(t => t === athleteTime);
-        
-        // Convert to percentile (0 = best, 100 = worst)
-        const percentile = (rank / (allBestsForTest.length - 1)) * 100;
-        totalPercentile += percentile;
-        testsRanked++;
-      });
-      
-      return {
-        athleteId: athlete.athleteId,
-        athleteName: athlete.athleteName,
-        averagePercentile: testsRanked > 0 ? totalPercentile / testsRanked : 100,
-        testsCompleted: testsRanked,
-        bestTime: null,
-        testType: 'Overall'
-      };
-    });
-    
-    // Sort by average percentile (lower is better)
-    return athleteScores
-      .filter(a => a.testsCompleted > 0)
-      .sort((a, b) => a.averagePercentile - b.averagePercentile);
-  };
-
-  // Calculate rankings for a specific test type
-  const calculateTestTypeRanking = (allPerformances, testType) => {
-    const athleteBests = allPerformances
-      .map(athlete => {
-        const best = getPersonalBest(athlete.performances, testType);
-        if (!best || !isValidTime(best.time)) return null;
-        
-        return {
-          athleteId: athlete.athleteId,
-          athleteName: athlete.athleteName,
-          bestTime: best.time,
-          bestTimeSeconds: parseTime(best.time),
-          date: best.date,
-          split: best.split,
-          testType: testType
-        };
-      })
-      .filter(a => a !== null)
-      .sort((a, b) => a.bestTimeSeconds - b.bestTimeSeconds); // Sort by fastest time
-    
-    return athleteBests;
-  };
-
-  // Main ranking calculation
-  const calculateRankings = (allPerformances, testType) => {
-    if (testType === "all") {
-      return calculateOverallRanking(allPerformances);
+  // Calculate rankings
+  const calculateRankings = () => {
+    if (selectedTestType === "overall") {
+      return calculateOverallRanking();
     } else {
-      return calculateTestTypeRanking(allPerformances, testType);
+      return calculateTestTypeRanking(selectedTestType);
     }
+  };
+
+  // Calculate overall ranking based on average of all test times
+  const calculateOverallRanking = () => {
+    const athleteScores = teamMembers.map(member => {
+      const memberPerfs = allPerformances[member.id] || [];
+      const validPerfs = memberPerfs.filter(p => isValidTime(p.time));
+      
+      if (validPerfs.length === 0) return null;
+
+      const avgTime = calculateAverageTime(validPerfs);
+      const bestPerf = validPerfs.reduce((best, current) => {
+        const currentTime = parseTime(current.time);
+        const bestTime = parseTime(best.time);
+        return currentTime < bestTime ? current : best;
+      });
+
+      return {
+        id: member.id,
+        name: member.name,
+        averageTime: avgTime,
+        bestTime: parseTime(bestPerf.time),
+        totalPerformances: validPerfs.length,
+        testTypesCount: [...new Set(validPerfs.map(p => p.testType))].length,
+      };
+    }).filter(a => a !== null);
+
+    // Sort by average time (lower is better)
+    return athleteScores.sort((a, b) => a.averageTime - b.averageTime);
+  };
+
+  // Calculate ranking for a specific test type based on average time
+  const calculateTestTypeRanking = (testType) => {
+    const athleteScores = teamMembers.map(member => {
+      const memberPerfs = allPerformances[member.id] || [];
+      const testPerfs = memberPerfs.filter(p => p.testType === testType && isValidTime(p.time));
+      
+      if (testPerfs.length === 0) return null;
+
+      const avgTime = calculateAverageTime(testPerfs);
+      const bestPerf = getPersonalBest(memberPerfs, testType);
+
+      return {
+        id: member.id,
+        name: member.name,
+        averageTime: avgTime,
+        bestTime: bestPerf ? parseTime(bestPerf.time) : null,
+        bestTimeFormatted: bestPerf?.time,
+        bestSplit: bestPerf?.split,
+        bestDate: bestPerf?.date,
+        totalAttempts: testPerfs.length,
+      };
+    }).filter(a => a !== null);
+
+    // Sort by average time (lower is better)
+    return athleteScores.sort((a, b) => a.averageTime - b.averageTime);
   };
 
   const formatTime = (timeValue) => {
-    if (!timeValue) return "N/A";
+    if (!timeValue || !isValidTime(timeValue)) return "—";
     
-    if (typeof timeValue === 'string') {
-      return timeValue;
-    }
+    if (typeof timeValue === 'string') return timeValue;
     
     if (typeof timeValue === 'number') {
       const mins = Math.floor(timeValue / 60);
@@ -329,11 +255,11 @@ export default function TeamRankings({ user, userSport }) {
       return `${mins}:${secs.padStart(4, '0')}`;
     }
     
-    return "N/A";
+    return "—";
   };
 
   const formatDate = (date) => {
-    if (!date) return "N/A";
+    if (!date) return "—";
     const d = date.toDate ? date.toDate() : new Date(date);
     return d.toLocaleDateString("en-US", {
       month: "short",
@@ -342,19 +268,9 @@ export default function TeamRankings({ user, userSport }) {
     });
   };
 
-  // Get available test types from all team members
-  const availableTestTypes = Array.from(
-    new Set(
-      teamMembers.flatMap(member => 
-        rankings
-          .filter(r => r.athleteId === member.id && r.testType)
-          .map(r => r.testType)
-      )
-    )
-  ).filter(type => type !== 'Overall');
-
   // Find current user's rank
-  const myRank = rankings.findIndex(r => r.athleteId === user?.uid) + 1;
+  const myRankIndex = rankings.findIndex(r => r.id === user?.uid);
+  const myRank = myRankIndex >= 0 ? myRankIndex + 1 : null;
 
   if (!user) {
     return (
@@ -371,22 +287,25 @@ export default function TeamRankings({ user, userSport }) {
         Team Rankings
       </h2>
       <p style={{ color: "#6b7280", marginBottom: "30px", fontSize: "15px" }}>
-        See where you rank compared to your teammates. Filter by test piece and date range to view specific rankings.
+        See where you rank compared to your teammates based on average times. Filter by test piece to view specific rankings.
       </p>
 
-      {/* Filters */}
+      {/* Filters & My Rank Card */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gridTemplateColumns: "1fr auto",
         gap: "16px",
         marginBottom: "30px",
-        padding: "20px",
-        backgroundColor: "#fff",
-        borderRadius: "12px",
-        border: "1px solid #e5e7eb",
-        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+        alignItems: "stretch",
       }}>
-        <div>
+        {/* Filter */}
+        <div style={{
+          padding: "20px",
+          backgroundColor: "#fff",
+          borderRadius: "12px",
+          border: "1px solid #e5e7eb",
+          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+        }}>
           <label style={{ 
             display: "block", 
             marginBottom: "8px", 
@@ -401,6 +320,7 @@ export default function TeamRankings({ user, userSport }) {
             onChange={(e) => setSelectedTestType(e.target.value)}
             style={{
               width: "100%",
+              maxWidth: "300px",
               padding: "10px 12px",
               borderRadius: "8px",
               border: "1px solid #d1d5db",
@@ -411,66 +331,38 @@ export default function TeamRankings({ user, userSport }) {
               cursor: "pointer"
             }}
           >
-            <option value="all">Overall Ranking</option>
+            <option value="overall">Overall Ranking</option>
             {sportTestTypes.map(type => (
               <option key={type} value={type}>
                 {type}
               </option>
             ))}
           </select>
+          <p style={{ fontSize: "12px", color: "#9ca3af", marginTop: "8px", marginBottom: 0 }}>
+            Rankings are based on average time across all attempts
+          </p>
         </div>
 
-        <div>
-          <label style={{ 
-            display: "block", 
-            marginBottom: "8px", 
-            fontWeight: "500",
-            color: "#374151",
-            fontSize: "14px"
-          }}>
-            Date Range
-          </label>
-          <select
-            value={selectedDateRange}
-            onChange={(e) => setSelectedDateRange(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: "8px",
-              border: "1px solid #d1d5db",
-              backgroundColor: "#fff",
-              color: "#111827",
-              fontSize: "14px",
-              outline: "none",
-              cursor: "pointer"
-            }}
-          >
-            {dateRangeOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {myRank > 0 && (
+        {/* My Rank Card */}
+        {myRank && (
           <div style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "16px",
+            padding: "20px 32px",
             backgroundColor: "#f0fdf4",
-            borderRadius: "8px",
-            border: "2px solid #10b981"
+            borderRadius: "12px",
+            border: "2px solid #10b981",
+            minWidth: "180px",
           }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "4px" }}>
                 Your Rank
               </div>
-              <div style={{ fontSize: "32px", fontWeight: "800", color: "#10b981" }}>
+              <div style={{ fontSize: "36px", fontWeight: "800", color: "#10b981" }}>
                 #{myRank}
               </div>
-              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>
+              <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "2px" }}>
                 out of {rankings.length}
               </div>
             </div>
@@ -501,7 +393,7 @@ export default function TeamRankings({ user, userSport }) {
             No Rankings Available
           </p>
           <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>
-            {selectedTestType === 'all' 
+            {selectedTestType === 'overall' 
               ? "No test data available for any team members yet."
               : `No ${selectedTestType} test data available yet.`}
           </p>
@@ -522,33 +414,53 @@ export default function TeamRankings({ user, userSport }) {
                 <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
                   Athlete
                 </th>
-                {selectedTestType !== 'all' ? (
+                <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    Avg Time
+                    <span style={{
+                      padding: "2px 6px",
+                      backgroundColor: "#e0f2fe",
+                      color: "#0369a1",
+                      borderRadius: "4px",
+                      fontSize: "10px",
+                      fontWeight: "600"
+                    }}>
+                      RANKED BY
+                    </span>
+                  </div>
+                </th>
+                <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                  Best Time
+                </th>
+                {selectedTestType !== 'overall' ? (
                   <>
                     <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
-                      Best Time
+                      Best Split
                     </th>
                     <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
-                      Split
-                    </th>
-                    <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
-                      Date
+                      Attempts
                     </th>
                   </>
                 ) : (
-                  <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
-                    Tests Completed
-                  </th>
+                  <>
+                    <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                      Test Types
+                    </th>
+                    <th style={{ padding: "16px", textAlign: "left", fontSize: "14px", fontWeight: "600", color: "#374151" }}>
+                      Total Tests
+                    </th>
+                  </>
                 )}
               </tr>
             </thead>
             <tbody>
               {rankings.map((athlete, index) => {
-                const isCurrentUser = athlete.athleteId === user.uid;
+                const isCurrentUser = athlete.id === user.uid;
                 const rank = index + 1;
                 
                 return (
                   <tr 
-                    key={athlete.athleteId}
+                    key={athlete.id}
                     style={{ 
                       borderBottom: index < rankings.length - 1 ? "1px solid #e5e7eb" : "none",
                       backgroundColor: isCurrentUser ? "#f0fdf4" : "transparent",
@@ -585,40 +497,106 @@ export default function TeamRankings({ user, userSport }) {
 
                     {/* Athlete Name */}
                     <td style={{ padding: "16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span style={{ 
-                          fontSize: "15px", 
-                          fontWeight: isCurrentUser ? "700" : "500", 
-                          color: isCurrentUser ? "#10b981" : "#111827" 
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        {/* Avatar */}
+                        <div style={{
+                          width: "36px",
+                          height: "36px",
+                          borderRadius: "50%",
+                          backgroundColor: isCurrentUser ? "#10b981" : "#e5e7eb",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: isCurrentUser ? "white" : "#6b7280",
+                          fontSize: "14px",
+                          fontWeight: "600"
                         }}>
-                          {athlete.athleteName}
-                          {isCurrentUser && " (You)"}
-                        </span>
+                          {athlete.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <span style={{ 
+                            fontSize: "15px", 
+                            fontWeight: isCurrentUser ? "700" : "500", 
+                            color: isCurrentUser ? "#10b981" : "#111827" 
+                          }}>
+                            {athlete.name}
+                          </span>
+                          {isCurrentUser && (
+                            <span style={{
+                              marginLeft: "8px",
+                              padding: "2px 8px",
+                              backgroundColor: "#10b981",
+                              color: "white",
+                              borderRadius: "12px",
+                              fontSize: "11px",
+                              fontWeight: "600"
+                            }}>
+                              YOU
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
 
-                    {selectedTestType !== 'all' ? (
+                    {/* Average Time */}
+                    <td style={{ padding: "16px" }}>
+                      <div style={{ 
+                        fontSize: "16px", 
+                        fontWeight: "700", 
+                        color: "#111827", 
+                        fontFamily: "monospace" 
+                      }}>
+                        {formatSecondsToTime(athlete.averageTime)}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "2px" }}>
+                        average
+                      </div>
+                    </td>
+
+                    {/* Best Time */}
+                    <td style={{ padding: "16px" }}>
+                      <div style={{ 
+                        fontSize: "14px", 
+                        fontWeight: "600", 
+                        color: "#6b7280", 
+                        fontFamily: "monospace" 
+                      }}>
+                        {selectedTestType !== 'overall' 
+                          ? formatTime(athlete.bestTimeFormatted)
+                          : formatSecondsToTime(athlete.bestTime)
+                        }
+                      </div>
+                      {selectedTestType !== 'overall' && athlete.bestDate && (
+                        <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "2px" }}>
+                          {formatDate(athlete.bestDate)}
+                        </div>
+                      )}
+                    </td>
+
+                    {selectedTestType !== 'overall' ? (
                       <>
-                        {/* Best Time */}
-                        <td style={{ padding: "16px", fontSize: "16px", fontWeight: "600", color: "#111827", fontFamily: "monospace" }}>
-                          {formatTime(athlete.bestTime)}
-                        </td>
-
-                        {/* Split */}
+                        {/* Best Split */}
                         <td style={{ padding: "16px", fontSize: "14px", color: "#6b7280", fontFamily: "monospace" }}>
-                          {athlete.split || "-"}
+                          {athlete.bestSplit || "—"}
                         </td>
 
-                        {/* Date */}
+                        {/* Attempts */}
                         <td style={{ padding: "16px", fontSize: "14px", color: "#6b7280" }}>
-                          {formatDate(athlete.date)}
+                          {athlete.totalAttempts}
                         </td>
                       </>
                     ) : (
-                      /* Tests Completed */
-                      <td style={{ padding: "16px", fontSize: "14px", color: "#6b7280" }}>
-                        {athlete.testsCompleted} test{athlete.testsCompleted !== 1 ? 's' : ''}
-                      </td>
+                      <>
+                        {/* Test Types */}
+                        <td style={{ padding: "16px", fontSize: "14px", color: "#6b7280" }}>
+                          {athlete.testTypesCount}
+                        </td>
+
+                        {/* Total Tests */}
+                        <td style={{ padding: "16px", fontSize: "14px", color: "#6b7280" }}>
+                          {athlete.totalPerformances}
+                        </td>
+                      </>
                     )}
                   </tr>
                 );
@@ -627,6 +605,50 @@ export default function TeamRankings({ user, userSport }) {
           </table>
         </div>
       )}
+
+      {/* Legend */}
+      <div style={{
+        marginTop: "20px",
+        padding: "16px 20px",
+        backgroundColor: "#f9fafb",
+        borderRadius: "8px",
+        display: "flex",
+        gap: "24px",
+        flexWrap: "wrap",
+        fontSize: "13px",
+        color: "#6b7280"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#fbbf24" }}></div>
+          <span>1st Place</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#9ca3af" }}></div>
+          <span>2nd Place</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#d97706" }}></div>
+          <span>3rd Place</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#10b981" }}></div>
+          <span>Your Position</span>
+        </div>
+      </div>
+
+      {/* Info Box */}
+      <div style={{
+        marginTop: "16px",
+        padding: "16px 20px",
+        backgroundColor: "#eff6ff",
+        borderRadius: "8px",
+        border: "1px solid #bfdbfe",
+        fontSize: "13px",
+        color: "#1e40af"
+      }}>
+        <strong>How rankings work:</strong> Athletes are ranked by their average time across all {selectedTestType === 'overall' ? 'test performances' : `${selectedTestType} attempts`}. 
+        Lower average time = higher rank.
+      </div>
     </div>
   );
 }

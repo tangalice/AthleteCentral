@@ -26,11 +26,36 @@ import PracticeDurationTracker from "./PracticeDurationTracker";
 import { ATTENDANCE_CONFIG } from "../constants/constants";
 import { fetchTeamAthletes } from "../services/teamService";
 
-// --- STUB for In-App Notification ---
-// We isolate this call in submitComment so errors here don't break the UI
-const sendInAppNotification = (targetUid, type, data) => {
-    console.log(`[Notification Stub] Sending ${type} notification to ${targetUid}. Data:`, data);
+// --- In-App Notification: mark reflection as having unread coach feedback ---
+const sendInAppNotification = async (targetUid, type, data) => {
+  if (type !== "coach_comment") return;
+  const { teamId, eventId } = data || {};
+  if (!teamId || !eventId) return;
+
+  console.log("[Notif] will set hasUnreadFeedback", { targetUid, teamId, eventId });
+
+  const reflectionRef = doc(
+    db,
+    "teams",
+    teamId,
+    "events",
+    eventId,
+    "reflections",
+    targetUid
+  );
+
+  await setDoc(
+    reflectionRef,
+    {
+      hasUnreadFeedback: true,
+      lastCoachFeedbackAt: Timestamp.now(),
+    },
+    { merge: true }
+  );
+
+  console.log("[Notif] hasUnreadFeedback written OK");
 };
+
 
 // ---- UI helpers ----
 const TYPE_COLORS = {
@@ -78,13 +103,18 @@ export default function Calendar({ userRole }) {
   const [savingReflection, setSavingReflection] = useState(false);
   const [reflectionMessage, setReflectionMessage] = useState("");
   const [reflectionMode, setReflectionMode] = useState('athlete_edit'); 
+
   
   // --- Coach Feedback State ---
   const [coachComments, setCoachComments] = useState([]); 
   const [newCommentText, setNewCommentText] = useState(''); 
   const [commenting, setCommenting] = useState(false);
   const [isEditingFeedback, setIsEditingFeedback] = useState(false); // Controls Edit Mode
-  let closeReflectionUnsubRef = useRef(() => {}); 
+  let closeReflectionUnsubRef = useRef(() => {});
+  
+  // --- Unread coach feedback for current athlete ---
+  const [unreadFeedbackEventIds, setUnreadFeedbackEventIds] = useState(() => new Set());
+  const unreadFeedbackUnsubsRef = useRef([]);
   
   // --- Reflection Overview State ---
   const [showReflectionOverview, setShowReflectionOverview] = useState(false);
@@ -92,7 +122,7 @@ export default function Calendar({ userRole }) {
   const [reflectionsSummary, setReflectionsSummary] = useState([]);
   const [loadingReflectionsSummary, setLoadingReflectionsSummary] = useState(false);
   
-  /* ========== useEffect: load my teams ========== */
+  /* useEffect: load my teams */
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
@@ -175,11 +205,67 @@ export default function Calendar({ userRole }) {
     })();
   }, [teamId]);
   
-  /* ========== Computed Variables ========== */
+  /* Computed Variables */
   const upcoming = useMemo(() => events.filter((e) => e.upcoming), [events]);
   const past = useMemo(() => events.filter((e) => !e.upcoming), [events]);
 
-  /* ========== CRUD operations ========== */
+  useEffect(() => {
+    if (userRole !== "athlete" || !me || !teamId) {
+      unreadFeedbackUnsubsRef.current.forEach((unsub) => unsub());
+      unreadFeedbackUnsubsRef.current = [];
+      setUnreadFeedbackEventIds(new Set());
+      return;
+    }
+  
+    unreadFeedbackUnsubsRef.current.forEach((unsub) => unsub());
+    unreadFeedbackUnsubsRef.current = [];
+  
+    const unsubs = past.map((ev) => {
+      const reflectionRef = doc(
+        db,
+        "teams",
+        teamId,
+        "events",
+        ev.id,
+        "reflections",
+        me
+      );
+  
+      console.log("[UnreadEffect] listen reflections for event", ev.id);
+  
+      const unsub = onSnapshot(
+        reflectionRef,
+        (snap) => {
+          const data = snap.data();
+          const hasUnread = !!data?.hasUnreadFeedback;
+          console.log("[UnreadEffect] snapshot", ev.id, { data, hasUnread });
+  
+          setUnreadFeedbackEventIds((prev) => {
+            const next = new Set(prev);
+            if (hasUnread) next.add(ev.id);
+            else next.delete(ev.id);
+            console.log("[UnreadEffect] current unread set:", Array.from(next));
+            return next;
+          });
+        },
+        (error) => {
+          console.error("Error listening for unread feedback", error);
+        }
+      );
+  
+      return unsub;
+    });
+  
+    unreadFeedbackUnsubsRef.current = unsubs;
+  
+    return () => {
+      unsubs.forEach((unsub) => unsub());
+    };
+  }, [past, teamId, userRole, me]);
+  
+  
+
+  /* CRUD operations */
   const openCreate = () => {
     if (!isCoach) return alert("Only coaches can create events");
     setCreateErr({});
@@ -283,6 +369,32 @@ export default function Calendar({ userRole }) {
     setNewCommentText('');
   };
 
+  const markFeedbackAsRead = async (eventId, athleteId) => {
+    if (!teamId || !athleteId) return;
+    try {
+      const reflectionRef = doc(
+        db,
+        "teams",
+        teamId,
+        "events",
+        eventId,
+        "reflections",
+        athleteId
+      );
+      await setDoc(
+        reflectionRef,
+        {
+          hasUnreadFeedback: false,
+          lastFeedbackReadAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.error("Failed to mark feedback as read", err);
+    }
+  };
+  
+
   // 3. Open Modal
   const openReflectionAndComments = async (ev, athleteId = me) => {
     if (!me || !teamId || !athleteId) return;
@@ -314,6 +426,10 @@ export default function Calendar({ userRole }) {
     }
     
     setShowReflection(true);
+
+    if (!isCoach && athleteId === me) {
+      markFeedbackAsRead(ev.id, athleteId);
+    }
   };
 
   // 4. Save Reflection (Athlete)
@@ -338,51 +454,52 @@ export default function Calendar({ userRole }) {
   };
 
   // 5. Submit Feedback (Coach)
-  const submitComment = async (e) => {
-    e.preventDefault();
-    if (!isCoach || !newCommentText.trim() || !reflectionEvent || !reflectionUser) return;
+const submitComment = async (e) => {
+  e.preventDefault();
+  if (!isCoach || !newCommentText.trim() || !reflectionEvent || !reflectionUser) return;
 
-    setCommenting(true);
+  setCommenting(true);
+  try {
+    const coachId = me;
+    const coachName = userDisplayName;
+
+    const feedbackRef = doc(db, "teams", teamId, "events", reflectionEvent.id, "reflections", reflectionUser, "coachFeedback", coachId);
+    
+    const existingDoc = await getDoc(feedbackRef);
+    const createdAt = existingDoc.exists() ? existingDoc.data().createdAt : Timestamp.now();
+
+    // Write Feedback
+    await setDoc(feedbackRef, {
+      text: newCommentText.trim(),
+      createdBy: coachId,
+      createdByName: coachName,
+      createdAt: createdAt,
+      updatedAt: Timestamp.now(),
+    }, { merge: true });
+    
     try {
-      const coachId = me;
-      const coachName = userDisplayName;
-
-      const feedbackRef = doc(db, "teams", teamId, "events", reflectionEvent.id, "reflections", reflectionUser, "coachFeedback", coachId);
-      
-      // Preserve createdAt if exists
-      const existingDoc = await getDoc(feedbackRef);
-      const createdAt = existingDoc.exists() ? existingDoc.data().createdAt : Timestamp.now();
-
-      // Write Feedback
-      await setDoc(feedbackRef, {
-        text: newCommentText.trim(),
-        createdBy: coachId,
-        createdByName: coachName,
-        createdAt: createdAt,
-        updatedAt: Timestamp.now(),
-      }, { merge: true });
-      
-      // Send Notification (ISOLATED TRY-CATCH to prevent false failures)
-      try {
-          sendInAppNotification(reflectionUser, 'coach_comment', {
-            eventId: reflectionEvent.id, eventName: reflectionEvent.title, coachName: coachName
-          });
-      } catch (notificationError) {
-          console.warn("Notification stub failed, but Firestore submission was successful:", notificationError);
-          // We suppress this error so the UI updates correctly
-      }
-      
-      // Clear state on success
-      setNewCommentText('');
-      setIsEditingFeedback(false); 
-      
-    } catch (error) { 
-        // Main catch block - only for actual Firestore write failures
-        console.error("Error submitting comment:", error); 
-        setReflectionMessage("Failed to submit feedback."); 
-    } 
-    finally { setCommenting(false); }
-  };
+      await sendInAppNotification(reflectionUser, "coach_comment", {
+        teamId,
+        eventId: reflectionEvent.id,
+        eventName: reflectionEvent.title,
+        coachName,
+      });
+      console.log("[submitComment] Notification sent successfully");
+    } catch (notificationError) {
+      // 通知失败不应阻止反馈保存，但要明确记录
+      console.error("[submitComment] Notification failed:", notificationError);
+    }
+    
+    setNewCommentText('');
+    setIsEditingFeedback(false); 
+    
+  } catch (error) { 
+    console.error("Error submitting comment:", error); 
+    setReflectionMessage("Failed to submit feedback."); 
+  } 
+  finally { setCommenting(false); }
+};
+  
   
   // 6. Reflection Overview (Coach)
   const openReflectionOverview = async (ev) => {
@@ -529,13 +646,27 @@ export default function Calendar({ userRole }) {
                     <button className="btn" onClick={()=>deleteEvent(ev)} style={{ border:"1px solid #ef4444", color:"#ef4444", background:"var(--surface)" }}>Delete</button>
                   </>
                 ) : (
-                    <button 
-                        className="btn btn-primary" 
-                        onClick={() => openReflectionAndComments(ev, me)}
-                        style={{ fontSize: 14 }}
-                    >
-                        📝 Reflection Log
-                    </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => openReflectionAndComments(ev, me)}
+                    style={{ fontSize: 14, position: "relative", paddingRight: 18 }}
+                  >
+                    Reflection Log
+                    {unreadFeedbackEventIds.has(ev.id) && (
+                      <span
+                        aria-label="New coach feedback"
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 6,
+                          width: 10,
+                          height: 10,
+                          borderRadius: "999px",
+                          backgroundColor: "#ef4444",
+                        }}
+                      />
+                    )}
+                  </button>
                 )}
               </div>
             </div>

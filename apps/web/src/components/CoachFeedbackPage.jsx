@@ -114,6 +114,30 @@ export default function CoachFeedbackPage() {
             };
 
             await addDoc(feedbackRef, newFeedback);
+
+            // In-app notification for athlete feedback
+            try {
+              const notificationsRef = collection(
+                db,
+                "users",
+                athlete.id,
+                "notifications"
+              );
+              await addDoc(notificationsRef, {
+                type: "coachFeedback",
+                category,
+                message,
+                coachId: coach.uid,
+                coachName: coach.displayName || coach.email || "Coach",
+                athleteId: athlete.id,
+                createdAt: new Date(),
+              });
+            } catch (notifyErr) {
+              console.error(
+                "Error creating athlete feedback notification:",
+                notifyErr
+              );
+            }
             successCount++;
 
             // Send email notification (fire and forget)
@@ -143,6 +167,30 @@ export default function CoachFeedbackPage() {
         };
 
         await addDoc(feedbackRef, newFeedback);
+
+        // In-app notification for athlete feedback
+        try {
+          const notificationsRef = collection(
+            db,
+            "users",
+            selectedAthlete,
+            "notifications"
+          );
+          await addDoc(notificationsRef, {
+            type: "coachFeedback",
+            category,
+            message,
+            coachId: coach.uid,
+            coachName: coach.displayName || coach.email || "Coach",
+            athleteId: selectedAthlete,
+            createdAt: new Date(),
+          });
+        } catch (notifyErr) {
+          console.error(
+            "Error creating athlete feedback notification:",
+            notifyErr
+          );
+        }
         setStatus("Feedback successfully submitted!");
 
         // Send email notification (fire and forget)
