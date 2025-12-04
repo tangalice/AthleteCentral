@@ -155,6 +155,9 @@ export default function HealthAndAvailability() {
                 name: data.displayName || data.name || "Unnamed",
                 email: data.email || "",
                 healthStatus: data.healthStatus || "active", // only for TODAY reflection
+                // Track when healthStatus was last updated so we don't "stick"
+                // an old injury/unavailable status onto new days.
+                healthStatusUpdatedAt: data.healthStatusUpdatedAt || null,
                 teamIds: Array.from(teamSet),
               });
 
@@ -173,6 +176,7 @@ export default function HealthAndAvailability() {
                 name: "Unnamed",
                 email: "",
                 healthStatus: "active",
+                healthStatusUpdatedAt: null,
                 teamIds: Array.from(teamSet),
               });
               if (!cancelled) {
@@ -232,8 +236,26 @@ export default function HealthAndAvailability() {
     const map = {};
 
     for (const athlete of list) {
-      // Use profile 'healthStatus' *only* if it's today's date
-      const fallbackStatus = dateISO === todayISO ? athlete.healthStatus || "active" : "active";
+      // Use profile 'healthStatus' *for today only if it was actually updated today*.
+      // Otherwise default to "active" so old injuries/unavailable statuses do not
+      // "stick" across days and conflict with the 7‑day availability summary.
+      let fallbackStatus = "active";
+      if (dateISO === todayISO && athlete?.healthStatus) {
+        const rawUpdated = athlete.healthStatusUpdatedAt;
+        let updatedDate = null;
+        if (rawUpdated && typeof rawUpdated.toDate === "function") {
+          // Firestore Timestamp
+          updatedDate = rawUpdated.toDate();
+        } else if (rawUpdated instanceof Date) {
+          updatedDate = rawUpdated;
+        }
+        if (updatedDate) {
+          const updatedISO = updatedDate.toISOString().split("T")[0];
+          if (updatedISO === todayISO) {
+            fallbackStatus = athlete.healthStatus || "active";
+          }
+        }
+      }
       const tid = pickTeamIdForAthlete(athlete);
       
       if (!tid) {
@@ -445,16 +467,33 @@ export default function HealthAndAvailability() {
     })();
   }, [filteredAthletes, selectedTeamId]);
 
-  // (From V1)
+  // (From V1) – updated to use the same 7-day source of truth when available
   const dailyStats = useMemo(() => {
     const total = filteredAthletes.length;
-    const available = filteredAthletes.filter((a) => {
-      const st = athleteStatuses[a.id] || "active";
-      return st === "active";
-    }).length;
-    const pct = total > 0 ? Math.round((available / total) * 100) : 0;
+    if (total === 0) return { total: 0, available: 0, pct: 0 };
+
+    // Prefer the 7‑day summary map for the selected date so daily stats
+    // and the weekly percentages are always computed from the same data.
+    const dayMap = weeklyStatuses[selectedDate];
+
+    let available = 0;
+    if (dayMap) {
+      available = filteredAthletes.filter((a) => {
+        const st = dayMap[a.id] || "active";
+        return st === "active";
+      }).length;
+    } else {
+      // Fallback to per‑day in‑memory statuses if we don't yet have a
+      // weekly summary entry for this date.
+      available = filteredAthletes.filter((a) => {
+        const st = athleteStatuses[a.id] || "active";
+        return st === "active";
+      }).length;
+    }
+
+    const pct = Math.round((available / total) * 100);
     return { total, available, pct };
-  }, [filteredAthletes, athleteStatuses]);
+  }, [filteredAthletes, athleteStatuses, weeklyStatuses, selectedDate]);
 
   // (From V2)
   // ✅ Fixed version: always read from weeklyStatuses (consistent 7-day data)
