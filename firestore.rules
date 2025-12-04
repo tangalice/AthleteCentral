@@ -215,32 +215,32 @@ service cloud.firestore {
         }
         
         match /reflections/{athleteId} {
-        allow read: if exists(/databases/$(database)/documents/teams/$(teamId)) &&
-                    request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members &&
-                    (
-                        athleteId == request.auth.uid || 
-                        isCoach(request.auth.uid)
-                    );
+          allow read: if exists(/databases/$(database)/documents/teams/$(teamId)) &&
+                      request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members &&
+                      (
+                          athleteId == request.auth.uid || 
+                          isCoach(request.auth.uid)
+                      );
 
-        allow create, update: if isVerifiedUser() && 
-                              !isCoach(request.auth.uid) && 
-                              athleteId == request.auth.uid;
+          allow create, update: if isVerifiedUser() && 
+                                !isCoach(request.auth.uid) && 
+                                athleteId == request.auth.uid;
 
-        allow update: if isVerifiedUser() && 
-                      isCoach(request.auth.uid) &&
-                      request.auth.uid != athleteId &&
-                      request.resource.data.keys().hasOnly(['coachFeedbackUpdatedAt']); 
-    
-        
-        match /coachFeedback/{coachId} {
-            allow read: if exists(/databases/$(database)/documents/teams/$(teamId)) &&
-                        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members;
+          allow update: if isVerifiedUser() && 
+                        isCoach(request.auth.uid) &&
+                        request.auth.uid != athleteId &&
+                        request.resource.data.diff(resource.data).affectedKeys()
+                            .hasOnly(['hasUnreadFeedback', 'lastCoachFeedbackAt', 'coachFeedbackUpdatedAt']);
 
-            allow write: if isVerifiedUser() && 
-                         isCoach(request.auth.uid) &&
-                         coachId == request.auth.uid;
-        }
-    	}
+          match /coachFeedback/{coachId} {
+              allow read: if exists(/databases/$(database)/documents/teams/$(teamId)) &&
+                          request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.members;
+
+              allow write: if isVerifiedUser() && 
+                           isCoach(request.auth.uid) &&
+                           coachId == request.auth.uid;
+          }
+      }
       }
     }
     
@@ -291,16 +291,37 @@ service cloud.firestore {
       allow create, update, delete: if isCoach(request.auth.uid);
 
       match /responses/{responseId} {
-        allow create: if isVerifiedUser() &&
-                       !isCoach(request.auth.uid) &&
-                       request.auth.uid == responseId;
+        allow create, update: if isVerifiedUser() &&
+                              !isCoach(request.auth.uid) &&
+                              request.auth.uid == responseId;
 
         allow read: if isVerifiedUser() &&
                     (request.auth.uid == responseId || isCoach(request.auth.uid));
 
-        allow update, delete: if false;
+        allow delete: if isCoach(request.auth.uid);
       }
     }
+    
+    match /teamPolls/{pollId} {
+      allow read: if isVerifiedUser();
+
+      allow create, update, delete: if isVerifiedUser() && isCoach(request.auth.uid);
+
+      allow update: if isVerifiedUser() && !isCoach(request.auth.uid);
+
+      match /responses/{odUserId} {
+        allow read: if isVerifiedUser() &&
+                    (request.auth.uid == odUserId || isCoach(request.auth.uid));
+
+        allow create, update: if isVerifiedUser() &&
+                              !isCoach(request.auth.uid) &&
+                              request.auth.uid == odUserId;
+
+        allow delete: if isCoach(request.auth.uid);
+      }
+    }
+
+
 
     match /athleteAvailability/{availabilityId} {
       allow read: if isVerifiedUser();
