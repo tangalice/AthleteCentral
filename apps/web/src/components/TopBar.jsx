@@ -170,7 +170,7 @@ function DropdownMenu({ user, activeTab }) {
     menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" });
     menuItems.push({ path: "/coach-weight-info", label: "Athlete Weights", activeTab: "coach-weight-info" });
 
-    menuItems.push({ path: "/coach-view-predictions", label: "Predicted Results", activeTab: "coach-view-predictions" });
+    menuItems.push({ path: "/coach-view-predictions", label: "Analyze Predictions", activeTab: "coach-view-predictions" });
     
     // Lineup Builder - Only for rowing coaches
     if (user?.sport?.toLowerCase() === "rowing") {
