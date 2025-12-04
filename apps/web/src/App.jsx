@@ -879,7 +879,6 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-<<<<<<< HEAD
       {
         path: "team-personal-bests",
         element: (
@@ -902,8 +901,6 @@ const router = createBrowserRouter([
         ),
       },
 
-=======
->>>>>>> 724d4f7aa72308170390dfd2933838c07190d7f7
       {
         path: "data-reports",
         element: (
