@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { db } from "../firebase";
+import { Link } from "react-router-dom";
 import {
   collection,
   getDocs,
@@ -87,6 +88,24 @@ export default function CoachViewPredictions() {
   return (
     <div style={{ padding: "25px" }}>
       <h1>Predicted Results (Coach View)</h1>
+
+       {/* NEW BUTTON HERE */}
+    <div style={{ marginBottom: "20px" }}>
+      <Link to="/calendar">
+        <button
+          style={{
+            padding: "10px 16px",
+            backgroundColor: "#007bff",
+            color: "white",
+            border: "none",
+            borderRadius: "5px",
+            cursor: "pointer",
+          }}
+        >
+          Add Training
+        </button>
+      </Link>
+    </div>
 
       {/* Athlete dropdown */}
       <div style={{ marginTop: "20px", marginBottom: "20px" }}>
