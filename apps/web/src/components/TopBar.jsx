@@ -52,6 +52,7 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "teammate-comparison" ||
     activeTab === "improvement-rates" ||
     activeTab === "team-rankings" ||
+    activeTab === "team-personal-bests" || 
     activeTab === "similar-teammates" ||
     activeTab === "view-athlete-practices" ||
     activeTab === "weight-info" ||
@@ -145,7 +146,7 @@ function DropdownMenu({ user, activeTab }) {
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
 
   menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
-
+  menuItems.push({ path: "/team-personal-bests", label: "Team Personal Bests", activeTab: "team-personal-bests" }); 
   
   // Goals - Different for coach vs athlete
   if (user?.role === "athlete") {
