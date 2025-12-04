@@ -138,7 +138,6 @@ function DropdownMenu({ user, activeTab }) {
   // Results - Available to both
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
 
-  menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
   menuItems.push({ path: "/team-personal-bests", label: "Team Personal Bests", activeTab: "team-personal-bests" }); 
   
   // Goals - Different for coach vs athlete
@@ -146,9 +145,11 @@ function DropdownMenu({ user, activeTab }) {
     menuItems.push({ path: "/goals", label: "Goals", activeTab: "goals" });
     menuItems.push({ path: "/practice-performances", label: "Enter Practice", activeTab: "practice-performances" });
     menuItems.push({ path: "/weight-info", label: "Weight Info", activeTab: "weight-info" });
+    menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
   } else if (user?.role === "coach") {
     menuItems.push({ path: "/view-athlete-goals", label: "View Athlete Goals", activeTab: "view-athlete-goals" });
     menuItems.push({ path: "/suggest-goals", label: "Suggest Goals", activeTab: "suggest-goals" });
+    menuItems.push({ path: "/coach-team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
   }
   
   // Feedback - Different for coach vs athlete
