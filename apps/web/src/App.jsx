@@ -48,7 +48,10 @@ import AthleteFeedback from "./pages/AthleteFeedback";
 import CoachViewPredictions from "./pages/CoachViewPredictions";
 import SimilarTeammatesPage from "./components/SimilarTeammatesPage";
 
-import CreatePoll from "./components/CreatePoll";
+import CreateTeamPoll from "./components/CreateTeamPoll";
+import TeamPollList from "./components/TeamPollList";
+import TeamPollVote from "./components/TeamPollVote";
+
 import Results from './Billa_UI_Pages/Results';
 import EnterResults from './Billa_UI_Pages/EnterResults';
 import ViewResults from './Billa_UI_Pages/ViewResults';
@@ -69,6 +72,7 @@ import TeamRankings from './Billa_UI_Pages/TeamRankings';
 import TeamPersonalBests from './Billa_UI_Pages/TeamPersonalBests';
 import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
 import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
+import CoachTeamRankings from './Billa_UI_Pages/CoachTeamRankings';
 
 /* ---------------- Protected wrapper ---------------- */
 
@@ -235,6 +239,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "predict-results" ? "predict-results" :
     root === "compare-results" ? "compare-results" :
     root === "teammate-comparison" ? "teammate-comparison" :
+    root === "coach-team-rankings" ? "coach-team-rankings" :
     root === "similar-teammates" ? "similar-teammates" :
     root === "weight-info" ? "weight-info" :
     root === "team-rankings" ? "team-rankings" :
@@ -242,7 +247,9 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "improvement-rates" ? "improvement-rates" :
     root === "coach-weight-info" ? "coach-weight-info" :
     root === "log-workout" ? "log-workout" :
-    root === "create-poll" ? "dashboard" :
+    root === "create-team-poll" ? "dashboard" :
+    root === "team-polls" ? "dashboard" :
+    root === "team-poll" ? "dashboard" :
     "dashboard";
 
   return (
@@ -519,14 +526,6 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "create-poll",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <CreatePoll /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-      {
         path: "feedback-summary",
         element: (
           <ProtectedRoute user={user}>
@@ -544,6 +543,18 @@ const router = createBrowserRouter([
           <ProtectedRoute user={user}>
             {userRole === "coach" ? (
               <CreateFeedbackPoll />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "coach-team-rankings",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? (
+              <CoachTeamRankings user={mergedUser} userSport={userSport} />
             ) : (
               <Navigate to="/dashboard" replace />
             )}
@@ -574,11 +585,32 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // Coach: Create new team poll
       {
-        path: "coach-feedback",
+        path: "create-team-poll",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "coach" ? <FeedbackSummaryPage coach={user} /> : <Navigate to="/dashboard" replace />}
+            {userRole === "coach" ? <CreateTeamPoll /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+      },
+      
+      // Coach: View all team polls with results
+      {
+        path: "team-polls",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "coach" ? <TeamPollList /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        ),
+      },
+      
+      // Athlete: Vote on a team poll
+      {
+        path: "team-poll/:pollId",
+        element: (
+          <ProtectedRoute user={user}>
+            {userRole === "athlete" ? <TeamPollVote /> : <Navigate to="/dashboard" replace />}
           </ProtectedRoute>
         ),
       },
@@ -847,6 +879,7 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+<<<<<<< HEAD
       {
         path: "team-personal-bests",
         element: (
@@ -869,6 +902,8 @@ const router = createBrowserRouter([
         ),
       },
 
+=======
+>>>>>>> 724d4f7aa72308170390dfd2933838c07190d7f7
       {
         path: "data-reports",
         element: (

@@ -1,90 +1,112 @@
-/**
- * @jest-environment jsdom
- */
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
-
-import "@testing-library/jest-dom";
+import React from "react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
 import TrackField from "../components/TrackField";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+} from "vitest";
 
-jest.mock("firebase/app", () => ({
-    initializeApp: jest.fn(() => ({})),
-  }));
-  
-  jest.mock("firebase/auth", () => ({
-    getAuth: jest.fn(() => ({})),
-  }));
-  
-  jest.mock("firebase/firestore", () => ({
-    getFirestore: jest.fn(() => ({})),
-    doc: jest.fn(() => ({})),
-    getDoc: jest.fn(() => Promise.resolve({ exists: () => false })),
-    updateDoc: jest.fn(() => Promise.resolve()),
-    setDoc: jest.fn(() => Promise.resolve()),
-    collection: jest.fn(),
-    query: jest.fn(),
-    where: jest.fn(),
-    getDocs: jest.fn(() => Promise.resolve({ docs: [] })),
-  }));
+// ---- ✅ Mock Firebase ----
+vi.mock("firebase/app", () => ({
+  initializeApp: vi.fn(() => ({})),
+}));
 
-// ---- ✅ Mock Firestore ----
+vi.mock("firebase/auth", () => ({
+  getAuth: vi.fn(() => ({})),
+}));
+
+vi.mock("firebase/firestore", () => ({
+  getFirestore: vi.fn(() => ({})),
+  doc: vi.fn(() => ({})),
+  getDoc: vi.fn(() => Promise.resolve({ exists: () => false })),
+  updateDoc: vi.fn(() => Promise.resolve()),
+  setDoc: vi.fn(() => Promise.resolve()),
+  collection: vi.fn(),
+  query: vi.fn(),
+  where: vi.fn(),
+  getDocs: vi.fn(() => Promise.resolve({ docs: [] })),
+}));
 
 // ---- ✅ Mock localStorage ----
 beforeAll(() => {
-  global.localStorage = {
-    store: {},
-    getItem(key) {
-      return this.store[key] || null;
+  const store = {};
+
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) {
+        return Object.prototype.hasOwnProperty.call(store, key)
+          ? store[key]
+          : null;
+      },
+      setItem(key, value) {
+        store[key] = value.toString();
+      },
+      clear() {
+        Object.keys(store).forEach((k) => delete store[k]);
+      },
+      removeItem(key) {
+        delete store[key];
+      },
     },
-    setItem(key, value) {
-      this.store[key] = value.toString();
-    },
-    clear() {
-      this.store = {};
-    },
-    removeItem(key) {
-      delete this.store[key];
-    },
-  };
+  });
 });
 
 beforeEach(() => {
-  localStorage.clear();
-  jest.clearAllMocks();
+  window.localStorage.clear();
+  vi.clearAllMocks();
 });
 
 // ---- ✅ Tests ----
 describe("🏃‍♀️ TrackField Component", () => {
-  test("renders main headings correctly", () => {
+  it("renders main headings correctly", () => {
     render(<TrackField />);
     expect(screen.getByText(/Track & Field/i)).toBeInTheDocument();
-    expect(screen.getByText(/Indoor \/ Outdoor Adjustment/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Indoor \/ Outdoor Adjustment/i)
+    ).toBeInTheDocument();
     expect(screen.getByText(/Race Time Prediction/i)).toBeInTheDocument();
   });
 
-  test("toggles mode radio buttons", async () => {
+  it("toggles mode radio buttons", async () => {
     render(<TrackField />);
     const indoorRadios = screen.getAllByLabelText(/Indoor/i);
     const outdoorRadios = screen.getAllByLabelText(/Outdoor/i);
 
     expect(indoorRadios[0]).toBeChecked();
+
     await act(async () => {
       fireEvent.click(outdoorRadios[0]);
     });
+
     expect(outdoorRadios[0]).toBeChecked();
   });
 
-  test("shows error if distance or time missing", async () => {
+  it("shows error if distance or time missing", async () => {
     render(<TrackField />);
     const button = screen.getByText(/Calculate Adjustment/i);
+
     await act(async () => {
       fireEvent.click(button);
     });
+
     expect(
       screen.getByText(/Please enter both distance and time/i)
     ).toBeInTheDocument();
   });
 
-  test("calculates adjusted time correctly (indoor to outdoor)", async () => {
+  it("calculates adjusted time correctly (indoor to outdoor)", async () => {
     render(<TrackField />);
     const inputs = screen.getAllByRole("spinbutton");
 
@@ -95,11 +117,13 @@ describe("🏃‍♀️ TrackField Component", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Adjusted Outdoor Time/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Adjusted Outdoor Time/i)
+      ).toBeInTheDocument();
     });
   });
 
-  test("predicts race time correctly", async () => {
+  it("predicts race time correctly", async () => {
     render(<TrackField />);
     const numberInputs = screen.getAllByRole("spinbutton");
 
@@ -115,7 +139,7 @@ describe("🏃‍♀️ TrackField Component", () => {
     });
   });
 
-  test("shows error for unrealistic input", async () => {
+  it("shows error for unrealistic input", async () => {
     render(<TrackField />);
     const numberInputs = screen.getAllByRole("spinbutton");
 

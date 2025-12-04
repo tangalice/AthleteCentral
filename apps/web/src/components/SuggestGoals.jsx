@@ -47,6 +47,29 @@ export default function SuggestGoals({ user }) {
       };
 
       await addDoc(athleteRef, newGoal);
+
+      // In-app notification for the athlete
+      try {
+        const athleteNotificationsRef = collection(
+          db,
+          "users",
+          selectedAthlete,
+          "notifications"
+        );
+        await addDoc(athleteNotificationsRef, {
+          type: "coachSuggestedGoal",
+          goalTitle: title,
+          coachId: coach.uid,
+          coachName: coach.displayName || coach.email || "Coach",
+          athleteId: selectedAthlete,
+          createdAt: new Date(),
+        });
+      } catch (notifyErr) {
+        console.error(
+          "Error creating athlete goal suggestion notification:",
+          notifyErr
+        );
+      }
       setStatus("Goal successfully suggested!");
       setTitle("");
       setSelectedAthlete("");
