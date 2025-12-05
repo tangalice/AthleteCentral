@@ -52,6 +52,7 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "teammate-comparison" ||
     activeTab === "improvement-rates" ||
     activeTab === "team-rankings" ||
+    activeTab === "team-personal-bests" || 
     activeTab === "coach-team-rankings" ||
     activeTab === "similar-teammates" ||
     activeTab === "view-athlete-practices" ||
@@ -139,21 +140,18 @@ function DropdownMenu({ user, activeTab }) {
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
   menuItems.push({ path: "/resources", label: "Resources", activeTab: "resources" });
 
-  if (user?.role === "athlete") {
-    menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
-  } else if (user?.role === "coach") {
-    menuItems.push({ path: "/coach-team-rankings", label: "Team Rankings", activeTab: "coach-team-rankings" });
-  }
-
+  menuItems.push({ path: "/team-personal-bests", label: "Team Personal Bests", activeTab: "team-personal-bests" }); 
   
   // Goals - Different for coach vs athlete
   if (user?.role === "athlete") {
     menuItems.push({ path: "/goals", label: "Goals", activeTab: "goals" });
     menuItems.push({ path: "/practice-performances", label: "Enter Practice", activeTab: "practice-performances" });
     menuItems.push({ path: "/weight-info", label: "Weight Info", activeTab: "weight-info" });
+    menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
   } else if (user?.role === "coach") {
     menuItems.push({ path: "/view-athlete-goals", label: "View Athlete Goals", activeTab: "view-athlete-goals" });
     menuItems.push({ path: "/suggest-goals", label: "Suggest Goals", activeTab: "suggest-goals" });
+    menuItems.push({ path: "/coach-team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
   }
   
   // Feedback - Different for coach vs athlete
@@ -172,7 +170,7 @@ function DropdownMenu({ user, activeTab }) {
     menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" });
     menuItems.push({ path: "/coach-weight-info", label: "Athlete Weights", activeTab: "coach-weight-info" });
 
-    menuItems.push({ path: "/coach-view-predictions", label: "Predicted Results", activeTab: "coach-view-predictions" });
+    menuItems.push({ path: "/coach-view-predictions", label: "Analyze Predictions", activeTab: "coach-view-predictions" });
     
     // Lineup Builder - Only for rowing coaches
     if (user?.sport?.toLowerCase() === "rowing") {

@@ -64,8 +64,42 @@ export default function Goals({ user }) {
 
   const handleToggleComplete = async (goal) => {
     try {
+      const newCompleted = !goal.completed;
       const ref = doc(db, "users", user.uid, "goalsList", goal.id);
-      await updateDoc(ref, { completed: !goal.completed });
+      await updateDoc(ref, { completed: newCompleted });
+
+      // If this is a coach-suggested goal being marked as completed,
+      // create an in-app notification for the coach.
+      if (
+        newCompleted &&
+        goal.category === "Coach Suggested" &&
+        goal.suggestedBy
+      ) {
+        try {
+          const coachNotificationsRef = collection(
+            db,
+            "users",
+            goal.suggestedBy,
+            "notifications"
+          );
+
+          await addDoc(coachNotificationsRef, {
+            type: "goalCompleted",
+            goalId: goal.id,
+            goalTitle: goal.title || "Goal",
+            athleteId: user.uid,
+            athleteName:
+              user.displayName || user.name || user.email || "Your athlete",
+            createdAt: new Date(),
+          });
+        } catch (notifyErr) {
+          // Don't block the user if notification write fails
+          console.error(
+            "Error creating coach goal-completed notification:",
+            notifyErr
+          );
+        }
+      }
     } catch (err) {
       console.error("Error updating goal:", err);
     }

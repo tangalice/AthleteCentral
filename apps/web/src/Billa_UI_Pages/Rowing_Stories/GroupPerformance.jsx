@@ -395,12 +395,62 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
     return rankingsMap;
   }, [filteredData]);
 
+  // Calculate team records - best time for each test type across ALL team data (not just filtered)
+  const teamRecords = useMemo(() => {
+    const recordsMap = {};
+    
+    teamData.forEach((entry) => {
+      if (!entry.completed) return;
+      if (!entry.time || entry.time === '--:--.-' || entry.time === '--:--') return;
+      
+      const timeToSeconds = (timeStr) => {
+        if (!timeStr || timeStr === '--:--.-' || timeStr === '--:--') return Infinity;
+        const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
+        if (!timeString.includes(':')) return Infinity;
+        try {
+          const parts = timeString.split(':');
+          const minutes = parseInt(parts[0]) || 0;
+          const seconds = parseFloat(parts[1]) || 0;
+          return minutes * 60 + seconds;
+        } catch (err) {
+          return Infinity;
+        }
+      };
+      
+      const entrySeconds = timeToSeconds(entry.time);
+      if (entrySeconds === Infinity) return;
+      
+      if (!recordsMap[entry.testType]) {
+        recordsMap[entry.testType] = {
+          id: entry.id,
+          time: entry.time,
+          seconds: entrySeconds,
+          athleteName: entry.athleteName
+        };
+      } else if (entrySeconds < recordsMap[entry.testType].seconds) {
+        recordsMap[entry.testType] = {
+          id: entry.id,
+          time: entry.time,
+          seconds: entrySeconds,
+          athleteName: entry.athleteName
+        };
+      }
+    });
+    
+    return recordsMap;
+  }, [teamData]);
+
   const getRank = (entry) => {
     if (!entry.completed) return '-';
     const typeRankings = rankings[entry.testType];
     if (!typeRankings) return '-';
     const index = typeRankings.findIndex((e) => e.id === entry.id);
     return index !== -1 ? index + 1 : '-';
+  };
+
+  const isTeamRecord = (entry) => {
+    const record = teamRecords[entry.testType];
+    return record && record.id === entry.id;
   };
 
   const handleSort = (column) => {
@@ -421,6 +471,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
   const totalAthletes = new Set(teamData.map(entry => entry.athleteId)).size;
   const completedTests = teamData.filter(entry => entry.completed).length;
   const incompleteTests = teamData.filter(entry => !entry.completed).length;
+  const totalRecords = Object.keys(teamRecords).length;
 
   // Handler for completion status with logging
   const handleCompletionStatusChange = (status) => {
@@ -511,6 +562,45 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
           {userSport && <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>({userSport})</span>}
         </p>
       </div>
+
+      {/* Team Records Summary */}
+      {Object.keys(teamRecords).length > 0 && (
+        <div style={{ 
+          marginBottom: '24px', 
+          backgroundColor: '#fef3c7', 
+          padding: '20px', 
+          borderRadius: '12px',
+          border: '2px solid #f59e0b'
+        }}>
+          <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            Team Records
+          </h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+            {Object.entries(teamRecords).map(([testType, record]) => (
+              <div 
+                key={testType}
+                style={{
+                  backgroundColor: '#ffffff',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #fcd34d',
+                  minWidth: '180px'
+                }}
+              >
+                <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>
+                  {testType}
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>
+                  {record.time}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                  {record.athleteName}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ 
@@ -725,13 +815,14 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
                   const rank = getRank(entry);
                   const isTopThree = rank !== '-' && rank <= 3;
                   const isIncomplete = !entry.completed;
+                  const isRecord = isTeamRecord(entry);
                   
                   return (
                     <tr
                       key={entry.id}
                       style={{ 
                         borderBottom: '1px solid #f3f4f6',
-                        backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa',
+                        backgroundColor: isRecord ? '#fef9c3' : (index % 2 === 0 ? '#ffffff' : '#fafafa'),
                         opacity: isIncomplete ? 0.6 : 1
                       }}
                     >
@@ -762,7 +853,28 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
                         </span>
                       </td>
                       <td style={{ padding: '16px 24px', color: '#111827', fontWeight: 600, fontSize: '15px' }}>
-                        {entry.athleteName}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {entry.athleteName}
+                          {isRecord && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                backgroundColor: '#f59e0b',
+                                color: '#ffffff',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px'
+                              }}
+                            >
+                               Team Record
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: '16px 24px' }}>
                         <span
@@ -816,7 +928,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
       <div style={{ 
         marginTop: '24px', 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
         gap: '16px' 
       }}>
         <div style={{ 
@@ -873,6 +985,20 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
           </div>
           <div style={{ fontSize: '32px', fontWeight: 700, color: '#ef4444' }}>
             {incompleteTests}
+          </div>
+        </div>
+        <div style={{ 
+          backgroundColor: '#fef3c7', 
+          padding: '24px', 
+          borderRadius: '12px',
+          border: '2px solid #f59e0b',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '13px', color: '#92400e', marginBottom: '8px', fontWeight: 600 }}>
+             Team Records
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: 700, color: '#92400e' }}>
+            {totalRecords}
           </div>
         </div>
       </div>

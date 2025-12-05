@@ -532,7 +532,6 @@ const rankingsText =
                 <th>Rank</th>
                 <th>Athlete</th>
                 <th>Email</th>
-                <th>Tests Completed</th>
               </tr>
             </thead>
             <tbody>
@@ -541,7 +540,6 @@ const rankingsText =
                   <td>{i + 1}</td>
                   <td>{r.athleteName}</td>
                   <td>{r.email || "-"}</td>
-                  <td>{r.testsCompleted}</td>
                 </tr>
               ))}
             </tbody>
@@ -552,7 +550,6 @@ const rankingsText =
               <tr>
                 <th style={{textAlign: "center"}}>Rank</th>
                 <th style={{textAlign: "center"}}>Athlete</th>
-                <th style={{textAlign: "center"}}>Email</th>
                 <th style={{textAlign: "center"}}>Best Time</th>
                 <th style={{textAlign: "center"}}>Date</th>
               </tr>
@@ -569,7 +566,6 @@ const rankingsText =
                   <tr key={r.athleteId}>
                     <td style={{textAlign: "center"}}>{i + 1}</td>
                     <td style={{textAlign: "center"}}>{r.athleteName}</td>
-                    <td style={{textAlign: "center"}}>{r.email || "-"}</td>
                     <td style={{textAlign: "center"}}>{r.bestTime}</td>
                     <td style={{textAlign: "center"}}>{d ? d.toISOString().split("T")[0] : "-"}</td>
                   </tr>

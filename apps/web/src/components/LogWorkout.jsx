@@ -96,7 +96,7 @@ export default function LogWorkout({ userRole, user }) {
       return;
     }
     if (!formData.workoutType.trim()) {
-      setError("Please enter a workout type");
+      setError("Please enter a workout name");
       return;
     }
     if (!formData.duration || parseFloat(formData.duration) <= 0) {
@@ -277,7 +277,7 @@ export default function LogWorkout({ userRole, user }) {
                   color: "#374151",
                 }}
               >
-                Workout Type <span style={{ color: "#ef4444" }}>*</span>
+                Workout Name <span style={{ color: "#ef4444" }}>*</span>
               </label>
               <input
                 type="text"
