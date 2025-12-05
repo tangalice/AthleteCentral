@@ -9,14 +9,6 @@ export default function Resources({ user, userRole }) {
   
   return (
     <div style={{ padding: '24px 0' }}>
-      <h1 style={{ 
-        fontSize: '32px', 
-        fontWeight: 700, 
-        marginBottom: '24px', 
-        color: '#111827' 
-      }}>
-        Team Resources
-      </h1>
       
       {userRole === 'coach' ? (
         <Resources_coach user={user} />
