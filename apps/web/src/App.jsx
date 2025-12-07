@@ -73,6 +73,7 @@ import TeamPersonalBests from './Billa_UI_Pages/TeamPersonalBests';
 import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
 import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
 import CoachTeamRankings from './Billa_UI_Pages/CoachTeamRankings';
+import Resources from "./components/Resources";
 
 /* ---------------- Protected wrapper ---------------- */
 
@@ -223,6 +224,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "activity" ? "activity" :
     root === "athlete-tools" ? "athlete-tools" :
     root === "results"  ? "results"  :
+    root === "resources" ? "resources" :
     root === "goals"    ? "goals"    :
     root === "view-athlete-goals" ? "view-athlete-goals" :
     root === "coach-feedback" ? "coach-feedback" :
@@ -973,6 +975,14 @@ const router = createBrowserRouter([
             ) : (
               <Navigate to="/dashboard" replace />
             )}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "resources",
+        element: (
+          <ProtectedRoute user={user}>
+            <Resources userRole={userRole} user={mergedUser} />
           </ProtectedRoute>
         ),
       },
