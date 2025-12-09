@@ -616,14 +616,11 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
               <span style={{ fontWeight: 700 }}>
                 {openPoll.title || "Weekly Feedback Poll"}
               </span>
-<<<<<<< HEAD
             </p>
 
             {/* 可选：简单一句描述 */}
             <p style={{ fontSize: 14, marginBottom: 8 }}>
               Please complete this week’s anonymous feedback before the deadline.
-=======
->>>>>>> b2be1a1eadbbd1e9cb05b1f5c600f185ae44054b
             </p>
 
             {/* 可选：简单一句描述 */}
