@@ -610,7 +610,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
               maxWidth: 600,
             }}
           >
-            {/* 标题：明确告诉这是哪一个 poll */}
+            {}
             <p style={{ fontWeight: 600, marginBottom: 4 }}>
               Current feedback poll:{" "}
               <span style={{ fontWeight: 700 }}>
@@ -618,12 +618,7 @@ export default function Dashboard({ userRole, user, unreadMessageCount = 0 }) {
               </span>
             </p>
 
-            {/* 可选：简单一句描述 */}
-            <p style={{ fontSize: 14, marginBottom: 8 }}>
-              Please complete this week’s anonymous feedback before the deadline.
-            </p>
-
-            {/* 可选：简单一句描述 */}
+            {}
             <p style={{ fontSize: 14, marginBottom: 8 }}>
               Please complete this week’s anonymous feedback before the deadline.
             </p>
