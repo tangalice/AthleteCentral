@@ -1,14 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc, updateDoc, deleteDoc, where } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 
-// Sport-specific test types
 const getTestTypesBySport = (sport) => {
   const sportLower = sport?.toLowerCase() || '';
-  
   switch (sportLower) {
     case 'rowing':
-      return ['All', '2k', '5k', '6k', '30min', '60min'];
+      return ['All', '2k', '5k', '6k', '2x5k', '30min', '60min'];
     case 'running':
     case 'track':
     case 'cross country':
@@ -20,111 +18,333 @@ const getTestTypesBySport = (sport) => {
   }
 };
 
-// Get column configuration by sport
 const getColumnsBySport = (sport) => {
   const sportLower = sport?.toLowerCase() || '';
-  
   switch (sportLower) {
     case 'rowing':
-      return {
-        splitLabel: 'Split (/500m)',
-        showWatts: true,
-        showSplit: true,
-      };
+      return { splitLabel: 'Split (/500m)', showWatts: true, showSplit: true, showWeightAdjusted: true };
     case 'running':
     case 'track':
     case 'cross country':
-      return {
-        splitLabel: 'Pace (/mile)',
-        showWatts: false,
-        showSplit: true,
-      };
+      return { splitLabel: 'Pace (/mile)', showWatts: false, showSplit: true, showWeightAdjusted: false };
     case 'swimming':
-      return {
-        splitLabel: 'Pace (/100m)',
-        showWatts: false,
-        showSplit: true,
-      };
+      return { splitLabel: 'Pace (/100m)', showWatts: false, showSplit: true, showWeightAdjusted: false };
     default:
-      return {
-        splitLabel: 'Split (/500m)',
-        showWatts: true,
-        showSplit: true,
-      };
+      return { splitLabel: 'Split (/500m)', showWatts: true, showSplit: true, showWeightAdjusted: true };
   }
 };
 
-// Calculate split time from total time and distance
-const calculateSplit = (timeStr, testType, sport) => {
-  if (!timeStr || timeStr === '--:--.-' || timeStr === '--:--') return null;
-  
-  const sportLower = sport?.toLowerCase() || '';
-  
-  // Get distance in meters based on test type
-  const getDistanceMeters = (testType) => {
-    const testLower = testType?.toLowerCase() || '';
-    if (testLower.includes('2k') || testLower === '2k') return 2000;
-    if (testLower.includes('5k') || testLower === '5k') return 5000;
-    if (testLower.includes('6k') || testLower === '6k') return 6000;
-    // For time-based tests, we can't calculate split
-    if (testLower.includes('min')) return null;
-    return null;
-  };
-  
-  const distanceMeters = getDistanceMeters(testType);
-  if (!distanceMeters) return null;
-  
+const splitToSeconds = (splitStr) => {
+  if (!splitStr || splitStr === '-' || splitStr === '--:--.-' || splitStr === '--:--') return Infinity;
   try {
-    // Convert time to total seconds
-    const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
-    if (!timeString.includes(':')) return null;
-    
-    const parts = timeString.split(':');
+    const parts = splitStr.split(':');
     const minutes = parseInt(parts[0]) || 0;
     const seconds = parseFloat(parts[1]) || 0;
-    const totalSeconds = minutes * 60 + seconds;
-    
-    // Calculate split per 500m (for rowing)
-    if (sportLower === 'rowing') {
-      const splitSeconds = (totalSeconds / distanceMeters) * 500;
-      const splitMinutes = Math.floor(splitSeconds / 60);
-      const splitSecs = (splitSeconds % 60).toFixed(1);
-      return `${splitMinutes}:${splitSecs.padStart(4, '0')}`;
-    }
-    
-    return null;
+    return minutes * 60 + seconds;
   } catch (err) {
-    console.error('Error calculating split:', err);
-    return null;
+    return Infinity;
   }
 };
 
-// Calculate watts from split time (for rowing)
 const calculateWatts = (splitStr) => {
-  // FIXED: Check for invalid split formats
   if (!splitStr || splitStr === '-' || splitStr === '--:--.-' || splitStr === '--:--') return 0;
-  
   try {
-    // Convert split time to seconds
     const parts = splitStr.split(':');
     const minutes = parseInt(parts[0]) || 0;
     const seconds = parseFloat(parts[1]) || 0;
     const splitSeconds = minutes * 60 + seconds;
-    
-    // FIXED: Check if splitSeconds is valid (not 0 or NaN)
     if (!splitSeconds || splitSeconds <= 0 || isNaN(splitSeconds)) return 0;
-    
-    // Watts formula: 2.80 / (pace/500)^3
     const watts = 2.80 / Math.pow(splitSeconds / 500, 3);
-    
-    // FIXED: Check if result is valid
     if (!isFinite(watts) || isNaN(watts)) return 0;
-    
     return Math.round(watts);
   } catch (err) {
-    console.error('Error calculating watts:', err);
     return 0;
   }
+};
+
+// Weight-adjusted score calculation
+// Formula: WF = (bodyWeight / 270) ^ 0.222
+// Corrected split (seconds) = WF * actual split (seconds)
+// Final = average of corrected split and actual split
+const calculateWeightAdjustedSplit = (splitStr, weight) => {
+  if (!splitStr || splitStr === '-' || splitStr === '--:--.-' || splitStr === '--:--') return null;
+  if (!weight || weight <= 0) return null;
+  
+  try {
+    const parts = splitStr.split(':');
+    const minutes = parseInt(parts[0]) || 0;
+    const seconds = parseFloat(parts[1]) || 0;
+    const splitSeconds = minutes * 60 + seconds;
+    if (!splitSeconds || splitSeconds <= 0 || isNaN(splitSeconds)) return null;
+    
+    // Weight factor = (weight / 270) ^ 0.222
+    const weightFactor = Math.pow(weight / 270, 0.222);
+    
+    // Corrected time in seconds
+    const correctedSeconds = weightFactor * splitSeconds;
+    
+    // Average of corrected and actual
+    const averageSeconds = (correctedSeconds + splitSeconds) / 2;
+    
+    // Convert back to split format (m:ss.s)
+    const mins = Math.floor(averageSeconds / 60);
+    const secs = averageSeconds % 60;
+    return `${mins}:${secs.toFixed(1).padStart(4, '0')}`;
+  } catch (err) {
+    return null;
+  }
+};
+
+// Calculate watts from weight-adjusted split
+const calculateWeightAdjustedWatts = (splitStr, weight) => {
+  const adjustedSplit = calculateWeightAdjustedSplit(splitStr, weight);
+  if (!adjustedSplit) return null;
+  const watts = calculateWatts(adjustedSplit);
+  return watts > 0 ? watts : null;
+};
+
+const formatDateDisplay = (dateVal, options = { month: 'numeric', day: 'numeric' }) => {
+  if (!dateVal) return '-';
+  try {
+    if (typeof dateVal === 'string') {
+      return new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', options);
+    } else if (dateVal instanceof Date) {
+      return dateVal.toLocaleDateString('en-US', options);
+    } else if (dateVal.toDate) {
+      return dateVal.toDate().toLocaleDateString('en-US', options);
+    }
+    return '-';
+  } catch (err) {
+    return '-';
+  }
+};
+
+const getDateString = (dateVal) => {
+  if (!dateVal) return '';
+  try {
+    if (typeof dateVal === 'string') return dateVal;
+    if (dateVal instanceof Date) return dateVal.toISOString().split('T')[0];
+    if (dateVal.toDate) return dateVal.toDate().toISOString().split('T')[0];
+    return '';
+  } catch (err) {
+    return '';
+  }
+};
+
+const formatDateForInput = (date) => getDateString(date);
+
+const getUniqueDates = (data) => {
+  const dates = new Set();
+  data.forEach(entry => {
+    if (entry.date) {
+      const formatted = formatDateForInput(entry.date);
+      if (formatted) dates.add(formatted);
+    }
+  });
+  return Array.from(dates).sort((a, b) => new Date(b) - new Date(a));
+};
+
+// Edit Modal Component - COACH ONLY
+const EditModal = ({ entry, onClose, onSave }) => {
+  const [formData, setFormData] = useState({
+    time: entry.time || '',
+    split: entry.split || '',
+    date: getDateString(entry.date) || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [weight, setWeight] = useState(null);
+  const [loadingWeight, setLoadingWeight] = useState(false);
+
+  const calculatedWatts = useMemo(() => calculateWatts(formData.split), [formData.split]);
+  const wattsPerKg = useMemo(() => {
+    if (weight && calculatedWatts > 0) return (calculatedWatts / weight).toFixed(2);
+    return null;
+  }, [calculatedWatts, weight]);
+
+  const weightAdjustedSplit = useMemo(() => calculateWeightAdjustedSplit(formData.split, weight), [formData.split, weight]);
+  const weightAdjustedWatts = useMemo(() => calculateWeightAdjustedWatts(formData.split, weight), [formData.split, weight]);
+
+  useEffect(() => {
+    const fetchWeight = async () => {
+      if (!entry.athleteId || !formData.date) { setWeight(null); return; }
+      setLoadingWeight(true);
+      try {
+        const weightQuery = query(collection(db, 'users', entry.athleteId, 'weightData'), where('date', '==', formData.date));
+        const snapshot = await getDocs(weightQuery);
+        setWeight(!snapshot.empty ? snapshot.docs[0].data().weight : null);
+      } catch (error) { setWeight(null); }
+      setLoadingWeight(false);
+    };
+    fetchWeight();
+  }, [entry.athleteId, formData.date]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const updateData = { time: formData.time, split: formData.split, avgSplit: formData.split, date: formData.date, watts: calculatedWatts };
+      if (weight && calculatedWatts > 0) {
+        updateData.wattsPerKg = parseFloat(wattsPerKg);
+        updateData.athleteWeight = weight;
+        updateData.weightAdjustedSplit = weightAdjustedSplit;
+        updateData.weightAdjustedWatts = weightAdjustedWatts;
+      } else {
+        updateData.wattsPerKg = null;
+        updateData.athleteWeight = null;
+        updateData.weightAdjustedSplit = null;
+        updateData.weightAdjustedWatts = null;
+      }
+      await onSave(entry.athleteId, entry.id, updateData);
+      onClose();
+    } catch (error) { alert('Error saving: ' + error.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
+      <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '24px', maxWidth: '500px', width: '90%', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#111827' }}>Edit Result</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#9ca3af' }}>×</button>
+        </div>
+        <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{entry.athleteName}</div>
+          <div style={{ fontSize: '12px', color: '#6b7280' }}>{entry.testType}</div>
+        </div>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date</label>
+          <input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }} />
+        </div>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Time</label>
+          <input type="text" value={formData.time} onChange={(e) => setFormData({ ...formData, time: e.target.value })} placeholder="7:00.0" style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+        </div>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Split (/500m)</label>
+          <input type="text" value={formData.split} onChange={(e) => setFormData({ ...formData, split: e.target.value })} placeholder="1:45.0" style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #10b981' }}>
+          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Watts</div><div style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>{calculatedWatts > 0 ? calculatedWatts : '-'}</div></div>
+          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Weight</div><div style={{ fontSize: '18px', fontWeight: 700, color: weight ? '#111827' : '#9ca3af' }}>{loadingWeight ? '...' : weight ? `${weight} kg` : '-'}</div></div>
+          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>W/kg</div><div style={{ fontSize: '18px', fontWeight: 700, color: wattsPerKg ? '#10b981' : '#9ca3af' }}>{wattsPerKg || '-'}</div></div>
+        </div>
+        {/* Weight Adjusted Row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '20px', padding: '16px', backgroundColor: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
+          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#92400e', marginBottom: '4px' }}>Wt-Adj Split</div><div style={{ fontSize: '18px', fontWeight: 700, color: weightAdjustedSplit ? '#92400e' : '#9ca3af', fontFamily: 'monospace' }}>{weightAdjustedSplit || '-'}</div></div>
+          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#92400e', marginBottom: '4px' }}>Wt-Adj Watts</div><div style={{ fontSize: '18px', fontWeight: 700, color: weightAdjustedWatts ? '#92400e' : '#9ca3af' }}>{weightAdjustedWatts || '-'}</div></div>
+        </div>
+        {!weight && formData.date && <p style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '16px' }}>⚠️ No weight recorded for this date.</p>}
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '12px', backgroundColor: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: '12px', backgroundColor: saving ? '#9ca3af' : '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? 'Saving...' : 'Save Changes'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Delete Modal - COACH ONLY
+const DeleteModal = ({ entry, onClose, onConfirm }) => {
+  const [deleting, setDeleting] = useState(false);
+  const handleDelete = async () => {
+    setDeleting(true);
+    try { await onConfirm(entry.athleteId, entry.id); onClose(); } 
+    catch (error) { alert('Error deleting: ' + error.message); }
+    setDeleting(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
+      <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '24px', maxWidth: '400px', width: '90%', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+          <div style={{ width: '48px', height: '48px', backgroundColor: '#fee2e2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}><span style={{ fontSize: '24px' }}>🗑️</span></div>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>Delete Result?</h2>
+          <p style={{ fontSize: '14px', color: '#6b7280' }}>Delete result for <strong>{entry.athleteName}</strong>?</p>
+          <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{entry.testType}</div>
+            <div style={{ fontSize: '13px', color: '#6b7280', fontFamily: 'monospace' }}>{entry.time} • {entry.split}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '12px', backgroundColor: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={handleDelete} disabled={deleting} style={{ flex: 1, padding: '12px', backgroundColor: deleting ? '#9ca3af' : '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer' }}>{deleting ? 'Deleting...' : 'Delete'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Split Breakdown Modal - Available to ALL users
+const SplitBreakdownModal = ({ entry, onClose }) => {
+  if (!entry) return null;
+  const splits = entry.splits || [];
+  const testType = entry.testType?.toLowerCase() || '';
+  
+  const getSplitLabels = () => {
+    if (testType === '2k') return ['500m', '1000m', '1500m', '2000m'];
+    if (testType === '5k') return ['1k', '2k', '3k', '4k', '5k'];
+    if (testType === '6k') return ['1k', '2k', '3k', '4k', '5k', '6k'];
+    if (testType === '2x5k') return ['Piece 1', 'Piece 2'];
+    return splits.map((_, i) => 'Split ' + (i + 1));
+  };
+  const splitLabels = getSplitLabels();
+  const getSplitValue = (split) => typeof split === 'string' ? split : split?.split || '-';
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
+      <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '24px', maxWidth: '500px', width: '90%', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ marginBottom: '20px', borderBottom: '2px solid #e5e7eb', paddingBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{entry.athleteName}</h2>
+              <p style={{ fontSize: '14px', color: '#6b7280' }}>{entry.testType} • {formatDateDisplay(entry.date, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+            </div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#9ca3af' }}>×</button>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ backgroundColor: '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600, marginBottom: '4px' }}>TIME</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{entry.time}</div></div>
+          <div style={{ backgroundColor: '#d1fae5', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#065f46', fontWeight: 600, marginBottom: '4px' }}>AVG SPLIT</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#065f46', fontFamily: 'monospace' }}>{entry.split}</div></div>
+          <div style={{ backgroundColor: '#dbeafe', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600, marginBottom: '4px' }}>WATTS</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#1e40af', fontFamily: 'monospace' }}>{entry.watts || '-'}</div></div>
+          <div style={{ backgroundColor: entry.wattsPerKg ? '#fef3c7' : '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: entry.wattsPerKg ? '#92400e' : '#6b7280', fontWeight: 600, marginBottom: '4px' }}>W/KG</div><div style={{ fontSize: '16px', fontWeight: 700, color: entry.wattsPerKg ? '#92400e' : '#9ca3af', fontFamily: 'monospace' }}>{entry.wattsPerKg ? entry.wattsPerKg.toFixed(2) : '-'}</div></div>
+        </div>
+        {/* Weight Adjusted Stats */}
+        {entry.weightAdjustedSplit && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid #f59e0b' }}><div style={{ fontSize: '11px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>WT-ADJ SPLIT</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#92400e', fontFamily: 'monospace' }}>{entry.weightAdjustedSplit}</div></div>
+            <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid #f59e0b' }}><div style={{ fontSize: '11px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>WT-ADJ WATTS</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#92400e', fontFamily: 'monospace' }}>{entry.weightAdjustedWatts || '-'}</div></div>
+          </div>
+        )}
+        <div style={{ marginBottom: '16px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Split Breakdown</h3>
+          {splits.length > 0 ? (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr style={{ backgroundColor: '#f9fafb' }}>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>INTERVAL</th>
+                <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>SPLIT</th>
+                <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>WATTS</th>
+              </tr></thead>
+              <tbody>
+                {splits.map((split, index) => {
+                  const splitValue = getSplitValue(split);
+                  const splitWatts = calculateWatts(splitValue);
+                  return (
+                    <tr key={index} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 500, color: '#374151' }}>{splitLabels[index] || `Split ${index + 1}`}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'monospace', fontSize: '14px', fontWeight: 600, color: '#10b981' }}>{splitValue}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: '13px', fontWeight: 500, color: '#374151' }}>{splitWatts > 0 ? splitWatts : '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{ padding: '24px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>No split data available.</div>
+          )}
+        </div>
+        <button onClick={onClose} style={{ width: '100%', padding: '12px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Close</button>
+      </div>
+    </div>
+  );
 };
 
 export default function GroupPerformance({ user, userRole, userSport = 'rowing' }) {
@@ -135,872 +355,322 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedTestType, setSelectedTestType] = useState('All');
+  const [selectedDate, setSelectedDate] = useState('All');
   const [completionStatus, setCompletionStatus] = useState('All');
-  const [sortBy, setSortBy] = useState('time');
-  const [sortOrder, setSortOrder] = useState('asc');
+  const [sortBy, setSortBy] = useState('wattsPerKg');
+  const [selectedEntry, setSelectedEntry] = useState(null);
+  const [editEntry, setEditEntry] = useState(null);
+  const [deleteEntry, setDeleteEntry] = useState(null);
 
-  // Fetch team performance data from Firestore
-  useEffect(() => {
-    const fetchTeamData = async () => {
-      const currentUser = auth.currentUser;
-      
-      if (!currentUser) {
-        setLoading(false);
-        setError('No user logged in');
-        return;
-      }
+  const isCoach = userRole === 'coach';
 
-      try {
-        setLoading(true);
-        setError(null);
-
-        console.log('Fetching team data...', { userSport });
-
-        // Force token refresh
-        await currentUser.getIdToken(true);
-        console.log('✅ Token refreshed successfully');
-
-        // STEP 1: Get the user's team(s)
-        const teamsRef = collection(db, 'teams');
-        const teamsQuery = query(teamsRef);
-        const teamsSnapshot = await getDocs(teamsQuery);
-        
-        console.log('Found teams:', teamsSnapshot.size);
-
-        // Find teams where current user is a member
-        const userTeams = [];
-        const teamMemberIds = new Set();
-
-        teamsSnapshot.forEach((teamDoc) => {
-          const teamData = teamDoc.data();
-          const members = teamData.members || [];
-          const athletes = teamData.athletes || [];
-          const coaches = teamData.coaches || [];
-          
-          // Check if current user is in this team
-          if (members.includes(currentUser.uid) || 
-              athletes.includes(currentUser.uid) || 
-              coaches.includes(currentUser.uid)) {
-            
-            userTeams.push({
-              id: teamDoc.id,
-              ...teamData
-            });
-            
-            // Collect all member IDs from this team
-            [...members, ...athletes, ...coaches].forEach(id => teamMemberIds.add(id));
-          }
-        });
-
-        console.log('User teams:', userTeams.length);
-        console.log('Team member IDs:', Array.from(teamMemberIds));
-
-        if (teamMemberIds.size === 0) {
-          setTeamData([]);
-          setLoading(false);
-          setError('You are not part of any team yet');
-          return;
-        }
-
-        // STEP 2: Fetch performances from each user's subcollection
-        const performances = [];
-        
-        // Query each user's testPerformances subcollection
-        for (const userId of Array.from(teamMemberIds)) {
-          try {
-            console.log(`Fetching test performances for user: ${userId}`);
-            
-            // Get user's name first
-            const userDocRef = doc(db, 'users', userId);
-            const userDoc = await getDoc(userDocRef);
-            const userName = userDoc.exists() ? 
-              (userDoc.data().displayName || userDoc.data().name || 'Unknown Athlete') : 
-              'Unknown Athlete';
-            
-            // Query the user's testPerformances subcollection
-            const userPerformancesRef = collection(db, 'users', userId, 'testPerformances');
-            const performancesSnapshot = await getDocs(userPerformancesRef);
-            
-            console.log(`Found ${performancesSnapshot.size} test performances for ${userName}`);
-
-            performancesSnapshot.forEach((doc) => {
-              const data = doc.data();
-              console.log('Test performance data:', doc.id, data);
-              
-              // Calculate split from time and test type
-              const calculatedSplit = calculateSplit(data.time, data.testType, data.sport || userSport);
-              
-              // FIXED: Check for ALL invalid split formats
-              const isInvalidSplit = !data.split || 
-                                     data.split === '--:--.-' || 
-                                     data.split === '--:--' ||
-                                     data.split === '-' ||
-                                     data.split === '';
-              
-              // Only use stored split if it's valid, otherwise use calculated split
-              let split = calculatedSplit;
-              if (!isInvalidSplit) {
-                split = data.split;
-              }
-              
-              // Calculate watts from split (or use stored watts if valid)
-              const calculatedWatts = split ? calculateWatts(split) : 0;
-              let watts = calculatedWatts;
-              if (data.watts && isFinite(data.watts) && data.watts > 0) {
-                watts = data.watts;
-              }
-              
-              // FIXED: Determine if completed - a test is incomplete if time is '--:--.-', '--:--' or missing
-              const isIncomplete = !data.time || 
-                                   data.time === '--:--.-' || 
-                                   data.time === '--:--' || 
-                                   data.completed === false;
-              const isCompleted = !isIncomplete;
-              
-              console.log('Test completion check:', {
-                id: doc.id,
-                time: data.time,
-                split: split,
-                watts: watts,
-                completed: data.completed,
-                isCompleted
-              });
-              
-              performances.push({
-                id: doc.id,
-                athleteId: userId,
-                athleteName: userName, // FIXED: Always use the fetched userName
-                testType: data.testType || data.eventType || 'Unknown',
-                time: data.time || '--:--.-',
-                split: split || '-',
-                watts: watts,
-                date: data.date?.toDate?.() || data.date || new Date(),
-                sport: data.sport || userSport,
-                completed: isCompleted,
-              });
-            });
-          } catch (userError) {
-            console.error(`Error fetching test performances for user ${userId}:`, userError);
-            // Continue with other users even if one fails
-          }
-        }
-
-        console.log('Total processed performances:', performances.length);
-        setTeamData(performances);
-      } catch (err) {
-        console.error('Error fetching team data:', err);
-        setError(`Failed to load team performance data: ${err.message}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTeamData();
-  }, [userSport]);
-
-  // Filter data by test type and completion status
-  const filteredData = useMemo(() => {
-    console.log('Filtering data:', {
-      totalRecords: teamData.length,
-      selectedTestType,
-      completionStatus
-    });
-    
-    const filtered = teamData.filter((entry) => {
-      const matchesTestType = selectedTestType === 'All' || entry.testType === selectedTestType;
-      
-      let matchesCompletion = true;
-      if (completionStatus === 'Complete') {
-        matchesCompletion = entry.completed === true;
-      } else if (completionStatus === 'Incomplete') {
-        matchesCompletion = entry.completed === false;
-      }
-      // If 'All', matchesCompletion stays true
-      
-      return matchesTestType && matchesCompletion;
-    });
-    
-    console.log('Filtered results:', filtered.length);
-    return filtered;
-  }, [teamData, selectedTestType, completionStatus]);
-
-  // Sort data
-  const sortedData = useMemo(() => {
-    return [...filteredData].sort((a, b) => {
-      let comparison = 0;
-      
-      if (sortBy === 'name') {
-        comparison = a.athleteName.localeCompare(b.athleteName);
-      } else if (sortBy === 'time') {
-        const timeToSeconds = (timeStr) => {
-          // Handle null, undefined, or '--:--.-' or '--:--'
-          if (!timeStr || timeStr === '--:--.-' || timeStr === '--:--') return Infinity;
-          
-          // Convert to string if it's not already
-          const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
-          
-          // Check if it contains a colon (mm:ss.s format)
-          if (!timeString.includes(':')) return Infinity;
-          
-          try {
-            const parts = timeString.split(':');
-            const minutes = parseInt(parts[0]) || 0;
-            const seconds = parseFloat(parts[1]) || 0;
-            return minutes * 60 + seconds;
-          } catch (err) {
-            console.error('Error parsing time:', timeString, err);
-            return Infinity;
-          }
-        };
-        comparison = timeToSeconds(a.time) - timeToSeconds(b.time);
-      } else if (sortBy === 'watts') {
-        comparison = (a.watts || 0) - (b.watts || 0);
-      }
-      
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-  }, [filteredData, sortBy, sortOrder]);
-
-  // Calculate rankings
-  const rankings = useMemo(() => {
-    const rankingsMap = {};
-    filteredData.forEach((entry) => {
-      if (entry.completed) {
-        if (!rankingsMap[entry.testType]) {
-          rankingsMap[entry.testType] = [];
-        }
-        rankingsMap[entry.testType].push(entry);
-      }
-    });
-
-    Object.keys(rankingsMap).forEach((testType) => {
-      rankingsMap[testType].sort((a, b) => {
-        const timeToSeconds = (timeStr) => {
-          if (!timeStr || timeStr === '--:--.-' || timeStr === '--:--') return Infinity;
-          const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
-          if (!timeString.includes(':')) return Infinity;
-          try {
-            const parts = timeString.split(':');
-            const minutes = parseInt(parts[0]) || 0;
-            const seconds = parseFloat(parts[1]) || 0;
-            return minutes * 60 + seconds;
-          } catch (err) {
-            return Infinity;
-          }
-        };
-        return timeToSeconds(a.time) - timeToSeconds(b.time);
+  const fetchTeamData = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) { setLoading(false); setError('No user logged in'); return; }
+    try {
+      setLoading(true);
+      setError(null);
+      const teamsRef = collection(db, 'teams');
+      const teamsSnapshot = await getDocs(query(teamsRef));
+      const teamMemberIds = new Set();
+      teamsSnapshot.forEach((teamDoc) => {
+        const data = teamDoc.data();
+        const allMembers = [...(data.members || []), ...(data.athletes || []), ...(data.coaches || [])];
+        if (allMembers.includes(currentUser.uid)) allMembers.forEach(id => teamMemberIds.add(id));
       });
+      if (teamMemberIds.size === 0) { setTeamData([]); setLoading(false); setError('You are not part of any team yet'); return; }
+
+      const performances = [];
+      for (const userId of Array.from(teamMemberIds)) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', userId));
+          const userName = userDoc.exists() ? (userDoc.data().displayName || userDoc.data().name || 'Unknown') : 'Unknown';
+          const performancesSnapshot = await getDocs(collection(db, 'users', userId, 'testPerformances'));
+          performancesSnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const watts = data.watts || calculateWatts(data.split || data.avgSplit);
+            let dateValue = data.date;
+            if (dateValue?.toDate) dateValue = dateValue.toDate();
+            
+            // Calculate weight-adjusted values if weight is available
+            const athleteWeight = data.athleteWeight || null;
+            const split = data.split || data.avgSplit || '-';
+            const weightAdjustedSplit = data.weightAdjustedSplit || calculateWeightAdjustedSplit(split, athleteWeight);
+            const weightAdjustedWatts = data.weightAdjustedWatts || calculateWeightAdjustedWatts(split, athleteWeight);
+            
+            performances.push({
+              id: docSnap.id,
+              athleteId: userId,
+              athleteName: userName,
+              testType: data.testType || data.eventType || 'Unknown',
+              time: data.time || '--:--.-',
+              split: split,
+              splits: data.splits || [],
+              watts: watts,
+              wattsPerKg: data.wattsPerKg || null,
+              athleteWeight: athleteWeight,
+              weightAdjustedSplit: weightAdjustedSplit,
+              weightAdjustedWatts: weightAdjustedWatts,
+              date: dateValue || new Date(),
+              completed: data.time && data.time !== '--:--.-' && data.completed !== false,
+            });
+          });
+        } catch (e) { console.error('Error fetching user ' + userId, e); }
+      }
+      setTeamData(performances);
+    } catch (err) { setError('Failed to load: ' + err.message); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchTeamData(); }, [userSport]);
+
+  const handleSaveEdit = async (athleteId, docId, updateData) => {
+    await updateDoc(doc(db, 'users', athleteId, 'testPerformances', docId), updateData);
+    await fetchTeamData();
+  };
+
+  const handleConfirmDelete = async (athleteId, docId) => {
+    await deleteDoc(doc(db, 'users', athleteId, 'testPerformances', docId));
+    await fetchTeamData();
+  };
+
+  const availableDates = useMemo(() => getUniqueDates(teamData), [teamData]);
+
+  const filteredData = useMemo(() => {
+    return teamData.filter((entry) => {
+      const matchesTestType = selectedTestType === 'All' || entry.testType === selectedTestType;
+      const matchesDate = selectedDate === 'All' || formatDateForInput(entry.date) === selectedDate;
+      const matchesCompletion = completionStatus === 'All' || (completionStatus === 'Complete' ? entry.completed : !entry.completed);
+      return matchesTestType && matchesDate && matchesCompletion;
+    });
+  }, [teamData, selectedTestType, selectedDate, completionStatus]);
+
+  const sortedDataWithGaps = useMemo(() => {
+    const sorted = [...filteredData].sort((a, b) => {
+      if (sortBy === 'wattsPerKg') {
+        const aWkg = a.wattsPerKg || 0;
+        const bWkg = b.wattsPerKg || 0;
+        if (aWkg === 0 && bWkg === 0) return (b.watts || 0) - (a.watts || 0);
+        if (aWkg === 0) return 1;
+        if (bWkg === 0) return -1;
+        return bWkg - aWkg;
+      } else if (sortBy === 'weightAdjusted') {
+        // Sort by weight-adjusted watts (higher is better)
+        const aWA = a.weightAdjustedWatts || 0;
+        const bWA = b.weightAdjustedWatts || 0;
+        if (aWA === 0 && bWA === 0) return (b.watts || 0) - (a.watts || 0);
+        if (aWA === 0) return 1;
+        if (bWA === 0) return -1;
+        return bWA - aWA;
+      }
+      return splitToSeconds(a.split) - splitToSeconds(b.split);
     });
     
-    return rankingsMap;
-  }, [filteredData]);
+    // Always calculate gaps
+    const leaderWatts = sorted.length > 0 && sorted[0].completed ? (sorted[0].watts || 0) : 0;
+    
+    return sorted.map((entry, index) => {
+      let wattsGapPercent = null;
+      if (entry.completed && leaderWatts > 0 && entry.watts > 0) {
+        if (index === 0) {
+          wattsGapPercent = 0; // First place = LEADER
+        } else if (entry.watts === leaderWatts) {
+          wattsGapPercent = 0.001; // Tied with leader, show as 0.0%
+        } else {
+          wattsGapPercent = ((leaderWatts - entry.watts) / leaderWatts) * 100;
+        }
+      }
+      return { ...entry, rank: entry.completed ? index + 1 : '-', wattsGapPercent };
+    });
+  }, [filteredData, sortBy]);
 
-  // Calculate team records - best time for each test type across ALL team data (not just filtered)
   const teamRecords = useMemo(() => {
     const recordsMap = {};
-    
     teamData.forEach((entry) => {
-      if (!entry.completed) return;
-      if (!entry.time || entry.time === '--:--.-' || entry.time === '--:--') return;
-      
-      const timeToSeconds = (timeStr) => {
-        if (!timeStr || timeStr === '--:--.-' || timeStr === '--:--') return Infinity;
-        const timeString = typeof timeStr === 'string' ? timeStr : String(timeStr);
-        if (!timeString.includes(':')) return Infinity;
-        try {
-          const parts = timeString.split(':');
-          const minutes = parseInt(parts[0]) || 0;
-          const seconds = parseFloat(parts[1]) || 0;
-          return minutes * 60 + seconds;
-        } catch (err) {
-          return Infinity;
-        }
-      };
-      
-      const entrySeconds = timeToSeconds(entry.time);
-      if (entrySeconds === Infinity) return;
-      
-      if (!recordsMap[entry.testType]) {
-        recordsMap[entry.testType] = {
-          id: entry.id,
-          time: entry.time,
-          seconds: entrySeconds,
-          athleteName: entry.athleteName
-        };
-      } else if (entrySeconds < recordsMap[entry.testType].seconds) {
-        recordsMap[entry.testType] = {
-          id: entry.id,
-          time: entry.time,
-          seconds: entrySeconds,
-          athleteName: entry.athleteName
-        };
+      if (!entry.completed || !entry.split || entry.split === '-') return;
+      const seconds = splitToSeconds(entry.split);
+      if (seconds === Infinity) return;
+      if (!recordsMap[entry.testType] || seconds < recordsMap[entry.testType].seconds) {
+        recordsMap[entry.testType] = { id: entry.id, split: entry.split, seconds, athleteName: entry.athleteName, time: entry.time, wattsPerKg: entry.wattsPerKg, weightAdjustedSplit: entry.weightAdjustedSplit };
       }
     });
-    
     return recordsMap;
   }, [teamData]);
 
-  const getRank = (entry) => {
-    if (!entry.completed) return '-';
-    const typeRankings = rankings[entry.testType];
-    if (!typeRankings) return '-';
-    const index = typeRankings.findIndex((e) => e.id === entry.id);
-    return index !== -1 ? index + 1 : '-';
-  };
+  const isTeamRecord = (entry) => teamRecords[entry.testType]?.id === entry.id;
+  const totalAthletes = new Set(teamData.map(e => e.athleteId)).size;
+  const completedTests = teamData.filter(e => e.completed).length;
+  const incompleteTests = teamData.filter(e => !e.completed).length;
 
-  const isTeamRecord = (entry) => {
-    const record = teamRecords[entry.testType];
-    return record && record.id === entry.id;
-  };
-
-  const handleSort = (column) => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(column);
-      setSortOrder('asc');
-    }
-  };
-
-  const getSortIcon = (column) => {
-    if (sortBy !== column) return '';
-    return sortOrder === 'asc' ? ' ↑' : ' ↓';
-  };
-
-  // Calculate stats
-  const totalAthletes = new Set(teamData.map(entry => entry.athleteId)).size;
-  const completedTests = teamData.filter(entry => entry.completed).length;
-  const incompleteTests = teamData.filter(entry => !entry.completed).length;
-  const totalRecords = Object.keys(teamRecords).length;
-
-  // Handler for completion status with logging
-  const handleCompletionStatusChange = (status) => {
-    console.log('Completion status changed to:', status);
-    setCompletionStatus(status);
-  };
-
-  // Loading state
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
-        <div style={{ textAlign: 'center', paddingTop: '100px' }}>
-          <p style={{ fontSize: '18px', color: '#6b7280' }}>Loading team performance data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
-        <div style={{ textAlign: 'center', paddingTop: '100px' }}>
-          <p style={{ fontSize: '18px', color: '#ef4444', marginBottom: '10px' }}>{error}</p>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '20px' }}>
-            Check the browser console for more details
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              marginTop: '20px',
-              padding: '10px 20px',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // No data state
-  if (teamData.length === 0) {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
-        <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>
-            Team Performance
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '15px' }}>
-            View and compare team member test piece results
-            {userSport && <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>({userSport})</span>}
-          </p>
-        </div>
-        <div style={{ 
-          textAlign: 'center', 
-          paddingTop: '100px',
-          backgroundColor: '#f9fafb',
-          padding: '60px',
-          borderRadius: '12px',
-          border: '2px solid #e5e7eb'
-        }}>
-          <p style={{ fontSize: '18px', color: '#6b7280', marginBottom: '10px' }}>
-            No performance data found
-          </p>
-          <p style={{ fontSize: '14px', color: '#9ca3af' }}>
-            Coaches can add results from the "Enter Results" page
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div style={{ minHeight: '100vh', backgroundColor: '#fff', padding: '32px', textAlign: 'center', paddingTop: '100px' }}><p style={{ fontSize: '18px', color: '#6b7280' }}>Loading team performance data...</p></div>;
+  if (error) return <div style={{ minHeight: '100vh', backgroundColor: '#fff', padding: '32px', textAlign: 'center', paddingTop: '100px' }}><p style={{ fontSize: '18px', color: '#ef4444' }}>{error}</p><button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Retry</button></div>;
+  if (teamData.length === 0) return <div style={{ minHeight: '100vh', backgroundColor: '#fff', padding: '32px' }}><h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>Team Performance</h1><div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '2px solid #e5e7eb' }}><p style={{ fontSize: '18px', color: '#6b7280' }}>No performance data found</p></div></div>;
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>
-          Team Performance
-        </h1>
-        <p style={{ color: '#6b7280', fontSize: '15px' }}>
-          View and compare team member test piece results
-          {userSport && <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>({userSport})</span>}
-        </p>
+      {selectedEntry && <SplitBreakdownModal entry={selectedEntry} onClose={() => setSelectedEntry(null)} />}
+      {editEntry && <EditModal entry={editEntry} onClose={() => setEditEntry(null)} onSave={handleSaveEdit} />}
+      {deleteEntry && <DeleteModal entry={deleteEntry} onClose={() => setDeleteEntry(null)} onConfirm={handleConfirmDelete} />}
+
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>Team Performance</h1>
+        <p style={{ color: '#6b7280', fontSize: '15px' }}>View and compare test results {userSport && <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>({userSport})</span>}</p>
       </div>
 
-      {/* Team Records Summary */}
       {Object.keys(teamRecords).length > 0 && (
-        <div style={{ 
-          marginBottom: '24px', 
-          backgroundColor: '#fef3c7', 
-          padding: '20px', 
-          borderRadius: '12px',
-          border: '2px solid #f59e0b'
-        }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            Team Records
-          </h2>
+        <div style={{ marginBottom: '24px', backgroundColor: '#fef3c7', padding: '20px', borderRadius: '12px', border: '2px solid #f59e0b' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px', color: '#92400e' }}>🏆 Team Records</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
             {Object.entries(teamRecords).map(([testType, record]) => (
-              <div 
-                key={testType}
-                style={{
-                  backgroundColor: '#ffffff',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid #fcd34d',
-                  minWidth: '180px'
-                }}
-              >
-                <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>
-                  {testType}
-                </div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>
-                  {record.time}
-                </div>
-                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-                  {record.athleteName}
-                </div>
+              <div key={testType} style={{ backgroundColor: '#fff', padding: '12px 16px', borderRadius: '8px', border: '1px solid #fcd34d', minWidth: '180px' }}>
+                <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>{testType}</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{record.split}</div>
+                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px', fontFamily: 'monospace' }}>({record.time})</div>
+                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>{record.athleteName}</div>
+                {record.wattsPerKg && <div style={{ fontSize: '11px', color: '#10b981', marginTop: '2px', fontWeight: 600 }}>{record.wattsPerKg.toFixed(2)} W/kg</div>}
+                {record.weightAdjustedSplit && <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '2px', fontWeight: 600 }}>Wt-Adj: {record.weightAdjustedSplit}</div>}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Filters */}
-      <div style={{ 
-        marginBottom: '24px', 
-        backgroundColor: '#f9fafb', 
-        padding: '24px', 
-        borderRadius: '12px',
-        border: '2px solid #e5e7eb'
-      }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px', color: '#111827' }}>
-          Filters
-        </h2>
-        
-        {/* Test Type Filter */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
-            Test Type
-          </label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {testTypes.map((type) => (
-              <button
-                key={type}
-                onClick={() => setSelectedTestType(type)}
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  border: selectedTestType === type ? '2px solid #10b981' : '2px solid #e5e7eb',
-                  backgroundColor: selectedTestType === type ? '#10b981' : '#ffffff',
-                  color: selectedTestType === type ? '#ffffff' : '#111827',
-                  transition: 'all 0.2s'
-                }}
-                onMouseOver={(e) => {
-                  if (selectedTestType !== type) {
-                    e.currentTarget.style.borderColor = '#10b981';
-                    e.currentTarget.style.backgroundColor = '#f9fafb';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (selectedTestType !== type) {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
-                  }
-                }}
-              >
-                {type}
-              </button>
-            ))}
+      <div style={{ marginBottom: '24px', backgroundColor: '#f9fafb', padding: '20px', borderRadius: '12px', border: '2px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Test Type</label>
+            <select value={selectedTestType} onChange={e => setSelectedTestType(e.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: '2px solid #e5e7eb', backgroundColor: '#fff', fontSize: '14px', fontWeight: 500, color: '#111827', cursor: 'pointer', minWidth: '140px' }}>
+              {testTypes.map(type => <option key={type} value={type}>{type}</option>)}
+            </select>
           </div>
-        </div>
-
-        {/* Completion Status Filter */}
-        <div>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
-            Completion Status
-          </label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {['All', 'Complete', 'Incomplete'].map((status) => (
-              <button
-                key={status}
-                onClick={() => handleCompletionStatusChange(status)}
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  border: completionStatus === status ? '2px solid #3b82f6' : '2px solid #e5e7eb',
-                  backgroundColor: completionStatus === status ? '#3b82f6' : '#ffffff',
-                  color: completionStatus === status ? '#ffffff' : '#111827',
-                  transition: 'all 0.2s'
-                }}
-                onMouseOver={(e) => {
-                  if (completionStatus !== status) {
-                    e.currentTarget.style.borderColor = '#3b82f6';
-                    e.currentTarget.style.backgroundColor = '#f9fafb';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (completionStatus !== status) {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
-                  }
-                }}
-              >
-                {status}
-              </button>
-            ))}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date</label>
+            <select value={selectedDate} onChange={e => setSelectedDate(e.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: selectedDate !== 'All' ? '2px solid #10b981' : '2px solid #e5e7eb', backgroundColor: selectedDate !== 'All' ? '#d1fae5' : '#fff', fontSize: '14px', fontWeight: 500, color: '#111827', cursor: 'pointer', minWidth: '160px' }}>
+              <option value="All">All Dates</option>
+              {availableDates.map(date => <option key={date} value={date}>{new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Status</label>
+            <select value={completionStatus} onChange={e => setCompletionStatus(e.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: '2px solid #e5e7eb', backgroundColor: '#fff', fontSize: '14px', fontWeight: 500, color: '#111827', cursor: 'pointer', minWidth: '140px' }}>
+              <option value="All">All</option>
+              <option value="Complete">Complete</option>
+              <option value="Incomplete">Incomplete</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Sort By</label>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: '2px solid #e5e7eb', backgroundColor: '#fff', fontSize: '14px', fontWeight: 500, color: '#111827', cursor: 'pointer', minWidth: '150px' }}>
+              <option value="wattsPerKg">W/kg (High→Low)</option>
+              <option value="split">Split (Fast→Slow)</option>
+              {columns.showWeightAdjusted && <option value="weightAdjusted">Wt-Adj (High→Low)</option>}
+            </select>
+          </div>
+          <div style={{ marginLeft: 'auto', padding: '10px 16px', backgroundColor: '#fff', borderRadius: '8px', border: '2px solid #e5e7eb' }}>
+            <span style={{ fontSize: '14px', color: '#6b7280' }}>Showing <span style={{ fontWeight: 700, color: '#111827' }}>{sortedDataWithGaps.length}</span> results</span>
           </div>
         </div>
       </div>
 
-      {/* Results Table */}
-      <div style={{ 
-        backgroundColor: '#ffffff', 
-        borderRadius: '12px', 
-        overflow: 'hidden',
-        border: '2px solid #e5e7eb',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-      }}>
+      <div style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden', border: '2px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ backgroundColor: '#f9fafb' }}>
+            <thead style={{ backgroundColor: '#f3f4f6' }}>
               <tr>
-                <th style={{ 
-                  padding: '16px 24px', 
-                  textAlign: 'left', 
-                  fontSize: '13px', 
-                  fontWeight: 600, 
-                  color: '#6b7280',
-                  borderBottom: '2px solid #e5e7eb'
-                }}>
-                  Rank
-                </th>
-                <th 
-                  onClick={() => handleSort('name')}
-                  style={{ 
-                    padding: '16px 24px', 
-                    textAlign: 'left', 
-                    fontSize: '13px', 
-                    fontWeight: 600, 
-                    color: '#6b7280',
-                    borderBottom: '2px solid #e5e7eb',
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  Athlete {getSortIcon('name')}
-                </th>
-                <th style={{ 
-                  padding: '16px 24px', 
-                  textAlign: 'left', 
-                  fontSize: '13px', 
-                  fontWeight: 600, 
-                  color: '#6b7280',
-                  borderBottom: '2px solid #e5e7eb'
-                }}>
-                  Test Type
-                </th>
-                <th 
-                  onClick={() => handleSort('time')}
-                  style={{ 
-                    padding: '16px 24px', 
-                    textAlign: 'left', 
-                    fontSize: '13px', 
-                    fontWeight: 600, 
-                    color: '#6b7280',
-                    borderBottom: '2px solid #e5e7eb',
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  Time {getSortIcon('time')}
-                </th>
-                {columns.showSplit && (
-                  <th style={{ 
-                    padding: '16px 24px', 
-                    textAlign: 'left', 
-                    fontSize: '13px', 
-                    fontWeight: 600, 
-                    color: '#6b7280',
-                    borderBottom: '2px solid #e5e7eb'
-                  }}>
-                    {columns.splitLabel}
-                  </th>
-                )}
-                {columns.showWatts && (
-                  <th 
-                    onClick={() => handleSort('watts')}
-                    style={{ 
-                      padding: '16px 24px', 
-                      textAlign: 'left', 
-                      fontSize: '13px', 
-                      fontWeight: 600, 
-                      color: '#6b7280',
-                      borderBottom: '2px solid #e5e7eb',
-                      cursor: 'pointer',
-                      userSelect: 'none'
-                    }}
-                  >
-                    Watts {getSortIcon('watts')}
-                  </th>
-                )}
-                <th style={{ 
-                  padding: '16px 24px', 
-                  textAlign: 'left', 
-                  fontSize: '13px', 
-                  fontWeight: 600, 
-                  color: '#6b7280',
-                  borderBottom: '2px solid #e5e7eb'
-                }}>
-                  Date
-                </th>
+                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '50px' }}>Rank</th>
+                <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase' }}>Athlete</th>
+                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '70px' }}>Test</th>
+                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '80px' }}>Time</th>
+                {columns.showSplit && <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '80px' }}>Split</th>}
+                {columns.showWatts && <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '60px' }}>Watts</th>}
+                {columns.showWatts && <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '60px' }}>W/kg</th>}
+                {columns.showWeightAdjusted && <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#f59e0b', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '80px', backgroundColor: '#fffbeb' }}>Wt-Adj</th>}
+                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '80px' }}>Δ Watts</th>
+                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '60px' }}>Splits</th>
+                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '70px' }}>Date</th>
+                {isCoach && <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '100px' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {sortedData.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.showWatts && columns.showSplit ? 7 : columns.showSplit ? 6 : 5} style={{ 
-                    padding: '40px 24px', 
-                    textAlign: 'center', 
-                    color: '#9ca3af',
-                    fontSize: '15px'
-                  }}>
-                    No team results found for the selected filters
-                  </td>
-                </tr>
-              ) : (
-                sortedData.map((entry, index) => {
-                  const rank = getRank(entry);
-                  const isTopThree = rank !== '-' && rank <= 3;
-                  const isIncomplete = !entry.completed;
-                  const isRecord = isTeamRecord(entry);
-                  
-                  return (
-                    <tr
-                      key={entry.id}
-                      style={{ 
-                        borderBottom: '1px solid #f3f4f6',
-                        backgroundColor: isRecord ? '#fef9c3' : (index % 2 === 0 ? '#ffffff' : '#fafafa'),
-                        opacity: isIncomplete ? 0.6 : 1
-                      }}
-                    >
-                      <td style={{ padding: '16px 24px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            minWidth: '32px',
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            fontSize: '14px',
-                            fontWeight: 700,
-                            backgroundColor: isTopThree 
-                              ? rank === 1 ? '#fef3c7' 
-                              : rank === 2 ? '#e5e7eb' 
-                              : '#fed7aa' 
-                              : 'transparent',
-                            color: isTopThree 
-                              ? rank === 1 ? '#92400e' 
-                              : rank === 2 ? '#374151' 
-                              : '#9a3412' 
-                              : '#6b7280'
-                          }}
-                        >
-                          {rank}
-                        </span>
+              {sortedDataWithGaps.length === 0 ? (
+                <tr><td colSpan={isCoach ? 12 : 11} style={{ padding: '40px 24px', textAlign: 'center', color: '#9ca3af', fontSize: '15px' }}>No results for selected filters</td></tr>
+              ) : sortedDataWithGaps.map((entry, index) => {
+                const isTopThree = entry.rank !== '-' && entry.rank <= 3;
+                const isRecord = isTeamRecord(entry);
+                const hasSplits = entry.splits && entry.splits.length > 0;
+                
+                return (
+                  <tr key={entry.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: isRecord ? '#fef9c3' : (index % 2 === 0 ? '#fff' : '#fafafa'), opacity: entry.completed ? 1 : 0.6 }}>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '28px', padding: '4px 8px', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: isTopThree ? (entry.rank === 1 ? '#fef3c7' : entry.rank === 2 ? '#e5e7eb' : '#fed7aa') : 'transparent', color: isTopThree ? (entry.rank === 1 ? '#92400e' : entry.rank === 2 ? '#374151' : '#9a3412') : '#6b7280' }}>{entry.rank}</span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#111827', fontWeight: 600, fontSize: '14px' }}>{entry.athleteName}</span>
+                        {isRecord && <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, backgroundColor: '#f59e0b', color: '#fff', textTransform: 'uppercase' }}>🏆 TR</span>}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}><span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, backgroundColor: '#dbeafe', color: '#1e40af' }}>{entry.testType}</span></td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center', color: entry.completed ? '#111827' : '#ef4444', fontFamily: 'monospace', fontSize: '14px', fontWeight: 600 }}>{entry.time}</td>
+                    {columns.showSplit && <td style={{ padding: '12px 16px', textAlign: 'center', fontFamily: 'monospace', fontSize: '14px', fontWeight: 700, color: entry.split !== '-' ? '#10b981' : '#9ca3af' }}>{entry.split}</td>}
+                    {columns.showWatts && <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#111827' }}>{entry.watts > 0 ? entry.watts : '-'}</td>}
+                    {columns.showWatts && <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '14px', fontWeight: 700, color: entry.wattsPerKg ? '#10b981' : '#9ca3af' }}>{entry.wattsPerKg ? entry.wattsPerKg.toFixed(2) : '-'}</td>}
+                    {columns.showWeightAdjusted && (
+                      <td style={{ padding: '12px 16px', textAlign: 'center', backgroundColor: '#fffbeb' }}>
+                        {entry.weightAdjustedSplit ? (
+                          <div>
+                            <div style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: '#f59e0b' }}>{entry.weightAdjustedSplit}</div>
+                            <div style={{ fontSize: '11px', color: '#92400e', marginTop: '2px' }}>{entry.weightAdjustedWatts ? `${entry.weightAdjustedWatts}W` : ''}</div>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>
+                        )}
                       </td>
-                      <td style={{ padding: '16px 24px', color: '#111827', fontWeight: 600, fontSize: '15px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {entry.athleteName}
-                          {isRecord && (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                backgroundColor: '#f59e0b',
-                                color: '#ffffff',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.5px'
-                              }}
-                            >
-                               Team Record
-                            </span>
-                          )}
+                    )}
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      {entry.wattsGapPercent === 0 ? (
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#10b981', backgroundColor: '#d1fae5', padding: '4px 8px', borderRadius: '4px' }}>LEADER</span>
+                      ) : entry.wattsGapPercent !== null && entry.wattsGapPercent < 0.1 ? (
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#6b7280', fontFamily: 'monospace' }}>0.0%</span>
+                      ) : entry.wattsGapPercent !== null ? (
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#dc2626', fontFamily: 'monospace' }}>-{entry.wattsGapPercent.toFixed(1)}%</span>
+                      ) : <span style={{ color: '#9ca3af' }}>-</span>}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <button onClick={() => setSelectedEntry(entry)} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: hasSplits ? '2px solid #10b981' : '2px solid #e5e7eb', backgroundColor: hasSplits ? '#d1fae5' : '#f9fafb', color: hasSplits ? '#065f46' : '#9ca3af' }}>{hasSplits ? 'View' : '—'}</button>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center', color: '#6b7280', fontSize: '13px' }}>{formatDateDisplay(entry.date)}</td>
+                    {isCoach && (
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <button onClick={() => setEditEntry(entry)} style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: '1px solid #3b82f6', backgroundColor: '#eff6ff', color: '#1d4ed8' }}>Edit</button>
+                          <button onClick={() => setDeleteEntry(entry)} style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: '1px solid #ef4444', backgroundColor: '#fef2f2', color: '#dc2626' }}>Delete</button>
                         </div>
                       </td>
-                      <td style={{ padding: '16px 24px' }}>
-                        <span
-                          style={{
-                            padding: '4px 12px',
-                            borderRadius: '6px',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            backgroundColor: '#dbeafe',
-                            color: '#1e40af'
-                          }}
-                        >
-                          {entry.testType}
-                        </span>
-                      </td>
-                      <td style={{ padding: '16px 24px', color: isIncomplete ? '#ef4444' : '#111827', fontFamily: 'monospace', fontSize: '15px', fontWeight: 600 }}>
-                        {entry.time || '--:--.-'}
-                      </td>
-                      {columns.showSplit && (
-                        <td style={{ padding: '16px 24px', color: '#6b7280', fontFamily: 'monospace', fontSize: '14px' }}>
-                          {entry.split !== '-' ? entry.split : '-'}
-                        </td>
-                      )}
-                      {columns.showWatts && (
-                        <td style={{ padding: '16px 24px', fontSize: '14px' }}>
-                          {entry.watts > 0 ? (
-                            <span style={{ 
-                              fontWeight: 600,
-                              color: '#111827'
-                            }}>
-                              {entry.watts}W
-                            </span>
-                          ) : (
-                            <span style={{ color: '#9ca3af' }}>-</span>
-                          )}
-                        </td>
-                      )}
-                      <td style={{ padding: '16px 24px', color: '#9ca3af', fontSize: '13px' }}>
-                        {new Date(entry.date).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Summary Stats */}
-      <div style={{ 
-        marginTop: '24px', 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
-        gap: '16px' 
-      }}>
-        <div style={{ 
-          backgroundColor: '#ffffff', 
-          padding: '24px', 
-          borderRadius: '12px',
-          border: '2px solid #e5e7eb',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px', fontWeight: 600 }}>
-            Team Members
-          </div>
-          <div style={{ fontSize: '32px', fontWeight: 700, color: '#111827' }}>
-            {totalAthletes}
-          </div>
+      {/* Formula explanation */}
+      {columns.showWeightAdjusted && (
+        <div style={{ marginTop: '16px', padding: '12px 16px', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px solid #f59e0b' }}>
+          <p style={{ fontSize: '12px', color: '#92400e', margin: 0 }}>
+            <strong>Weight-Adjusted Formula:</strong> WF = (weight/270)^0.222 • Corrected Split = WF × Actual Split • Final = avg(Corrected, Actual)
+          </p>
         </div>
-        <div style={{ 
-          backgroundColor: '#ffffff', 
-          padding: '24px', 
-          borderRadius: '12px',
-          border: '2px solid #e5e7eb',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px', fontWeight: 600 }}>
-            Total Tests
-          </div>
-          <div style={{ fontSize: '32px', fontWeight: 700, color: '#111827' }}>
-            {teamData.length}
-          </div>
-        </div>
-        <div style={{ 
-          backgroundColor: '#ffffff', 
-          padding: '24px', 
-          borderRadius: '12px',
-          border: '2px solid #e5e7eb',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px', fontWeight: 600 }}>
-            Completed Tests
-          </div>
-          <div style={{ fontSize: '32px', fontWeight: 700, color: '#10b981' }}>
-            {completedTests}
-          </div>
-        </div>
-        <div style={{ 
-          backgroundColor: '#ffffff', 
-          padding: '24px', 
-          borderRadius: '12px',
-          border: '2px solid #e5e7eb',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px', fontWeight: 600 }}>
-            Incomplete Tests
-          </div>
-          <div style={{ fontSize: '32px', fontWeight: 700, color: '#ef4444' }}>
-            {incompleteTests}
-          </div>
-        </div>
-        <div style={{ 
-          backgroundColor: '#fef3c7', 
-          padding: '24px', 
-          borderRadius: '12px',
-          border: '2px solid #f59e0b',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ fontSize: '13px', color: '#92400e', marginBottom: '8px', fontWeight: 600 }}>
-             Team Records
-          </div>
-          <div style={{ fontSize: '32px', fontWeight: 700, color: '#92400e' }}>
-            {totalRecords}
-          </div>
-        </div>
+      )}
+
+      <div style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #e5e7eb' }}><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Athletes</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#111827' }}>{totalAthletes}</div></div>
+        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #e5e7eb' }}><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Total Tests</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#111827' }}>{teamData.length}</div></div>
+        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #10b981' }}><div style={{ fontSize: '12px', color: '#10b981', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Completed</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#10b981' }}>{completedTests}</div></div>
+        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #ef4444' }}><div style={{ fontSize: '12px', color: '#ef4444', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Incomplete</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#ef4444' }}>{incompleteTests}</div></div>
+        <div style={{ backgroundColor: '#fef3c7', padding: '20px', borderRadius: '12px', border: '2px solid #f59e0b' }}><div style={{ fontSize: '12px', color: '#92400e', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>🏆 Records</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#92400e' }}>{Object.keys(teamRecords).length}</div></div>
       </div>
     </div>
   );

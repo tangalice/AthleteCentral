@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, where, getDocs, getDoc, doc, onSnapshot, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs, getDoc, doc, onSnapshot, orderBy, addDoc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "../../firebase";
 
 function CoachWeightInfo() {
@@ -9,6 +9,11 @@ function CoachWeightInfo() {
   const [loading, setLoading] = useState(true);
   const [loadingWeights, setLoadingWeights] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Form state for adding weight
+  const [weight, setWeight] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [submitting, setSubmitting] = useState(false);
 
   // Fetch athletes using the SAME logic as LineupBuilder
   useEffect(() => {
@@ -155,6 +160,72 @@ function CoachWeightInfo() {
     return () => unsubscribe();
   }, [selectedAthlete]);
 
+  // Handle adding weight for selected athlete
+  const handleAddWeight = async (e) => {
+    e.preventDefault();
+    
+    if (!selectedAthlete) {
+      alert("Please select an athlete first");
+      return;
+    }
+
+    if (!weight || !date) {
+      alert("Please enter both weight and date");
+      return;
+    }
+
+    const weightNum = parseFloat(weight);
+    if (isNaN(weightNum) || weightNum <= 0) {
+      alert("Please enter a valid weight");
+      return;
+    }
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      alert("You must be logged in to add weight data");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      await addDoc(collection(db, "users", selectedAthlete.id, "weightData"), {
+        weight: weightNum,
+        date: date,
+        athleteId: selectedAthlete.id,
+        athleteName: selectedAthlete.displayName || selectedAthlete.name || "Unknown",
+        enteredBy: currentUser.uid,
+        enteredByName: currentUser.displayName || "Coach",
+        createdAt: new Date(),
+      });
+      
+      setWeight("");
+      setDate(new Date().toISOString().split('T')[0]);
+      alert("Weight recorded successfully!");
+    } catch (error) {
+      console.error("Error adding weight:", error);
+      alert("Error recording weight: " + error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle deleting a weight entry
+  const handleDelete = async (weightId) => {
+    if (!selectedAthlete) return;
+    
+    if (!window.confirm("Are you sure you want to delete this weight entry?")) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, "users", selectedAthlete.id, "weightData", weightId));
+    } catch (error) {
+      console.error("Error deleting weight:", error);
+      alert("Error deleting weight: " + error.message);
+    }
+  };
+
   // Calculate stats
   const calculateStats = () => {
     if (weightHistory.length === 0) return null;
@@ -268,6 +339,120 @@ function CoachWeightInfo() {
         )}
       </div>
 
+      {/* Add Weight Form - Only shown when athlete is selected */}
+      {selectedAthlete && (
+        <div style={{
+          backgroundColor: "white",
+          padding: "24px",
+          borderRadius: "8px",
+          border: "1px solid #e5e7eb",
+          marginBottom: "24px",
+          boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.1)"
+        }}>
+          <h2 style={{
+            fontSize: "20px",
+            fontWeight: "600",
+            marginBottom: "16px",
+            color: "#374151"
+          }}>
+            Record Weight for {selectedAthlete.displayName || selectedAthlete.name}
+          </h2>
+          
+          <form onSubmit={handleAddWeight}>
+            <div style={{ 
+              display: "grid", 
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: "16px",
+              marginBottom: "16px"
+            }}>
+              <div>
+                <label style={{
+                  display: "block",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  marginBottom: "8px",
+                  color: "#374151"
+                }}>
+                  Weight (kg)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  placeholder="Enter weight in kg"
+                  disabled={submitting}
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                    outline: "none",
+                    boxSizing: "border-box"
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = "#10b981"}
+                  onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
+                />
+              </div>
+
+              <div>
+                <label style={{
+                  display: "block",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  marginBottom: "8px",
+                  color: "#374151"
+                }}>
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  disabled={submitting}
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                    outline: "none",
+                    boxSizing: "border-box"
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = "#10b981"}
+                  onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{
+                backgroundColor: submitting ? "#9ca3af" : "#10b981",
+                color: "white",
+                padding: "10px 20px",
+                borderRadius: "6px",
+                border: "none",
+                fontSize: "14px",
+                fontWeight: "500",
+                cursor: submitting ? "not-allowed" : "pointer",
+                minWidth: "150px"
+              }}
+              onMouseOver={(e) => {
+                if (!submitting) e.target.style.backgroundColor = "#059669";
+              }}
+              onMouseOut={(e) => {
+                if (!submitting) e.target.style.backgroundColor = "#10b981";
+              }}
+            >
+              {submitting ? "Saving..." : "Add Weight Entry"}
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* Weight Statistics */}
       {selectedAthlete && stats && (
         <div style={{
@@ -284,7 +469,7 @@ function CoachWeightInfo() {
             marginBottom: "16px",
             color: "#374151"
           }}>
-            Weight Statistics - {selectedAthlete.displayName || selectedAthlete.name}
+            Weight Statistics
           </h2>
 
           <div style={{
@@ -389,7 +574,7 @@ function CoachWeightInfo() {
             </p>
           ) : weightHistory.length === 0 ? (
             <p style={{ textAlign: "center", color: "#6b7280", padding: "20px" }}>
-              No weight entries recorded for this athlete yet.
+              No weight entries recorded for this athlete yet. Use the form above to add the first entry.
             </p>
           ) : (
             <div style={{ overflowX: "auto" }}>
@@ -426,6 +611,15 @@ function CoachWeightInfo() {
                     }}>
                       Change
                     </th>
+                    <th style={{
+                      padding: "12px",
+                      textAlign: "center",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      color: "#374151"
+                    }}>
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -442,7 +636,7 @@ function CoachWeightInfo() {
                           fontSize: "14px",
                           color: "#374151"
                         }}>
-                          {new Date(entry.date).toLocaleDateString('en-US', {
+                          {new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric'
@@ -475,6 +669,28 @@ function CoachWeightInfo() {
                             ? `${change.toFixed(1)} kg ↓`
                             : "No change"}
                         </td>
+                        <td style={{
+                          padding: "12px",
+                          textAlign: "center"
+                        }}>
+                          <button
+                            onClick={() => handleDelete(entry.id)}
+                            style={{
+                              backgroundColor: "#ef4444",
+                              color: "white",
+                              padding: "6px 12px",
+                              borderRadius: "4px",
+                              border: "none",
+                              fontSize: "12px",
+                              fontWeight: "500",
+                              cursor: "pointer"
+                            }}
+                            onMouseOver={(e) => e.target.style.backgroundColor = "#dc2626"}
+                            onMouseOut={(e) => e.target.style.backgroundColor = "#ef4444"}
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -495,7 +711,7 @@ function CoachWeightInfo() {
         fontSize: "13px",
         color: "#166534"
       }}>
-        <strong></strong> Weight data is private and only visible to the athlete and their coaches.
+        <strong>Coach Access:</strong> Weight data is private and only visible to coaches. Athletes cannot view or modify their own weight data.
       </div>
     </div>
   );

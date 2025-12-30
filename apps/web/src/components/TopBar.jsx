@@ -146,7 +146,7 @@ function DropdownMenu({ user, activeTab }) {
   if (user?.role === "athlete") {
     menuItems.push({ path: "/goals", label: "Goals", activeTab: "goals" });
     menuItems.push({ path: "/practice-performances", label: "Enter Practice", activeTab: "practice-performances" });
-    menuItems.push({ path: "/weight-info", label: "Weight Info", activeTab: "weight-info" });
+    //menuItems.push({ path: "/weight-info", label: "Weight Info", activeTab: "weight-info" });
     menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
   } else if (user?.role === "coach") {
     menuItems.push({ path: "/view-athlete-goals", label: "View Athlete Goals", activeTab: "view-athlete-goals" });
