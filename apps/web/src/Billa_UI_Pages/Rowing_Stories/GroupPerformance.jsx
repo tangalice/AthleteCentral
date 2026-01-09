@@ -385,6 +385,17 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
         try {
           const userDoc = await getDoc(doc(db, 'users', userId));
           const userName = userDoc.exists() ? (userDoc.data().displayName || userDoc.data().name || 'Unknown') : 'Unknown';
+          
+          // Fetch all weight data for this user upfront
+          const weightSnapshot = await getDocs(collection(db, 'users', userId, 'weightData'));
+          const weightsByDate = {};
+          weightSnapshot.forEach((weightDoc) => {
+            const weightData = weightDoc.data();
+            if (weightData.date && weightData.weight) {
+              weightsByDate[weightData.date] = weightData.weight;
+            }
+          });
+          
           const performancesSnapshot = await getDocs(collection(db, 'users', userId, 'testPerformances'));
           performancesSnapshot.forEach((docSnap) => {
             const data = docSnap.data();
@@ -392,11 +403,19 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
             let dateValue = data.date;
             if (dateValue?.toDate) dateValue = dateValue.toDate();
             
-            // Calculate weight-adjusted values if weight is available
-            const athleteWeight = data.athleteWeight || null;
+            // Get the date string to look up weight
+            const dateString = getDateString(dateValue);
+            
+            // Try to get weight: first from stored data, then from weightsByDate lookup
+            const athleteWeight = data.athleteWeight || weightsByDate[dateString] || null;
             const split = data.split || data.avgSplit || '-';
-            const weightAdjustedSplit = data.weightAdjustedSplit || calculateWeightAdjustedSplit(split, athleteWeight);
-            const weightAdjustedWatts = data.weightAdjustedWatts || calculateWeightAdjustedWatts(split, athleteWeight);
+            
+            // Calculate weight-adjusted values - always recalculate if we have weight
+            const weightAdjustedSplit = athleteWeight ? calculateWeightAdjustedSplit(split, athleteWeight) : null;
+            const weightAdjustedWatts = athleteWeight ? calculateWeightAdjustedWatts(split, athleteWeight) : null;
+            
+            // Calculate W/kg if we have weight and watts
+            const wattsPerKg = (athleteWeight && watts > 0) ? watts / athleteWeight : (data.wattsPerKg || null);
             
             performances.push({
               id: docSnap.id,
@@ -407,7 +426,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
               split: split,
               splits: data.splits || [],
               watts: watts,
-              wattsPerKg: data.wattsPerKg || null,
+              wattsPerKg: wattsPerKg,
               athleteWeight: athleteWeight,
               weightAdjustedSplit: weightAdjustedSplit,
               weightAdjustedWatts: weightAdjustedWatts,
