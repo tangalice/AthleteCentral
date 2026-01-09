@@ -366,6 +366,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
 
   const fetchTeamData = async () => {
     const currentUser = auth.currentUser;
+    console.log('Current user:', currentUser?.uid, 'Email verified:', currentUser?.emailVerified);
     if (!currentUser) { setLoading(false); setError('No user logged in'); return; }
     try {
       setLoading(true);
@@ -679,7 +680,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
       {columns.showWeightAdjusted && (
         <div style={{ marginTop: '16px', padding: '12px 16px', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px solid #f59e0b' }}>
           <p style={{ fontSize: '12px', color: '#92400e', margin: 0 }}>
-            <strong>Weight-Adjusted Formula:</strong> WF = (weight/270)^0.222 • Corrected Split = WF × Actual Split • Final = avg(Corrected, Actual)
+           <strong>Weight-Adjusted Formula:</strong> WF = (weight/270)^0.222 • Corrected Split = WF × Actual Split • Final = avg(Corrected, Actual) 
           </p>
         </div>
       )}
