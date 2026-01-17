@@ -59,6 +59,7 @@ function DropdownMenu({ user, activeTab }) {
     activeTab === "weight-info" ||
     activeTab === "coach-weight-info" ||
     activeTab === "log-workout" ||
+    activeTab === "overview" ||
     activeTab === "resources";
 
   // Close dropdown when clicking outside
@@ -120,83 +121,88 @@ function DropdownMenu({ user, activeTab }) {
     transition: "background-color 0.2s",
   };
 
+  const sectionHeaderStyle = {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#9ca3af",
+    padding: "8px 16px 4px 16px",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+  };
+
   // Build menu items based on user role
   const menuItems = [];
   
-  // Activity - Available to both
+  // ===== SHARED ITEMS (Both roles) =====
   menuItems.push({ path: "/activity", label: "Activity", activeTab: "activity" });
-  
-  // Log Workout - Athlete only
-  if (user?.role === "athlete") {
-    menuItems.push({ path: "/log-workout", label: "Log Workout", activeTab: "log-workout" });
-  }
-
-  //Athlete only
-  if (user?.role === "athlete") {
-    menuItems.push({ path: "/improvement-rates", label: "Improvement Rates", activeTab: "improvement-rates" });
-  }
-  
-  // Results - Available to both
   menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
   menuItems.push({ path: "/resources", label: "Resources", activeTab: "resources" });
-
   menuItems.push({ path: "/team-personal-bests", label: "Team Personal Bests", activeTab: "team-personal-bests" }); 
+  menuItems.push({ path: "/group-performance", label: "Group Performance", activeTab: "group-performance" });
+  menuItems.push({ path: "/individual-performance", label: "Individual Performance", activeTab: "individual-performance" });
   
-  // Goals - Different for coach vs athlete
+  // Rowing tools - Only for rowing users (both roles)
+  if (user?.sport?.toLowerCase() === "rowing") {
+    menuItems.push({ path: "/split-calculator", label: "Split Calculator", activeTab: "split-calculator" });
+    menuItems.push({ path: "/overview", label: "Attendance Overview", activeTab: "overview" });
+  }
+
+  // ===== ATHLETE FEATURES (Athletes get these, Coaches get read-only access) =====
   if (user?.role === "athlete") {
-    menuItems.push({ path: "/goals", label: "Goals", activeTab: "goals" });
+    // Athlete-specific actions
+    menuItems.push({ type: "header", label: "My Training" });
+    menuItems.push({ path: "/log-workout", label: "Log Workout", activeTab: "log-workout" });
     menuItems.push({ path: "/practice-performances", label: "Enter Practice", activeTab: "practice-performances" });
-    //menuItems.push({ path: "/weight-info", label: "Weight Info", activeTab: "weight-info" });
-    menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
-  } else if (user?.role === "coach") {
-    menuItems.push({ path: "/view-athlete-goals", label: "View Athlete Goals", activeTab: "view-athlete-goals" });
-    menuItems.push({ path: "/suggest-goals", label: "Suggest Goals", activeTab: "suggest-goals" });
-    menuItems.push({ path: "/coach-team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
-  }
-  
-  // Feedback - Different for coach vs athlete
-  if (user?.role === "athlete") {
-    menuItems.push({ path: "/athlete-feedback", label: "Feedback", activeTab: "athlete-feedback" });
-  } else if (user?.role === "coach") {
-    menuItems.push({ path: "/coach-feedback", label: "Give Feedback", activeTab: "coach-feedback" });
-  }
-
-  
-  
-  // Coach-only management links
-  if (user?.role === "coach") {
-    menuItems.push({ path: "/health-availability", label: "Health and Availability", activeTab: "health-availability" });
-    menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
-    menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" });
-    menuItems.push({ path: "/coach-weight-info", label: "Athlete Weights", activeTab: "coach-weight-info" });
-
-    menuItems.push({ path: "/coach-view-predictions", label: "Analyze Predictions", activeTab: "coach-view-predictions" });
+    menuItems.push({ path: "/goals", label: "My Goals", activeTab: "goals" });
+    menuItems.push({ path: "/athlete-feedback", label: "My Feedback", activeTab: "athlete-feedback" });
     
-    // Lineup Builder - Only for rowing coaches
-    if (user?.sport?.toLowerCase() === "rowing") {
-      menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
-    }
-  }
-
-  if (user?.role === "athlete") {
+    menuItems.push({ type: "header", label: "Analytics" });
+    menuItems.push({ path: "/improvement-rates", label: "Improvement Rates", activeTab: "improvement-rates" });
+    menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
+    menuItems.push({ path: "/teammate-comparison", label: "Teammate Comparison", activeTab: "teammate-comparison" });
+    menuItems.push({ path: "/similar-teammates", label: "Similar Teammates", activeTab: "similar-teammates" });
+    
+    menuItems.push({ type: "header", label: "Tools" });
     menuItems.push({ path: "/athlete-tools", label: "Tools", activeTab: "athlete-tools" });
     menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
     menuItems.push({ path: "/compare-results", label: "Compare Results", activeTab: "compare-results" });
+  } 
+  
+  // ===== COACH FEATURES =====
+  if (user?.role === "coach") {
+    // Coach management tools
+    menuItems.push({ type: "header", label: "Team Management" });
+    menuItems.push({ path: "/view-athlete-goals", label: "View Athlete Goals", activeTab: "view-athlete-goals" });
+    menuItems.push({ path: "/suggest-goals", label: "Suggest Goals", activeTab: "suggest-goals" });
+    menuItems.push({ path: "/coach-feedback", label: "Give Feedback", activeTab: "coach-feedback" });
+    menuItems.push({ path: "/health-availability", label: "Health & Availability", activeTab: "health-availability" });
+    menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" });
+    menuItems.push({ path: "/coach-weight-info", label: "Athlete Weights", activeTab: "coach-weight-info" });
+    
+    menuItems.push({ type: "header", label: "Analytics & Reports" });
+    menuItems.push({ path: "/coach-team-rankings", label: "Team Rankings", activeTab: "coach-team-rankings" });
+    menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
+    menuItems.push({ path: "/coach-view-predictions", label: "Analyze Predictions", activeTab: "coach-view-predictions" });
+    
+    // ===== COACH ACCESS TO ATHLETE FEATURES (Read-only/View mode) =====
+    menuItems.push({ type: "header", label: "Athlete Views" });
+    menuItems.push({ path: "/goals", label: "Goals Page", activeTab: "goals" });
+    menuItems.push({ path: "/practice-performances", label: "Practice Entry", activeTab: "practice-performances" });
+    menuItems.push({ path: "/improvement-rates", label: "Improvement Rates", activeTab: "improvement-rates" });
+    menuItems.push({ path: "/team-rankings", label: "Athlete Rankings View", activeTab: "team-rankings" });
+    menuItems.push({ path: "/teammate-comparison", label: "Teammate Comparison", activeTab: "teammate-comparison" });
     menuItems.push({ path: "/similar-teammates", label: "Similar Teammates", activeTab: "similar-teammates" });
-    menuItems.push({ path: "/teammate-comparison", label: "Teammate Comparison", activeTab: "teammate-comparison" }); // ADD THIS LINE
-  }
-
-  
-  
-  // Group Performance - Available to both
-  menuItems.push({ path: "/group-performance", label: "Group Performance", activeTab: "group-performance" });
-  
-  // Individual Performance - Available to both
-  menuItems.push({ path: "/individual-performance", label: "Individual Performance", activeTab: "individual-performance" });
-  
-  // Split Calculator - Only for rowing users
-  if (user?.sport?.toLowerCase() === "rowing") {
-    menuItems.push({ path: "/split-calculator", label: "Split Calculator", activeTab: "split-calculator" });
+    menuItems.push({ path: "/athlete-feedback", label: "Athlete Feedback View", activeTab: "athlete-feedback" });
+    menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
+    menuItems.push({ path: "/compare-results", label: "Compare Results", activeTab: "compare-results" });
+    menuItems.push({ path: "/athlete-tools", label: "Athlete Tools", activeTab: "athlete-tools" });
+    menuItems.push({ path: "/log-workout", label: "Log Workout", activeTab: "log-workout" });
+    
+    // Lineup Builder - Coach only, Rowing only
+    if (user?.sport?.toLowerCase() === "rowing") {
+      menuItems.push({ type: "header", label: "Rowing Tools" });
+      menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
+    }
   }
 
   return (
@@ -226,7 +232,16 @@ function DropdownMenu({ user, activeTab }) {
         </svg>
       </button>
       <div style={dropdownMenuStyle}>
-        {menuItems.map((item) => {
+        {menuItems.map((item, index) => {
+          // Render section headers
+          if (item.type === "header") {
+            return (
+              <div key={`header-${index}`} style={sectionHeaderStyle}>
+                {item.label}
+              </div>
+            );
+          }
+          
           const isItemActive = activeTab === item.activeTab;
           return (
             <Link

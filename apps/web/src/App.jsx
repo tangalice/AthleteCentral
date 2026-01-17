@@ -74,6 +74,7 @@ import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPer
 import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
 import CoachTeamRankings from './Billa_UI_Pages/CoachTeamRankings';
 import Resources from "./components/Resources";
+import Overview from './Billa_UI_Pages/Rowing_Stories/Overview';
 
 /* ---------------- Protected wrapper ---------------- */
 
@@ -252,6 +253,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "create-team-poll" ? "dashboard" :
     root === "team-polls" ? "dashboard" :
     root === "team-poll" ? "dashboard" :
+    root === "overview" ? "overview" :
     "dashboard";
 
   return (
@@ -645,15 +647,12 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // UPDATED: Removed athlete-only restriction - coaches can now access
       {
         path: "predict-results",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <PredictResultsPage />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
+            <PredictResultsPage />
           </ProtectedRoute>
         ),
       },
@@ -665,51 +664,39 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // UPDATED: Removed athlete-only restriction - coaches can now access
       {
         path: "teammate-comparison",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <TeammateComparison user={mergedUser} userSport={userSport} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
+            <TeammateComparison user={mergedUser} userSport={userSport} />
           </ProtectedRoute>
         ),
       },
+      // UPDATED: Removed athlete-only restriction - coaches can now access
       {
         path: "team-rankings",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <TeamRankings user={mergedUser} userSport={userSport} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
+            <TeamRankings user={mergedUser} userSport={userSport} />
           </ProtectedRoute>
         ),
       },
+      // UPDATED: Removed athlete-only restriction - coaches can now access
       {
         path: "similar-teammates",
         element: (
           <ProtectedRoute user={user}>
-          {userRole === "athlete" ? (
-          <SimilarTeammatesPage />
-          ) : (
-          <Navigate to="/dashboard" replace />
-        )}
+            <SimilarTeammatesPage />
           </ProtectedRoute>
         ),
       },
+      // UPDATED: Removed athlete-only restriction - coaches can now access
       {
         path: "athlete-tools",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <AthleteToolsPage />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
+            <AthleteToolsPage />
           </ProtectedRoute>
         ),
       },
@@ -798,27 +785,21 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // UPDATED: Removed athlete-only restriction - coaches can now access
       {
         path: "log-workout",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <LogWorkout userRole={userRole} user={mergedUser} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
+            <LogWorkout userRole={userRole} user={mergedUser} />
           </ProtectedRoute>
         ),
       },
+      // UPDATED: Removed athlete-only restriction - coaches can now access
       {
         path: "improvement-rates",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <ImprovementRates user={mergedUser} userSport={userSport} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
+            <ImprovementRates user={mergedUser} userSport={userSport} />
           </ProtectedRoute>
         ),
       },
@@ -848,11 +829,12 @@ const router = createBrowserRouter([
         ),
       },
 
+      // UPDATED: Removed athlete-only restriction - coaches can now view athlete feedback
       {
         path: "athlete-feedback",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "athlete" ? <AthleteFeedbackPage user={user} /> : <Navigate to="/dashboard" replace />}
+            <AthleteFeedbackPage user={user} />
           </ProtectedRoute>
         ),
       },
@@ -881,15 +863,12 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // UPDATED: Removed athlete-only restriction - coaches can now access
       {
         path: "team-personal-bests",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <TeamPersonalBests user={mergedUser} userSport={userSport} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
+            <TeamPersonalBests user={mergedUser} userSport={userSport} />
           </ProtectedRoute>
         ),
       },
@@ -983,6 +962,19 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute user={user}>
             <Resources userRole={userRole} user={mergedUser} />
+          </ProtectedRoute>
+        ),
+      },
+      // Attendance Overview - All rowing users (coach can add/delete, athletes view-only)
+      {
+        path: "overview",
+        element: (
+          <ProtectedRoute user={user}>
+            {userSport?.toLowerCase() === "rowing" ? (
+              <Overview user={mergedUser} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )}
           </ProtectedRoute>
         ),
       },
