@@ -646,7 +646,7 @@ export default function AttendanceTracker({ user }) {
                 justifyContent: "center",
                 fontSize: "18px"
               }}>
-                📝
+                
               </span>
               <h3 style={{ fontSize: "18px", fontWeight: "600", color: "#111827", margin: 0 }}>
                 {isCoach ? "Mark Unexcused Absence" : "Submit Excused Absence"}
@@ -772,7 +772,7 @@ export default function AttendanceTracker({ user }) {
                   justifyContent: "center",
                   fontSize: "18px"
                 }}>
-                  🔄
+                  
                 </span>
                 <h3 style={{ fontSize: "18px", fontWeight: "600", color: "#111827", margin: 0 }}>
                   Log Makeup Workout
@@ -870,7 +870,7 @@ export default function AttendanceTracker({ user }) {
               justifyContent: "center",
               fontSize: "18px"
             }}>
-              💪
+              
             </span>
             <h3 style={{ fontSize: "18px", fontWeight: "600", color: "#111827", margin: 0 }}>
               Log Extra Work
