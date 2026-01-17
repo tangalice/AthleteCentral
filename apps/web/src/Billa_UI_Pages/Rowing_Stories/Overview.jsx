@@ -777,7 +777,7 @@ export default function Overview({ user }) {
                   border: "1px solid #bae6fd",
                 }}>
                   <div style={{ fontSize: "13px", color: "#0369a1" }}>
-                    💡 <strong>Tip:</strong> Click on any athlete's name to view their detailed attendance history.
+                    <strong>Tip:</strong> Click on any athlete's name to view their detailed attendance history.
                   </div>
                 </div>
 
