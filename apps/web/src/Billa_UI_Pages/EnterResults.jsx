@@ -5,7 +5,7 @@ import { collection, query, where, getDocs, getDoc, doc, orderBy, limit } from '
 import { db } from '../firebase';
 import TestPerformanceService from '../services/TestPerformanceService';
 
-// Rowing piece configurations
+// Rowing piece configurations - removed 30min, 60min, 2x5k, added Custom
 const ROWING_PIECES = {
   '2k': { 
     type: 'distance', 
@@ -25,33 +25,15 @@ const ROWING_PIECES = {
     splits: [1, 2, 3, 4, 5, 6],
     label: '6k'
   },
-  '30min': { 
-    type: 'time', 
-    duration: 30, 
-    label: "30'"
-  },
-  '60min': { 
-    type: 'time', 
-    duration: 60, 
-    label: "60'"
-  },
   "20'@20": {
     type: 'time',
     duration: 20,
     rate: 20,
     label: "20'@20"
   },
-  "30'@20": {
-    type: 'time',
-    duration: 30,
-    rate: 20,
-    label: "30'@20"
-  },
-  "2x5k": {
-    type: 'multi',
-    pieces: 2,
-    distancePerPiece: 5000,
-    label: '2x5k'
+  'Custom': {
+    type: 'custom',
+    label: 'Custom Workout'
   }
 };
 
@@ -107,11 +89,11 @@ export default function EnterResults({ user }) {
   });
 
   const [splits, setSplits] = useState([]);
-  const [multiPieceData, setMultiPieceData] = useState({
-    p1AvgSplit: '',
-    p2AvgSplit: '',
-    deltaWatts: '',
-  });
+  
+  // Custom workout state
+  const [customPieceCount, setCustomPieceCount] = useState(1);
+  const [customPieceSplits, setCustomPieceSplits] = useState([]);
+  
   const [athleteWeight, setAthleteWeight] = useState(null);
   const [athletes, setAthletes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -124,8 +106,41 @@ export default function EnterResults({ user }) {
 
   const isDistancePiece = pieceConfig?.type === 'distance';
   const isTimePiece = pieceConfig?.type === 'time';
-  const isMultiPiece = pieceConfig?.type === 'multi';
+  const isCustomPiece = pieceConfig?.type === 'custom';
   const isRowingSport = formData.athleteSport?.toLowerCase() === 'rowing';
+
+  // Calculate custom workout metrics
+  const customWorkoutMetrics = useMemo(() => {
+    const metrics = {
+      avgSplit: '',
+      avgSplitSeconds: 0,
+      avgWatts: 0,
+      wattsPerKg: 0,
+      pieceWatts: [],
+    };
+
+    if (!isCustomPiece || customPieceSplits.length === 0) return metrics;
+
+    const validSplits = customPieceSplits.filter(s => s && timeStringToSeconds(s) > 0);
+    if (validSplits.length === 0) return metrics;
+
+    const totalSeconds = validSplits.reduce((sum, s) => sum + timeStringToSeconds(s), 0);
+    metrics.avgSplitSeconds = totalSeconds / validSplits.length;
+    metrics.avgSplit = formatSplit(metrics.avgSplitSeconds);
+    metrics.avgWatts = calculateWattsFromSplit(metrics.avgSplitSeconds);
+    
+    // Calculate watts for each piece
+    metrics.pieceWatts = customPieceSplits.map(s => {
+      const seconds = timeStringToSeconds(s);
+      return seconds > 0 ? calculateWattsFromSplit(seconds) : 0;
+    });
+
+    if (athleteWeight && athleteWeight > 0) {
+      metrics.wattsPerKg = (metrics.avgWatts / athleteWeight).toFixed(2);
+    }
+
+    return metrics;
+  }, [customPieceSplits, athleteWeight, isCustomPiece]);
 
   const calculatedMetrics = useMemo(() => {
     const metrics = {
@@ -133,34 +148,18 @@ export default function EnterResults({ user }) {
       wattsPerKg: 0,
       totalTimeSeconds: 0,
       avgSplitSeconds: 0,
-      p1Watts: 0,
-      p2Watts: 0,
-      avgWatts: 0,
     };
 
     if (!formData.completed) return metrics;
 
-    if (isMultiPiece) {
-      const p1Seconds = timeStringToSeconds(multiPieceData.p1AvgSplit);
-      const p2Seconds = timeStringToSeconds(multiPieceData.p2AvgSplit);
-      
-      if (p1Seconds > 0) {
-        metrics.p1Watts = calculateWattsFromSplit(p1Seconds);
-      }
-      if (p2Seconds > 0) {
-        metrics.p2Watts = calculateWattsFromSplit(p2Seconds);
-      }
-      if (p1Seconds > 0 && p2Seconds > 0) {
-        const avgSplitSeconds = (p1Seconds + p2Seconds) / 2;
-        metrics.avgSplitSeconds = avgSplitSeconds;
-        metrics.avgWatts = calculateWattsFromSplit(avgSplitSeconds);
-        metrics.watts = metrics.avgWatts;
-        
-        if (athleteWeight && athleteWeight > 0) {
-          metrics.wattsPerKg = (metrics.avgWatts / athleteWeight).toFixed(2);
-        }
-      }
-      return metrics;
+    // For custom pieces, use the custom workout metrics
+    if (isCustomPiece) {
+      return {
+        ...metrics,
+        watts: customWorkoutMetrics.avgWatts,
+        wattsPerKg: customWorkoutMetrics.wattsPerKg,
+        avgSplitSeconds: customWorkoutMetrics.avgSplitSeconds,
+      };
     }
 
     const avgSplitSeconds = timeStringToSeconds(formData.avgSplit);
@@ -183,7 +182,14 @@ export default function EnterResults({ user }) {
     }
 
     return metrics;
-  }, [formData.completed, formData.avgSplit, formData.totalTime, multiPieceData, athleteWeight, isDistancePiece, isMultiPiece, pieceConfig]);
+  }, [formData.completed, formData.avgSplit, formData.totalTime, athleteWeight, isDistancePiece, isCustomPiece, pieceConfig, customWorkoutMetrics]);
+
+  // Initialize custom piece splits when count changes
+  useEffect(() => {
+    if (isCustomPiece) {
+      setCustomPieceSplits(Array(customPieceCount).fill(''));
+    }
+  }, [customPieceCount, isCustomPiece]);
 
   useEffect(() => {
     if (isRowingSport && isDistancePiece && pieceConfig?.splits) {
@@ -197,12 +203,12 @@ export default function EnterResults({ user }) {
       setSplits([]);
     }
     
-    setMultiPieceData({
-      p1AvgSplit: '',
-      p2AvgSplit: '',
-      deltaWatts: '',
-    });
-  }, [isRowingSport, isDistancePiece, pieceConfig, formData.testType]);
+    // Reset custom workout data when test type changes
+    if (!isCustomPiece) {
+      setCustomPieceCount(1);
+      setCustomPieceSplits([]);
+    }
+  }, [isRowingSport, isDistancePiece, isCustomPiece, pieceConfig, formData.testType]);
 
   // Fetch athlete's weight for the selected date
   useEffect(() => {
@@ -250,7 +256,7 @@ export default function EnterResults({ user }) {
     const sportLower = sport?.toLowerCase() || '';
     switch (sportLower) {
       case 'rowing':
-        return ["20'@20", "30'@20", '2x5k', '2k', '5k', '6k', '30min', '60min'];
+        return ["20'@20", '2k', '5k', '6k', 'Custom'];
       case 'running':
       case 'track':
       case 'cross country':
@@ -296,7 +302,7 @@ export default function EnterResults({ user }) {
           rate: '',
         }));
         setSplits(splits.map(s => ({ ...s, split: '', spm: '' })));
-        setMultiPieceData({ p1AvgSplit: '', p2AvgSplit: '', deltaWatts: '' });
+        setCustomPieceSplits(Array(customPieceCount).fill(''));
       }
       return;
     }
@@ -329,29 +335,22 @@ export default function EnterResults({ user }) {
         distance: '',
         rate: ROWING_PIECES[value]?.rate?.toString() || '',
       }));
+      // Reset custom workout when changing test type
+      setCustomPieceCount(1);
+      setCustomPieceSplits(['']);
     }
   };
 
-  const handleMultiPieceChange = (field, value) => {
-    setMultiPieceData(prev => ({ ...prev, [field]: value }));
-    
-    if (field === 'p1AvgSplit' || field === 'p2AvgSplit') {
-      const p1 = field === 'p1AvgSplit' ? value : multiPieceData.p1AvgSplit;
-      const p2 = field === 'p2AvgSplit' ? value : multiPieceData.p2AvgSplit;
-      
-      const p1Seconds = timeStringToSeconds(p1);
-      const p2Seconds = timeStringToSeconds(p2);
-      
-      if (p1Seconds > 0 && p2Seconds > 0) {
-        const p1Watts = calculateWattsFromSplit(p1Seconds);
-        const p2Watts = calculateWattsFromSplit(p2Seconds);
-        const delta = p2Watts - p1Watts;
-        setMultiPieceData(prev => ({ ...prev, deltaWatts: delta.toString() }));
-        
-        const avgSeconds = (p1Seconds + p2Seconds) / 2;
-        setFormData(prev => ({ ...prev, avgSplit: formatSplit(avgSeconds) }));
-      }
-    }
+  const handleCustomPieceCountChange = (e) => {
+    const count = Math.min(20, Math.max(1, parseInt(e.target.value) || 1));
+    setCustomPieceCount(count);
+    setCustomPieceSplits(Array(count).fill(''));
+  };
+
+  const handleCustomSplitChange = (index, value) => {
+    const newSplits = [...customPieceSplits];
+    newSplits[index] = value;
+    setCustomPieceSplits(newSplits);
   };
 
   const handleSplitChange = (index, field, value) => {
@@ -393,11 +392,14 @@ export default function EnterResults({ user }) {
         setErrorMessage('Please enter distance covered');
         return false;
       }
-      if (isMultiPiece && (!multiPieceData.p1AvgSplit || !multiPieceData.p2AvgSplit)) {
-        setErrorMessage('Please enter average split for both pieces');
-        return false;
+      if (isCustomPiece) {
+        const validSplits = customPieceSplits.filter(s => s && timeStringToSeconds(s) > 0);
+        if (validSplits.length === 0) {
+          setErrorMessage('Please enter at least one split for the custom workout');
+          return false;
+        }
       }
-      if (!isMultiPiece && !formData.avgSplit) {
+      if (!isCustomPiece && !formData.avgSplit) {
         setErrorMessage('Please enter average split');
         return false;
       }
@@ -416,16 +418,13 @@ export default function EnterResults({ user }) {
     setLoading(true);
 
     try {
-      // Build performance data
-      // IMPORTANT: Store date as the exact string from the input (e.g., "2025-12-23")
-      // Do NOT convert to Date object as this causes timezone issues
-      console.log('Date being saved:', formData.date); // Debug log
+      console.log('Date being saved:', formData.date);
       
       const performanceData = {
         athleteName: formData.athleteName,
         sport: formData.athleteSport,
         testType: formData.testType,
-        date: formData.date, // Keep as string like "2025-12-23"
+        date: formData.date,
         completed: formData.completed,
         coachId: user.uid,
         coachName: user.displayName || user.email,
@@ -437,27 +436,30 @@ export default function EnterResults({ user }) {
 
       if (!formData.completed) {
         performanceData.time = '--:--.-';
-        performanceData.distance = '';
+        performanceData.distance = 0;
         performanceData.split = '--:--.-';
         performanceData.watts = 0;
       }
       else if (isRowingSport) {
-        if (isMultiPiece) {
-          performanceData.p1AvgSplit = multiPieceData.p1AvgSplit;
-          performanceData.p2AvgSplit = multiPieceData.p2AvgSplit;
-          performanceData.p1Watts = calculatedMetrics.p1Watts;
-          performanceData.p2Watts = calculatedMetrics.p2Watts;
-          performanceData.deltaWatts = parseInt(multiPieceData.deltaWatts) || 0;
-          performanceData.avgSplit = formData.avgSplit;
-          performanceData.split = formData.avgSplit;
-          performanceData.watts = calculatedMetrics.avgWatts;
-          performanceData.distance = pieceConfig.distancePerPiece * pieceConfig.pieces;
-          performanceData.time = formData.avgSplit;
-          // Store splits as array of strings for 2x5k
-          performanceData.splits = [multiPieceData.p1AvgSplit, multiPieceData.p2AvgSplit];
+        if (isCustomPiece) {
+          // Custom workout data
+          const validSplits = customPieceSplits.filter(s => s && timeStringToSeconds(s) > 0);
+          
+          performanceData.isCustomWorkout = true;
+          performanceData.customPieceCount = customPieceCount;
+          performanceData.splits = customPieceSplits;
+          performanceData.avgSplit = customWorkoutMetrics.avgSplit;
+          performanceData.split = customWorkoutMetrics.avgSplit;
+          performanceData.watts = customWorkoutMetrics.avgWatts;
+          performanceData.pieceWatts = customWorkoutMetrics.pieceWatts;
+          performanceData.time = customWorkoutMetrics.avgSplit;
+          
+          // FIX: Set distance to prevent undefined error in Firestore
+          // For custom workouts, we estimate distance as 500m per piece
+          performanceData.distance = customPieceCount * 500;
           
           if (athleteWeight) {
-            performanceData.wattsPerKg = parseFloat(calculatedMetrics.wattsPerKg);
+            performanceData.wattsPerKg = parseFloat(customWorkoutMetrics.wattsPerKg);
             performanceData.athleteWeight = athleteWeight;
           }
         }
@@ -480,17 +482,10 @@ export default function EnterResults({ user }) {
             performanceData.athleteWeight = athleteWeight;
           }
           
-          // FIXED: Store splits as array of STRINGS for GroupPerformance compatibility
           const validSplits = splits.filter(s => s.split && s.split.trim() !== '');
-          console.log('Raw splits:', splits); // Debug
-          console.log('Valid splits:', validSplits); // Debug
           
           if (validSplits.length > 0) {
-            // Store as simple string array: ["1:45.0", "1:46.0", ...]
             performanceData.splits = validSplits.map(s => s.split);
-            console.log('Splits being saved:', performanceData.splits); // Debug
-            
-            // Also store detailed version for future use
             performanceData.splitsDetailed = validSplits.map(s => ({
               marker: s.marker,
               split: s.split,
@@ -501,6 +496,8 @@ export default function EnterResults({ user }) {
         else if (isTimePiece) {
           if (formData.distance) {
             performanceData.distance = parseInt(formData.distance);
+          } else {
+            performanceData.distance = 0;
           }
           performanceData.avgSplit = formData.avgSplit;
           performanceData.split = formData.avgSplit;
@@ -518,6 +515,7 @@ export default function EnterResults({ user }) {
       }
       else if (formData.completed) {
         performanceData.time = formData.totalTime || '--:--.-';
+        performanceData.distance = 0;
       }
 
       console.log('Saving performance data:', performanceData);
@@ -546,7 +544,8 @@ export default function EnterResults({ user }) {
           totalTime: '',
         });
         setSplits([]);
-        setMultiPieceData({ p1AvgSplit: '', p2AvgSplit: '', deltaWatts: '' });
+        setCustomPieceCount(1);
+        setCustomPieceSplits([]);
         setAthleteWeight(null);
 
         setTimeout(() => setSuccessMessage(''), 3000);
@@ -711,74 +710,77 @@ export default function EnterResults({ user }) {
                 {pieceConfig?.label || formData.testType} Results
               </h3>
 
-              {/* 2x5k Multi-piece entry */}
-              {isMultiPiece && (
+              {/* Custom Workout Entry */}
+              {isCustomPiece && (
                 <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: '#374151' }}>
-                        P1 Avg Split (/500m) *
-                      </label>
-                      <input
-                        type="text"
-                        value={multiPieceData.p1AvgSplit}
-                        onChange={(e) => handleMultiPieceChange('p1AvgSplit', e.target.value)}
-                        placeholder="1:55.0"
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          border: '1px solid #d1d5db',
-                          borderRadius: '6px',
-                          fontSize: '14px',
-                          fontFamily: 'monospace',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: '#374151' }}>
-                        P2 Avg Split (/500m) *
-                      </label>
-                      <input
-                        type="text"
-                        value={multiPieceData.p2AvgSplit}
-                        onChange={(e) => handleMultiPieceChange('p2AvgSplit', e.target.value)}
-                        placeholder="1:57.0"
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          border: '1px solid #d1d5db',
-                          borderRadius: '6px',
-                          fontSize: '14px',
-                          fontFamily: 'monospace',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: '#374151' }}>
-                        ΔW (P2 - P1)
-                      </label>
-                      <input
-                        type="text"
-                        value={multiPieceData.deltaWatts ? `${multiPieceData.deltaWatts}W` : ''}
-                        readOnly
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          border: '1px solid #d1d5db',
-                          borderRadius: '6px',
-                          fontSize: '14px',
-                          backgroundColor: '#f9fafb',
-                          color: parseInt(multiPieceData.deltaWatts) < 0 ? '#ef4444' : '#10b981',
-                          fontWeight: 600,
-                          boxSizing: 'border-box'
-                        }}
-                      />
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: '#374151' }}>
+                      Number of Pieces (1-20) *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={customPieceCount}
+                      onChange={handleCustomPieceCountChange}
+                      style={{
+                        width: '120px',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '13px', color: '#374151' }}>
+                      Enter Split for Each Piece (/500m)
+                    </label>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
+                      gap: '12px' 
+                    }}>
+                      {customPieceSplits.map((split, index) => (
+                        <div key={index}>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#6b7280' }}>
+                            Piece {index + 1}
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="text"
+                              value={split}
+                              onChange={(e) => handleCustomSplitChange(index, e.target.value)}
+                              placeholder="1:55.0"
+                              style={{
+                                width: '100%',
+                                padding: '10px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '14px',
+                                fontFamily: 'monospace',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                            {split && timeStringToSeconds(split) > 0 && (
+                              <span style={{ 
+                                fontSize: '11px', 
+                                color: '#6b7280',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {calculateWattsFromSplit(timeStringToSeconds(split))}W
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
-                  {(multiPieceData.p1AvgSplit || multiPieceData.p2AvgSplit) && (
+                  {/* Custom workout calculated metrics */}
+                  {customWorkoutMetrics.avgWatts > 0 && (
                     <div style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
@@ -789,27 +791,27 @@ export default function EnterResults({ user }) {
                       border: '1px solid #d1fae5'
                     }}>
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>P1 Watts</div>
-                        <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>
-                          {calculatedMetrics.p1Watts > 0 ? calculatedMetrics.p1Watts : '-'}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>P2 Watts</div>
-                        <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>
-                          {calculatedMetrics.p2Watts > 0 ? calculatedMetrics.p2Watts : '-'}
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Avg Split</div>
+                        <div style={{ fontSize: '18px', fontWeight: 700, color: '#10b981', fontFamily: 'monospace' }}>
+                          {customWorkoutMetrics.avgSplit}
                         </div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Avg Watts</div>
-                        <div style={{ fontSize: '18px', fontWeight: 700, color: '#10b981' }}>
-                          {calculatedMetrics.avgWatts > 0 ? calculatedMetrics.avgWatts : '-'}
+                        <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>
+                          {customWorkoutMetrics.avgWatts}
                         </div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>W/kg</div>
                         <div style={{ fontSize: '18px', fontWeight: 700, color: athleteWeight ? '#10b981' : '#9ca3af' }}>
-                          {calculatedMetrics.wattsPerKg > 0 ? calculatedMetrics.wattsPerKg : '-'}
+                          {customWorkoutMetrics.wattsPerKg > 0 ? customWorkoutMetrics.wattsPerKg : '-'}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Pieces</div>
+                        <div style={{ fontSize: '18px', fontWeight: 700, color: '#6b7280' }}>
+                          {customPieceSplits.filter(s => s && timeStringToSeconds(s) > 0).length}
                         </div>
                       </div>
                     </div>
@@ -1081,8 +1083,8 @@ export default function EnterResults({ user }) {
                 </>
               )}
 
-              {/* Calculated metrics display */}
-              {!isMultiPiece && formData.avgSplit && (
+              {/* Calculated metrics display (non-custom) */}
+              {!isCustomPiece && formData.avgSplit && (
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
@@ -1126,7 +1128,7 @@ export default function EnterResults({ user }) {
 
               {!athleteWeight && (
                 <p style={{ fontSize: '12px', color: '#f59e0b', marginTop: '12px' }}>
-                  ⚠️ No weight recorded for this athlete on this date. Add weight data to calculate W/kg.
+                  No weight recorded for this athlete on this date. Add weight data to calculate W/kg.
                 </p>
               )}
             </div>

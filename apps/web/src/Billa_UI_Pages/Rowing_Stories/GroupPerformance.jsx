@@ -6,7 +6,7 @@ const getTestTypesBySport = (sport) => {
   const sportLower = sport?.toLowerCase() || '';
   switch (sportLower) {
     case 'rowing':
-      return ['All', '2k', '5k', '6k', '2x5k', '30min', '60min'];
+      return ['All', '2k', '5k', '6k', "20'@20", 'Custom'];
     case 'running':
     case 'track':
     case 'cross country':
@@ -14,7 +14,7 @@ const getTestTypesBySport = (sport) => {
     case 'swimming':
       return ['All', '50 Free', '100 Free', '200 Free', '500 Free', '100 Fly', '200 IM'];
     default:
-      return ['All', '2k', '5k', '6k', '30min', '60min'];
+      return ['All', '2k', '5k', '6k', "20'@20", 'Custom'];
   }
 };
 
@@ -62,10 +62,6 @@ const calculateWatts = (splitStr) => {
   }
 };
 
-// Weight-adjusted score calculation
-// Formula: WF = (bodyWeight / 270) ^ 0.222
-// Corrected split (seconds) = WF * actual split (seconds)
-// Final = average of corrected split and actual split
 const calculateWeightAdjustedSplit = (splitStr, weight) => {
   if (!splitStr || splitStr === '-' || splitStr === '--:--.-' || splitStr === '--:--') return null;
   if (!weight || weight <= 0) return null;
@@ -77,16 +73,10 @@ const calculateWeightAdjustedSplit = (splitStr, weight) => {
     const splitSeconds = minutes * 60 + seconds;
     if (!splitSeconds || splitSeconds <= 0 || isNaN(splitSeconds)) return null;
     
-    // Weight factor = (weight / 270) ^ 0.222
     const weightFactor = Math.pow(weight / 270, 0.222);
-    
-    // Corrected time in seconds
     const correctedSeconds = weightFactor * splitSeconds;
-    
-    // Average of corrected and actual
     const averageSeconds = (correctedSeconds + splitSeconds) / 2;
     
-    // Convert back to split format (m:ss.s)
     const mins = Math.floor(averageSeconds / 60);
     const secs = averageSeconds % 60;
     return `${mins}:${secs.toFixed(1).padStart(4, '0')}`;
@@ -95,7 +85,6 @@ const calculateWeightAdjustedSplit = (splitStr, weight) => {
   }
 };
 
-// Calculate watts from weight-adjusted split
 const calculateWeightAdjustedWatts = (splitStr, weight) => {
   const adjustedSplit = calculateWeightAdjustedSplit(splitStr, weight);
   if (!adjustedSplit) return null;
@@ -144,7 +133,17 @@ const getUniqueDates = (data) => {
   return Array.from(dates).sort((a, b) => new Date(b) - new Date(a));
 };
 
-// Edit Modal Component - COACH ONLY
+const getCustomWorkoutDates = (data) => {
+  const dates = new Set();
+  data.forEach(entry => {
+    if (entry.testType === 'Custom' && entry.date) {
+      const formatted = formatDateForInput(entry.date);
+      if (formatted) dates.add(formatted);
+    }
+  });
+  return Array.from(dates).sort((a, b) => new Date(b) - new Date(a));
+};
+
 const EditModal = ({ entry, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     time: entry.time || '',
@@ -227,7 +226,6 @@ const EditModal = ({ entry, onClose, onSave }) => {
           <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Weight</div><div style={{ fontSize: '18px', fontWeight: 700, color: weight ? '#111827' : '#9ca3af' }}>{loadingWeight ? '...' : weight ? `${weight} kg` : '-'}</div></div>
           <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>W/kg</div><div style={{ fontSize: '18px', fontWeight: 700, color: wattsPerKg ? '#10b981' : '#9ca3af' }}>{wattsPerKg || '-'}</div></div>
         </div>
-        {/* Weight Adjusted Row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '20px', padding: '16px', backgroundColor: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
           <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#92400e', marginBottom: '4px' }}>Wt-Adj Split</div><div style={{ fontSize: '18px', fontWeight: 700, color: weightAdjustedSplit ? '#92400e' : '#9ca3af', fontFamily: 'monospace' }}>{weightAdjustedSplit || '-'}</div></div>
           <div style={{ textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#92400e', marginBottom: '4px' }}>Wt-Adj Watts</div><div style={{ fontSize: '18px', fontWeight: 700, color: weightAdjustedWatts ? '#92400e' : '#9ca3af' }}>{weightAdjustedWatts || '-'}</div></div>
@@ -242,7 +240,6 @@ const EditModal = ({ entry, onClose, onSave }) => {
   );
 };
 
-// Delete Modal - COACH ONLY
 const DeleteModal = ({ entry, onClose, onConfirm }) => {
   const [deleting, setDeleting] = useState(false);
   const handleDelete = async () => {
@@ -273,17 +270,17 @@ const DeleteModal = ({ entry, onClose, onConfirm }) => {
   );
 };
 
-// Split Breakdown Modal - Available to ALL users
 const SplitBreakdownModal = ({ entry, onClose }) => {
   if (!entry) return null;
   const splits = entry.splits || [];
   const testType = entry.testType?.toLowerCase() || '';
+  const isCustom = entry.isCustomWorkout || entry.testType === 'Custom';
   
   const getSplitLabels = () => {
+    if (isCustom) return splits.map((_, i) => `Piece ${i + 1}`);
     if (testType === '2k') return ['500m', '1000m', '1500m', '2000m'];
     if (testType === '5k') return ['1k', '2k', '3k', '4k', '5k'];
     if (testType === '6k') return ['1k', '2k', '3k', '4k', '5k', '6k'];
-    if (testType === '2x5k') return ['Piece 1', 'Piece 2'];
     return splits.map((_, i) => 'Split ' + (i + 1));
   };
   const splitLabels = getSplitLabels();
@@ -296,18 +293,22 @@ const SplitBreakdownModal = ({ entry, onClose }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{entry.athleteName}</h2>
-              <p style={{ fontSize: '14px', color: '#6b7280' }}>{entry.testType} • {formatDateDisplay(entry.date, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+              <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                {entry.testType} 
+                {isCustom && entry.customPieceCount && ` (${entry.customPieceCount} pieces)`}
+                {' • '}
+                {formatDateDisplay(entry.date, { month: 'long', day: 'numeric', year: 'numeric' })}
+              </p>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#9ca3af' }}>×</button>
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
-          <div style={{ backgroundColor: '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600, marginBottom: '4px' }}>TIME</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{entry.time}</div></div>
+          <div style={{ backgroundColor: '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600, marginBottom: '4px' }}>{isCustom ? 'PIECES' : 'TIME'}</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{isCustom ? (entry.customPieceCount || splits.length) : entry.time}</div></div>
           <div style={{ backgroundColor: '#d1fae5', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#065f46', fontWeight: 600, marginBottom: '4px' }}>AVG SPLIT</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#065f46', fontFamily: 'monospace' }}>{entry.split}</div></div>
           <div style={{ backgroundColor: '#dbeafe', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600, marginBottom: '4px' }}>WATTS</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#1e40af', fontFamily: 'monospace' }}>{entry.watts || '-'}</div></div>
           <div style={{ backgroundColor: entry.wattsPerKg ? '#fef3c7' : '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: entry.wattsPerKg ? '#92400e' : '#6b7280', fontWeight: 600, marginBottom: '4px' }}>W/KG</div><div style={{ fontSize: '16px', fontWeight: 700, color: entry.wattsPerKg ? '#92400e' : '#9ca3af', fontFamily: 'monospace' }}>{entry.wattsPerKg ? entry.wattsPerKg.toFixed(2) : '-'}</div></div>
         </div>
-        {/* Weight Adjusted Stats */}
         {entry.weightAdjustedSplit && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '20px' }}>
             <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid #f59e0b' }}><div style={{ fontSize: '11px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>WT-ADJ SPLIT</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#92400e', fontFamily: 'monospace' }}>{entry.weightAdjustedSplit}</div></div>
@@ -315,21 +316,21 @@ const SplitBreakdownModal = ({ entry, onClose }) => {
           </div>
         )}
         <div style={{ marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Split Breakdown</h3>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>{isCustom ? 'Piece Breakdown' : 'Split Breakdown'}</h3>
           {splits.length > 0 ? (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={{ backgroundColor: '#f9fafb' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>INTERVAL</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>{isCustom ? 'PIECE' : 'INTERVAL'}</th>
                 <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>SPLIT</th>
                 <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>WATTS</th>
               </tr></thead>
               <tbody>
                 {splits.map((split, index) => {
                   const splitValue = getSplitValue(split);
-                  const splitWatts = calculateWatts(splitValue);
+                  const splitWatts = entry.pieceWatts?.[index] || calculateWatts(splitValue);
                   return (
                     <tr key={index} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 500, color: '#374151' }}>{splitLabels[index] || `Split ${index + 1}`}</td>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 500, color: '#374151' }}>{splitLabels[index] || `Piece ${index + 1}`}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'monospace', fontSize: '14px', fontWeight: 600, color: '#10b981' }}>{splitValue}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: '13px', fontWeight: 500, color: '#374151' }}>{splitWatts > 0 ? splitWatts : '-'}</td>
                     </tr>
@@ -356,6 +357,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
   const [error, setError] = useState(null);
   const [selectedTestType, setSelectedTestType] = useState('All');
   const [selectedDate, setSelectedDate] = useState('All');
+  const [selectedCustomDate, setSelectedCustomDate] = useState('All');
   const [completionStatus, setCompletionStatus] = useState('All');
   const [sortBy, setSortBy] = useState('wattsPerKg');
   const [selectedEntry, setSelectedEntry] = useState(null);
@@ -366,7 +368,6 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
 
   const fetchTeamData = async () => {
     const currentUser = auth.currentUser;
-    console.log('Current user:', currentUser?.uid, 'Email verified:', currentUser?.emailVerified);
     if (!currentUser) { setLoading(false); setError('No user logged in'); return; }
     try {
       setLoading(true);
@@ -387,14 +388,11 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
           const userDoc = await getDoc(doc(db, 'users', userId));
           const userName = userDoc.exists() ? (userDoc.data().displayName || userDoc.data().name || 'Unknown') : 'Unknown';
           
-          // Fetch all weight data for this user upfront
           const weightSnapshot = await getDocs(collection(db, 'users', userId, 'weightData'));
           const weightsByDate = {};
           weightSnapshot.forEach((weightDoc) => {
             const weightData = weightDoc.data();
-            if (weightData.date && weightData.weight) {
-              weightsByDate[weightData.date] = weightData.weight;
-            }
+            if (weightData.date && weightData.weight) weightsByDate[weightData.date] = weightData.weight;
           });
           
           const performancesSnapshot = await getDocs(collection(db, 'users', userId, 'testPerformances'));
@@ -404,18 +402,12 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
             let dateValue = data.date;
             if (dateValue?.toDate) dateValue = dateValue.toDate();
             
-            // Get the date string to look up weight
             const dateString = getDateString(dateValue);
-            
-            // Try to get weight: first from stored data, then from weightsByDate lookup
             const athleteWeight = data.athleteWeight || weightsByDate[dateString] || null;
             const split = data.split || data.avgSplit || '-';
             
-            // Calculate weight-adjusted values - always recalculate if we have weight
             const weightAdjustedSplit = athleteWeight ? calculateWeightAdjustedSplit(split, athleteWeight) : null;
             const weightAdjustedWatts = athleteWeight ? calculateWeightAdjustedWatts(split, athleteWeight) : null;
-            
-            // Calculate W/kg if we have weight and watts
             const wattsPerKg = (athleteWeight && watts > 0) ? watts / athleteWeight : (data.wattsPerKg || null);
             
             performances.push({
@@ -433,6 +425,9 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
               weightAdjustedWatts: weightAdjustedWatts,
               date: dateValue || new Date(),
               completed: data.time && data.time !== '--:--.-' && data.completed !== false,
+              isCustomWorkout: data.isCustomWorkout || false,
+              customPieceCount: data.customPieceCount || null,
+              pieceWatts: data.pieceWatts || [],
             });
           });
         } catch (e) { console.error('Error fetching user ' + userId, e); }
@@ -443,6 +438,10 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
   };
 
   useEffect(() => { fetchTeamData(); }, [userSport]);
+
+  useEffect(() => {
+    if (selectedTestType !== 'Custom') setSelectedCustomDate('All');
+  }, [selectedTestType]);
 
   const handleSaveEdit = async (athleteId, docId, updateData) => {
     await updateDoc(doc(db, 'users', athleteId, 'testPerformances', docId), updateData);
@@ -455,15 +454,17 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
   };
 
   const availableDates = useMemo(() => getUniqueDates(teamData), [teamData]);
+  const customWorkoutDates = useMemo(() => getCustomWorkoutDates(teamData), [teamData]);
 
   const filteredData = useMemo(() => {
     return teamData.filter((entry) => {
       const matchesTestType = selectedTestType === 'All' || entry.testType === selectedTestType;
       const matchesDate = selectedDate === 'All' || formatDateForInput(entry.date) === selectedDate;
       const matchesCompletion = completionStatus === 'All' || (completionStatus === 'Complete' ? entry.completed : !entry.completed);
-      return matchesTestType && matchesDate && matchesCompletion;
+      const matchesCustomDate = selectedTestType !== 'Custom' || selectedCustomDate === 'All' || formatDateForInput(entry.date) === selectedCustomDate;
+      return matchesTestType && matchesDate && matchesCompletion && matchesCustomDate;
     });
-  }, [teamData, selectedTestType, selectedDate, completionStatus]);
+  }, [teamData, selectedTestType, selectedDate, completionStatus, selectedCustomDate]);
 
   const sortedDataWithGaps = useMemo(() => {
     const sorted = [...filteredData].sort((a, b) => {
@@ -475,7 +476,6 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
         if (bWkg === 0) return -1;
         return bWkg - aWkg;
       } else if (sortBy === 'weightAdjusted') {
-        // Sort by weight-adjusted watts (higher is better)
         const aWA = a.weightAdjustedWatts || 0;
         const bWA = b.weightAdjustedWatts || 0;
         if (aWA === 0 && bWA === 0) return (b.watts || 0) - (a.watts || 0);
@@ -486,19 +486,14 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
       return splitToSeconds(a.split) - splitToSeconds(b.split);
     });
     
-    // Always calculate gaps
     const leaderWatts = sorted.length > 0 && sorted[0].completed ? (sorted[0].watts || 0) : 0;
     
     return sorted.map((entry, index) => {
       let wattsGapPercent = null;
       if (entry.completed && leaderWatts > 0 && entry.watts > 0) {
-        if (index === 0) {
-          wattsGapPercent = 0; // First place = LEADER
-        } else if (entry.watts === leaderWatts) {
-          wattsGapPercent = 0.001; // Tied with leader, show as 0.0%
-        } else {
-          wattsGapPercent = ((leaderWatts - entry.watts) / leaderWatts) * 100;
-        }
+        if (index === 0) wattsGapPercent = 0;
+        else if (entry.watts === leaderWatts) wattsGapPercent = 0.001;
+        else wattsGapPercent = ((leaderWatts - entry.watts) / leaderWatts) * 100;
       }
       return { ...entry, rank: entry.completed ? index + 1 : '-', wattsGapPercent };
     });
@@ -508,6 +503,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
     const recordsMap = {};
     teamData.forEach((entry) => {
       if (!entry.completed || !entry.split || entry.split === '-') return;
+      if (entry.testType === 'Custom') return;
       const seconds = splitToSeconds(entry.split);
       if (seconds === Infinity) return;
       if (!recordsMap[entry.testType] || seconds < recordsMap[entry.testType].seconds) {
@@ -517,10 +513,11 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
     return recordsMap;
   }, [teamData]);
 
-  const isTeamRecord = (entry) => teamRecords[entry.testType]?.id === entry.id;
+  const isTeamRecord = (entry) => entry.testType !== 'Custom' && teamRecords[entry.testType]?.id === entry.id;
   const totalAthletes = new Set(teamData.map(e => e.athleteId)).size;
   const completedTests = teamData.filter(e => e.completed).length;
   const incompleteTests = teamData.filter(e => !e.completed).length;
+  const customWorkouts = teamData.filter(e => e.testType === 'Custom').length;
 
   if (loading) return <div style={{ minHeight: '100vh', backgroundColor: '#fff', padding: '32px', textAlign: 'center', paddingTop: '100px' }}><p style={{ fontSize: '18px', color: '#6b7280' }}>Loading team performance data...</p></div>;
   if (error) return <div style={{ minHeight: '100vh', backgroundColor: '#fff', padding: '32px', textAlign: 'center', paddingTop: '100px' }}><p style={{ fontSize: '18px', color: '#ef4444' }}>{error}</p><button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Retry</button></div>;
@@ -548,7 +545,6 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
                 <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px', fontFamily: 'monospace' }}>({record.time})</div>
                 <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>{record.athleteName}</div>
                 {record.wattsPerKg && <div style={{ fontSize: '11px', color: '#10b981', marginTop: '2px', fontWeight: 600 }}>{record.wattsPerKg.toFixed(2)} W/kg</div>}
-                {record.weightAdjustedSplit && <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '2px', fontWeight: 600 }}>Wt-Adj: {record.weightAdjustedSplit}</div>}
               </div>
             ))}
           </div>
@@ -563,6 +559,17 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
               {testTypes.map(type => <option key={type} value={type}>{type}</option>)}
             </select>
           </div>
+          
+          {selectedTestType === 'Custom' && (
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#7c3aed', marginBottom: '6px' }}>Custom Workout Date</label>
+              <select value={selectedCustomDate} onChange={e => setSelectedCustomDate(e.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: '2px solid #8b5cf6', backgroundColor: '#f5f3ff', fontSize: '14px', fontWeight: 500, color: '#111827', cursor: 'pointer', minWidth: '160px' }}>
+                <option value="All">All Custom Workouts</option>
+                {customWorkoutDates.map(date => <option key={date} value={date}>{new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</option>)}
+              </select>
+            </div>
+          )}
+          
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date</label>
             <select value={selectedDate} onChange={e => setSelectedDate(e.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: selectedDate !== 'All' ? '2px solid #10b981' : '2px solid #e5e7eb', backgroundColor: selectedDate !== 'All' ? '#d1fae5' : '#fff', fontSize: '14px', fontWeight: 500, color: '#111827', cursor: 'pointer', minWidth: '160px' }}>
@@ -599,7 +606,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
               <tr>
                 <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '50px' }}>Rank</th>
                 <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase' }}>Athlete</th>
-                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '70px' }}>Test</th>
+                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '80px' }}>Test</th>
                 <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '80px' }}>Time</th>
                 {columns.showSplit && <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '80px' }}>Split</th>}
                 {columns.showWatts && <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', textTransform: 'uppercase', width: '60px' }}>Watts</th>}
@@ -618,9 +625,10 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
                 const isTopThree = entry.rank !== '-' && entry.rank <= 3;
                 const isRecord = isTeamRecord(entry);
                 const hasSplits = entry.splits && entry.splits.length > 0;
+                const isCustom = entry.isCustomWorkout || entry.testType === 'Custom';
                 
                 return (
-                  <tr key={entry.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: isRecord ? '#fef9c3' : (index % 2 === 0 ? '#fff' : '#fafafa'), opacity: entry.completed ? 1 : 0.6 }}>
+                  <tr key={entry.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: isRecord ? '#fef9c3' : isCustom ? '#f5f3ff' : (index % 2 === 0 ? '#fff' : '#fafafa'), opacity: entry.completed ? 1 : 0.6 }}>
                     <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '28px', padding: '4px 8px', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: isTopThree ? (entry.rank === 1 ? '#fef3c7' : entry.rank === 2 ? '#e5e7eb' : '#fed7aa') : 'transparent', color: isTopThree ? (entry.rank === 1 ? '#92400e' : entry.rank === 2 ? '#374151' : '#9a3412') : '#6b7280' }}>{entry.rank}</span>
                     </td>
@@ -630,8 +638,14 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
                         {isRecord && <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, backgroundColor: '#f59e0b', color: '#fff', textTransform: 'uppercase' }}>🏆 TR</span>}
                       </div>
                     </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}><span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, backgroundColor: '#dbeafe', color: '#1e40af' }}>{entry.testType}</span></td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center', color: entry.completed ? '#111827' : '#ef4444', fontFamily: 'monospace', fontSize: '14px', fontWeight: 600 }}>{entry.time}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, backgroundColor: isCustom ? '#ddd6fe' : '#dbeafe', color: isCustom ? '#7c3aed' : '#1e40af' }}>
+                        {entry.testType}{isCustom && entry.customPieceCount && ` (${entry.customPieceCount})`}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center', color: entry.completed ? '#111827' : '#ef4444', fontFamily: 'monospace', fontSize: '14px', fontWeight: 600 }}>
+                      {isCustom ? (entry.customPieceCount || entry.splits?.length || '-') + ' pcs' : entry.time}
+                    </td>
                     {columns.showSplit && <td style={{ padding: '12px 16px', textAlign: 'center', fontFamily: 'monospace', fontSize: '14px', fontWeight: 700, color: entry.split !== '-' ? '#10b981' : '#9ca3af' }}>{entry.split}</td>}
                     {columns.showWatts && <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#111827' }}>{entry.watts > 0 ? entry.watts : '-'}</td>}
                     {columns.showWatts && <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '14px', fontWeight: 700, color: entry.wattsPerKg ? '#10b981' : '#9ca3af' }}>{entry.wattsPerKg ? entry.wattsPerKg.toFixed(2) : '-'}</td>}
@@ -642,9 +656,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
                             <div style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: '#f59e0b' }}>{entry.weightAdjustedSplit}</div>
                             <div style={{ fontSize: '11px', color: '#92400e', marginTop: '2px' }}>{entry.weightAdjustedWatts ? `${entry.weightAdjustedWatts}W` : ''}</div>
                           </div>
-                        ) : (
-                          <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>
-                        )}
+                        ) : <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>}
                       </td>
                     )}
                     <td style={{ padding: '12px 16px', textAlign: 'center' }}>
@@ -676,7 +688,6 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
         </div>
       </div>
 
-      {/* Formula explanation */}
       {columns.showWeightAdjusted && (
         <div style={{ marginTop: '16px', padding: '12px 16px', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px solid #f59e0b' }}>
           <p style={{ fontSize: '12px', color: '#92400e', margin: 0 }}>
@@ -690,6 +701,7 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #e5e7eb' }}><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Total Tests</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#111827' }}>{teamData.length}</div></div>
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #10b981' }}><div style={{ fontSize: '12px', color: '#10b981', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Completed</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#10b981' }}>{completedTests}</div></div>
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #ef4444' }}><div style={{ fontSize: '12px', color: '#ef4444', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Incomplete</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#ef4444' }}>{incompleteTests}</div></div>
+        <div style={{ backgroundColor: '#f5f3ff', padding: '20px', borderRadius: '12px', border: '2px solid #8b5cf6' }}><div style={{ fontSize: '12px', color: '#7c3aed', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Custom Workouts</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#7c3aed' }}>{customWorkouts}</div></div>
         <div style={{ backgroundColor: '#fef3c7', padding: '20px', borderRadius: '12px', border: '2px solid #f59e0b' }}><div style={{ fontSize: '12px', color: '#92400e', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>🏆 Records</div><div style={{ fontSize: '28px', fontWeight: 700, color: '#92400e' }}>{Object.keys(teamRecords).length}</div></div>
       </div>
     </div>
