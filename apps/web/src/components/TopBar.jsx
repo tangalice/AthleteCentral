@@ -159,7 +159,7 @@ function DropdownMenu({ user, activeTab }) {
     menuItems.push({ type: "header", label: "Analytics" });
     menuItems.push({ path: "/improvement-rates", label: "Improvement Rates", activeTab: "improvement-rates" });
     menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
-    menuItems.push({ path: "/teammate-comparison", label: "Teammate Comparison", activeTab: "teammate-comparison" });
+    //menuItems.push({ path: "/teammate-comparison", label: "Teammate Comparison", activeTab: "teammate-comparison" });
     menuItems.push({ path: "/similar-teammates", label: "Similar Teammates", activeTab: "similar-teammates" });
     
     menuItems.push({ type: "header", label: "Tools" });

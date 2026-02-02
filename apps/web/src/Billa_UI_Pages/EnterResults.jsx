@@ -241,6 +241,7 @@ export default function EnterResults({ user }) {
   }, [formData.athleteId, formData.date]);
 
   // Auto-calculate avg split from total time for distance pieces
+  // THIS IS THE ONLY PLACE avgSplit should be calculated for distance pieces
   useEffect(() => {
     if (isDistancePiece && pieceConfig && formData.totalTime) {
       const totalSeconds = timeStringToSeconds(formData.totalTime);
@@ -269,23 +270,34 @@ export default function EnterResults({ user }) {
   };
 
   useEffect(() => {
+    // Only fetch athletes once when component mounts
+    let isMounted = true;
+    
     const fetchAthletes = async () => {
+      // Skip if we already have athletes loaded
+      if (athletes.length > 0) return;
+      
       try {
         const q = query(collection(db, 'users'), where('role', '==', 'athlete'));
         const snapshot = await getDocs(q);
-        const athletesList = snapshot.docs.map(doc => ({
-          id: doc.id,
-          name: doc.data().displayName || doc.data().email,
-          sport: doc.data().sport || 'Unknown',
-          ...doc.data()
-        }));
-        setAthletes(athletesList);
+        if (isMounted) {
+          const athletesList = snapshot.docs.map(doc => ({
+            id: doc.id,
+            name: doc.data().displayName || doc.data().email,
+            sport: doc.data().sport || 'Unknown',
+            ...doc.data()
+          }));
+          setAthletes(athletesList);
+        }
       } catch (error) {
         console.error('Error fetching athletes:', error);
       }
     };
+    
     fetchAthletes();
-  }, []);
+    
+    return () => { isMounted = false; };
+  }, []); // Empty dependency array - only run once on mount
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -353,24 +365,23 @@ export default function EnterResults({ user }) {
     setCustomPieceSplits(newSplits);
   };
 
+  // FIXED: Individual splits are for detail only - they do NOT affect avgSplit
+  // avgSplit is ONLY calculated from totalTime (via the useEffect above)
   const handleSplitChange = (index, field, value) => {
     const newSplits = [...splits];
     newSplits[index] = { ...newSplits[index], [field]: value };
     setSplits(newSplits);
 
-    const validSplits = newSplits.filter(s => s.split && timeStringToSeconds(s.split) > 0);
+    // Only calculate avgSPM from individual splits (this is fine to average)
     const validSpms = newSplits.filter(s => s.spm && parseInt(s.spm) > 0);
-
-    if (validSplits.length > 0) {
-      const totalSplitSeconds = validSplits.reduce((sum, s) => sum + timeStringToSeconds(s.split), 0);
-      const avgSplitSeconds = totalSplitSeconds / validSplits.length;
-      setFormData(prev => ({ ...prev, avgSplit: formatSplit(avgSplitSeconds) }));
-    }
-
     if (validSpms.length > 0) {
       const avgSpm = Math.round(validSpms.reduce((sum, s) => sum + parseInt(s.spm), 0) / validSpms.length);
       setFormData(prev => ({ ...prev, avgSPM: avgSpm.toString() }));
     }
+
+    // DO NOT recalculate avgSplit from individual splits!
+    // avgSplit should ONLY come from totalTime (via the useEffect)
+    // Individual splits are just for reference/detail, they don't determine the average
   };
 
   const validateForm = () => {
@@ -399,7 +410,12 @@ export default function EnterResults({ user }) {
           return false;
         }
       }
-      if (!isCustomPiece && !formData.avgSplit) {
+      // For distance pieces, require totalTime instead of avgSplit
+      if (isDistancePiece && !formData.totalTime) {
+        setErrorMessage('Please enter the total time');
+        return false;
+      }
+      if (!isCustomPiece && !isDistancePiece && !formData.avgSplit) {
         setErrorMessage('Please enter average split');
         return false;
       }
@@ -529,12 +545,18 @@ export default function EnterResults({ user }) {
         const status = formData.completed ? 'completed' : 'incomplete';
         setSuccessMessage(`Test performance marked as ${status} for ${formData.athleteName}!`);
         
+        // Keep athlete and date selected for faster multiple entries
+        const keepAthleteId = formData.athleteId;
+        const keepAthleteName = formData.athleteName;
+        const keepAthleteSport = formData.athleteSport;
+        const keepDate = formData.date;
+        
         setFormData({
-          athleteId: '',
-          athleteName: '',
-          athleteSport: '',
+          athleteId: keepAthleteId,
+          athleteName: keepAthleteName,
+          athleteSport: keepAthleteSport,
           testType: '',
-          date: '',
+          date: keepDate,
           notes: '',
           completed: true,
           rate: '',
@@ -546,7 +568,7 @@ export default function EnterResults({ user }) {
         setSplits([]);
         setCustomPieceCount(1);
         setCustomPieceSplits([]);
-        setAthleteWeight(null);
+        // Keep athleteWeight since we're keeping the same athlete and date
 
         setTimeout(() => setSuccessMessage(''), 3000);
       } else {
@@ -892,35 +914,39 @@ export default function EnterResults({ user }) {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
                     <div>
                       <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: '#374151' }}>
-                        Total Time
+                        Total Time *
                       </label>
                       <input
                         type="text"
                         name="totalTime"
-                        value={formData.totalTime || (calculatedMetrics.totalTimeSeconds > 0 ? secondsToTimeString(calculatedMetrics.totalTimeSeconds) : '')}
+                        value={formData.totalTime}
                         onChange={handleChange}
                         placeholder="7:00.0"
                         style={{
                           width: '100%',
                           padding: '10px',
-                          border: '1px solid #d1d5db',
+                          border: '2px solid #10b981',
                           borderRadius: '6px',
                           fontSize: '14px',
                           fontFamily: 'monospace',
-                          boxSizing: 'border-box'
+                          boxSizing: 'border-box',
+                          backgroundColor: '#f0fdf4'
                         }}
                       />
+                      <p style={{ fontSize: '11px', color: '#065f46', marginTop: '4px' }}>
+                        Enter total time - split will calculate automatically
+                      </p>
                     </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: '#374151' }}>
-                        Avg Split (/500m) *
+                        Avg Split (/500m)
                       </label>
                       <input
                         type="text"
                         name="avgSplit"
                         value={formData.avgSplit}
-                        onChange={handleChange}
-                        placeholder="1:45.0"
+                        readOnly
+                        placeholder="--:--.-"
                         style={{
                           width: '100%',
                           padding: '10px',
@@ -928,9 +954,15 @@ export default function EnterResults({ user }) {
                           borderRadius: '6px',
                           fontSize: '14px',
                           fontFamily: 'monospace',
-                          boxSizing: 'border-box'
+                          boxSizing: 'border-box',
+                          backgroundColor: '#f9fafb',
+                          color: '#10b981',
+                          fontWeight: 600
                         }}
                       />
+                      <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+                        Calculated from total time
+                      </p>
                     </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: '#374151' }}>
@@ -978,8 +1010,11 @@ export default function EnterResults({ user }) {
                   {splits.length > 0 && (
                     <div>
                       <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: '#374151' }}>
-                        Per-Kilometer Splits (optional)
+                        Per-Kilometer Splits (optional - for reference only)
                       </h4>
+                      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+                        These are individual checkpoint splits. They do not affect the calculated average split.
+                      </p>
                       <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '6px' }}>
                           <thead>

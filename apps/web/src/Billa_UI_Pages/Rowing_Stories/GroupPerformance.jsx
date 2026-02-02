@@ -62,9 +62,14 @@ const calculateWatts = (splitStr) => {
   }
 };
 
-const calculateWeightAdjustedSplit = (splitStr, weight) => {
+// Concept2 Weight Adjustment Formula
+// Wf = (weight in lbs / 270) ^ 0.222
+// Corrected Time = Wf × Actual Time
+// Final Adjusted = Average of Corrected and Actual
+// Note: Weight must be converted to lbs if stored in kg
+const calculateWeightAdjustedSplit = (splitStr, weightKg) => {
   if (!splitStr || splitStr === '-' || splitStr === '--:--.-' || splitStr === '--:--') return null;
-  if (!weight || weight <= 0) return null;
+  if (!weightKg || weightKg <= 0) return null;
   
   try {
     const parts = splitStr.split(':');
@@ -73,20 +78,28 @@ const calculateWeightAdjustedSplit = (splitStr, weight) => {
     const splitSeconds = minutes * 60 + seconds;
     if (!splitSeconds || splitSeconds <= 0 || isNaN(splitSeconds)) return null;
     
-    const weightFactor = Math.pow(weight / 270, 0.222);
-    const correctedSeconds = weightFactor * splitSeconds;
-    const averageSeconds = (correctedSeconds + splitSeconds) / 2;
+    // Convert kg to lbs (1 kg = 2.20462 lbs)
+    const weightLbs = weightKg * 2.20462;
     
-    const mins = Math.floor(averageSeconds / 60);
-    const secs = averageSeconds % 60;
+    // Concept2 formula: Wf = (weight_lbs / 270) ^ 0.222
+    const weightFactor = Math.pow(weightLbs / 270, 0.222);
+    
+    // Corrected split = Wf × actual split
+    const correctedSeconds = weightFactor * splitSeconds;
+    
+    // Final adjusted = average of corrected and actual
+    const adjustedSeconds = (correctedSeconds + splitSeconds) / 2;
+    
+    const mins = Math.floor(adjustedSeconds / 60);
+    const secs = adjustedSeconds % 60;
     return `${mins}:${secs.toFixed(1).padStart(4, '0')}`;
   } catch (err) {
     return null;
   }
 };
 
-const calculateWeightAdjustedWatts = (splitStr, weight) => {
-  const adjustedSplit = calculateWeightAdjustedSplit(splitStr, weight);
+const calculateWeightAdjustedWatts = (splitStr, weightKg) => {
+  const adjustedSplit = calculateWeightAdjustedSplit(splitStr, weightKg);
   if (!adjustedSplit) return null;
   const watts = calculateWatts(adjustedSplit);
   return watts > 0 ? watts : null;
@@ -122,12 +135,16 @@ const getDateString = (dateVal) => {
 
 const formatDateForInput = (date) => getDateString(date);
 
-const getUniqueDates = (data) => {
+// Get unique dates for a specific test type
+const getUniqueDatesByTestType = (data, testType) => {
   const dates = new Set();
   data.forEach(entry => {
     if (entry.date) {
-      const formatted = formatDateForInput(entry.date);
-      if (formatted) dates.add(formatted);
+      // If testType is 'All', get all dates; otherwise filter by test type
+      if (testType === 'All' || entry.testType === testType) {
+        const formatted = formatDateForInput(entry.date);
+        if (formatted) dates.add(formatted);
+      }
     }
   });
   return Array.from(dates).sort((a, b) => new Date(b) - new Date(a));
@@ -270,21 +287,128 @@ const DeleteModal = ({ entry, onClose, onConfirm }) => {
   );
 };
 
-const SplitBreakdownModal = ({ entry, onClose }) => {
+// UPDATED: Editable Split Breakdown Modal - allows filling in blank splits
+const SplitBreakdownModal = ({ entry, onClose, onSave, isCoach }) => {
   if (!entry) return null;
-  const splits = entry.splits || [];
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedSplits, setEditedSplits] = useState([]);
+  const [saving, setSaving] = useState(false);
+  
   const testType = entry.testType?.toLowerCase() || '';
   const isCustom = entry.isCustomWorkout || entry.testType === 'Custom';
   
+  // Determine expected number of splits based on test type
+  const getExpectedSplitCount = () => {
+    if (isCustom) return entry.customPieceCount || entry.splits?.length || 1;
+    if (testType === '2k') return 4;
+    if (testType === '5k') return 5;
+    if (testType === '6k') return 6;
+    return entry.splits?.length || 0;
+  };
+  
+  const expectedSplitCount = getExpectedSplitCount();
+  
+  // Get existing splits, padded with empty strings if needed
+  const getDisplaySplits = () => {
+    const existingSplits = entry.splits || [];
+    const result = [];
+    for (let i = 0; i < expectedSplitCount; i++) {
+      const split = existingSplits[i];
+      result.push(typeof split === 'string' ? split : split?.split || '');
+    }
+    return result;
+  };
+  
+  const displaySplits = getDisplaySplits();
+  
+  // Check if any splits are missing/blank
+  const hasMissingSplits = displaySplits.some(s => !s || s === '' || s === '-' || s === '--:--.-');
+  
+  // Initialize edited splits when entering edit mode
+  useEffect(() => {
+    if (isEditing) {
+      setEditedSplits([...displaySplits]);
+    }
+  }, [isEditing]);
+  
   const getSplitLabels = () => {
-    if (isCustom) return splits.map((_, i) => `Piece ${i + 1}`);
+    if (isCustom) return Array.from({ length: expectedSplitCount }, (_, i) => `Piece ${i + 1}`);
     if (testType === '2k') return ['500m', '1000m', '1500m', '2000m'];
     if (testType === '5k') return ['1k', '2k', '3k', '4k', '5k'];
     if (testType === '6k') return ['1k', '2k', '3k', '4k', '5k', '6k'];
-    return splits.map((_, i) => 'Split ' + (i + 1));
+    return Array.from({ length: expectedSplitCount }, (_, i) => `Split ${i + 1}`);
   };
   const splitLabels = getSplitLabels();
-  const getSplitValue = (split) => typeof split === 'string' ? split : split?.split || '-';
+
+  // Calculate average split from total time (not from averaging individual splits)
+  // For distance pieces: avg split = total time / (distance / 500)
+  // For custom pieces: average the individual piece splits
+  const calculateNewAverage = () => {
+    if (isCustom) {
+      // For custom workouts, average the individual splits
+      const validSplits = editedSplits.filter(s => s && s !== '' && s !== '-' && splitToSeconds(s) !== Infinity);
+      if (validSplits.length === 0) return null;
+      
+      const totalSeconds = validSplits.reduce((sum, s) => sum + splitToSeconds(s), 0);
+      const avgSeconds = totalSeconds / validSplits.length;
+      
+      const mins = Math.floor(avgSeconds / 60);
+      const secs = avgSeconds % 60;
+      return `${mins}:${secs.toFixed(1).padStart(4, '0')}`;
+    }
+    
+    // For distance pieces (2k, 5k, 6k), use the original time-based calculation
+    // Don't recalculate from splits - keep the original avg split from total time
+    return entry.split || entry.avgSplit || null;
+  };
+
+  const handleSplitChange = (index, value) => {
+    const newSplits = [...editedSplits];
+    newSplits[index] = value;
+    setEditedSplits(newSplits);
+  };
+
+  const handleSaveEdits = async () => {
+    setSaving(true);
+    try {
+      const pieceWatts = editedSplits.map(s => calculateWatts(s));
+      
+      const updateData = {
+        splits: editedSplits,
+        pieceWatts: pieceWatts,
+      };
+      
+      // For custom workouts, recalculate the average from splits
+      // For distance pieces (2k, 5k, 6k), keep the original avg split (based on total time)
+      if (isCustom) {
+        const newAvgSplit = calculateNewAverage();
+        const newWatts = calculateWatts(newAvgSplit);
+        updateData.split = newAvgSplit;
+        updateData.avgSplit = newAvgSplit;
+        updateData.watts = newWatts;
+        
+        // Recalculate weight-adjusted values if weight is available
+        if (entry.athleteWeight && newWatts > 0) {
+          updateData.weightAdjustedSplit = calculateWeightAdjustedSplit(newAvgSplit, entry.athleteWeight);
+          updateData.weightAdjustedWatts = calculateWeightAdjustedWatts(newAvgSplit, entry.athleteWeight);
+          updateData.wattsPerKg = newWatts / entry.athleteWeight;
+        }
+      }
+      // For distance pieces, don't update split/avgSplit/watts - they're based on total time
+      
+      await onSave(entry.athleteId, entry.id, updateData);
+      setIsEditing(false);
+    } catch (error) {
+      alert('Error saving splits: ' + error.message);
+    }
+    setSaving(false);
+  };
+
+  // For distance pieces (2k, 5k, 6k), ALWAYS use the original split from total time
+  // Only for custom workouts do we calculate from individual splits
+  const previewAvgSplit = isCustom && isEditing ? calculateNewAverage() : (entry.split || entry.avgSplit);
+  const previewWatts = isCustom && isEditing ? calculateWatts(previewAvgSplit) : entry.watts;
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
@@ -303,21 +427,74 @@ const SplitBreakdownModal = ({ entry, onClose }) => {
             <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#9ca3af' }}>×</button>
           </div>
         </div>
+        
+        {/* Summary metrics - update in real-time when editing */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
-          <div style={{ backgroundColor: '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600, marginBottom: '4px' }}>{isCustom ? 'PIECES' : 'TIME'}</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{isCustom ? (entry.customPieceCount || splits.length) : entry.time}</div></div>
-          <div style={{ backgroundColor: '#d1fae5', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#065f46', fontWeight: 600, marginBottom: '4px' }}>AVG SPLIT</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#065f46', fontFamily: 'monospace' }}>{entry.split}</div></div>
-          <div style={{ backgroundColor: '#dbeafe', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600, marginBottom: '4px' }}>WATTS</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#1e40af', fontFamily: 'monospace' }}>{entry.watts || '-'}</div></div>
-          <div style={{ backgroundColor: entry.wattsPerKg ? '#fef3c7' : '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}><div style={{ fontSize: '11px', color: entry.wattsPerKg ? '#92400e' : '#6b7280', fontWeight: 600, marginBottom: '4px' }}>W/KG</div><div style={{ fontSize: '16px', fontWeight: 700, color: entry.wattsPerKg ? '#92400e' : '#9ca3af', fontFamily: 'monospace' }}>{entry.wattsPerKg ? entry.wattsPerKg.toFixed(2) : '-'}</div></div>
+          <div style={{ backgroundColor: '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600, marginBottom: '4px' }}>{isCustom ? 'PIECES' : 'TIME'}</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{isCustom ? (entry.customPieceCount || splits.length) : entry.time}</div>
+          </div>
+          <div style={{ backgroundColor: isEditing ? '#dbeafe' : '#d1fae5', padding: '12px', borderRadius: '8px', textAlign: 'center', border: isEditing ? '2px solid #3b82f6' : 'none' }}>
+            <div style={{ fontSize: '11px', color: isEditing ? '#1e40af' : '#065f46', fontWeight: 600, marginBottom: '4px' }}>AVG SPLIT {isEditing && '(PREVIEW)'}</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: isEditing ? '#1e40af' : '#065f46', fontFamily: 'monospace' }}>{previewAvgSplit || '-'}</div>
+          </div>
+          <div style={{ backgroundColor: isEditing ? '#dbeafe' : '#dbeafe', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600, marginBottom: '4px' }}>WATTS {isEditing && '(PREVIEW)'}</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e40af', fontFamily: 'monospace' }}>{previewWatts || '-'}</div>
+          </div>
+          <div style={{ backgroundColor: entry.wattsPerKg ? '#fef3c7' : '#f3f4f6', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '11px', color: entry.wattsPerKg ? '#92400e' : '#6b7280', fontWeight: 600, marginBottom: '4px' }}>W/KG</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: entry.wattsPerKg ? '#92400e' : '#9ca3af', fontFamily: 'monospace' }}>{entry.wattsPerKg ? entry.wattsPerKg.toFixed(2) : '-'}</div>
+          </div>
         </div>
-        {entry.weightAdjustedSplit && (
+        
+        {entry.weightAdjustedSplit && !isEditing && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '20px' }}>
-            <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid #f59e0b' }}><div style={{ fontSize: '11px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>WT-ADJ SPLIT</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#92400e', fontFamily: 'monospace' }}>{entry.weightAdjustedSplit}</div></div>
-            <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid #f59e0b' }}><div style={{ fontSize: '11px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>WT-ADJ WATTS</div><div style={{ fontSize: '16px', fontWeight: 700, color: '#92400e', fontFamily: 'monospace' }}>{entry.weightAdjustedWatts || '-'}</div></div>
+            <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid #f59e0b' }}>
+              <div style={{ fontSize: '11px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>WT-ADJ SPLIT</div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#92400e', fontFamily: 'monospace' }}>{entry.weightAdjustedSplit}</div>
+            </div>
+            <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid #f59e0b' }}>
+              <div style={{ fontSize: '11px', color: '#92400e', fontWeight: 600, marginBottom: '4px' }}>WT-ADJ WATTS</div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#92400e', fontFamily: 'monospace' }}>{entry.weightAdjustedWatts || '-'}</div>
+            </div>
           </div>
         )}
+        
+        {/* Split breakdown table - editable when in edit mode */}
         <div style={{ marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>{isCustom ? 'Piece Breakdown' : 'Split Breakdown'}</h3>
-          {splits.length > 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
+              {isCustom ? 'Piece Breakdown' : 'Split Breakdown'}
+              {hasMissingSplits && !isEditing && (
+                <span style={{ marginLeft: '8px', fontSize: '12px', color: '#f59e0b', fontWeight: 500 }}>
+                  (some splits missing)
+                </span>
+              )}
+            </h3>
+            {isCoach && expectedSplitCount > 0 && !isEditing && (
+              <button 
+                onClick={() => setIsEditing(true)}
+                style={{ 
+                  padding: '6px 12px', 
+                  backgroundColor: hasMissingSplits ? '#f59e0b' : '#3b82f6', 
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: '6px', 
+                  fontSize: '12px', 
+                  fontWeight: 600, 
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                {hasMissingSplits ? '⚠️ Fill in Splits' : '✏️ Edit Splits'}
+              </button>
+            )}
+          </div>
+          
+          {expectedSplitCount > 0 ? (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={{ backgroundColor: '#f9fafb' }}>
                 <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>{isCustom ? 'PIECE' : 'INTERVAL'}</th>
@@ -325,13 +502,42 @@ const SplitBreakdownModal = ({ entry, onClose }) => {
                 <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, color: '#6b7280', borderBottom: '2px solid #e5e7eb' }}>WATTS</th>
               </tr></thead>
               <tbody>
-                {splits.map((split, index) => {
-                  const splitValue = getSplitValue(split);
-                  const splitWatts = entry.pieceWatts?.[index] || calculateWatts(splitValue);
+                {(isEditing ? editedSplits : displaySplits).map((split, index) => {
+                  const splitValue = isEditing ? editedSplits[index] : (split || '');
+                  const isEmpty = !splitValue || splitValue === '' || splitValue === '-' || splitValue === '--:--.-';
+                  const splitWatts = isEditing 
+                    ? calculateWatts(editedSplits[index]) 
+                    : (entry.pieceWatts?.[index] || calculateWatts(split));
+                  
                   return (
-                    <tr key={index} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 500, color: '#374151' }}>{splitLabels[index] || `Piece ${index + 1}`}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'monospace', fontSize: '14px', fontWeight: 600, color: '#10b981' }}>{splitValue}</td>
+                    <tr key={index} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: isEmpty && !isEditing ? '#fef3c7' : 'transparent' }}>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 500, color: '#374151' }}>{splitLabels[index] || `Split ${index + 1}`}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editedSplits[index] || ''}
+                            onChange={(e) => handleSplitChange(index, e.target.value)}
+                            placeholder="1:45.0"
+                            style={{
+                              width: '80px',
+                              padding: '6px 8px',
+                              border: isEmpty ? '2px solid #f59e0b' : '2px solid #3b82f6',
+                              borderRadius: '4px',
+                              fontSize: '14px',
+                              fontFamily: 'monospace',
+                              fontWeight: 600,
+                              textAlign: 'center',
+                              color: '#10b981',
+                              backgroundColor: isEmpty ? '#fffbeb' : '#fff'
+                            }}
+                          />
+                        ) : (
+                          <span style={{ fontFamily: 'monospace', fontSize: '14px', fontWeight: 600, color: isEmpty ? '#f59e0b' : '#10b981' }}>
+                            {isEmpty ? '—' : splitValue}
+                          </span>
+                        )}
+                      </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: '13px', fontWeight: 500, color: '#374151' }}>{splitWatts > 0 ? splitWatts : '-'}</td>
                     </tr>
                   );
@@ -339,18 +545,52 @@ const SplitBreakdownModal = ({ entry, onClose }) => {
               </tbody>
             </table>
           ) : (
-            <div style={{ padding: '24px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>No split data available.</div>
+            <div style={{ padding: '24px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>No split data available for this test type.</div>
           )}
         </div>
-        <button onClick={onClose} style={{ width: '100%', padding: '12px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Close</button>
+        
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: '12px' }}>
+          {isEditing ? (
+            <>
+              <button 
+                onClick={() => setIsEditing(false)} 
+                style={{ flex: 1, padding: '12px', backgroundColor: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveEdits} 
+                disabled={saving}
+                style={{ flex: 1, padding: '12px', backgroundColor: saving ? '#9ca3af' : '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </>
+          ) : (
+            <button onClick={onClose} style={{ width: '100%', padding: '12px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Close</button>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-export default function GroupPerformance({ user, userRole, userSport = 'rowing' }) {
-  const testTypes = useMemo(() => getTestTypesBySport(userSport), [userSport]);
-  const columns = useMemo(() => getColumnsBySport(userSport), [userSport]);
+export default function GroupPerformance({ user, userRole, userSport }) {
+  // If no sport specified, use rowing defaults for display but show all data
+  const effectiveSport = userSport || 'rowing';
+  
+  // Get test types - if no sport, show all common test types
+  const testTypes = useMemo(() => {
+    if (!userSport) {
+      // Show all common test types when no sport filter
+      return ['All', '2k', '5k', '6k', "20'@20", 'Custom', 'Mile', '5K', '10K'];
+    }
+    return getTestTypesBySport(effectiveSport);
+  }, [effectiveSport, userSport]);
+  
+  // Use rowing columns as default (most comprehensive)
+  const columns = useMemo(() => getColumnsBySport(effectiveSport), [effectiveSport]);
   
   const [teamData, setTeamData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -368,6 +608,9 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
 
   const fetchTeamData = async () => {
     const currentUser = auth.currentUser;
+    console.log('GroupPerformance - fetchTeamData called');
+    console.log('GroupPerformance - currentUser:', currentUser?.uid);
+    
     if (!currentUser) { setLoading(false); setError('No user logged in'); return; }
     try {
       setLoading(true);
@@ -375,11 +618,21 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
       const teamsRef = collection(db, 'teams');
       const teamsSnapshot = await getDocs(query(teamsRef));
       const teamMemberIds = new Set();
+      
+      console.log('GroupPerformance - teams found:', teamsSnapshot.size);
+      
       teamsSnapshot.forEach((teamDoc) => {
         const data = teamDoc.data();
+        console.log('GroupPerformance - checking team:', teamDoc.id, data);
         const allMembers = [...(data.members || []), ...(data.athletes || []), ...(data.coaches || [])];
-        if (allMembers.includes(currentUser.uid)) allMembers.forEach(id => teamMemberIds.add(id));
+        if (allMembers.includes(currentUser.uid)) {
+          console.log('GroupPerformance - user is in team:', teamDoc.id);
+          allMembers.forEach(id => teamMemberIds.add(id));
+        }
       });
+      
+      console.log('GroupPerformance - team member IDs:', Array.from(teamMemberIds));
+      
       if (teamMemberIds.size === 0) { setTeamData([]); setLoading(false); setError('You are not part of any team yet'); return; }
 
       const performances = [];
@@ -396,6 +649,8 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
           });
           
           const performancesSnapshot = await getDocs(collection(db, 'users', userId, 'testPerformances'));
+          console.log('GroupPerformance - performances for user', userId, ':', performancesSnapshot.size);
+          
           performancesSnapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const watts = data.watts || calculateWatts(data.split || data.avgSplit);
@@ -432,20 +687,46 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
           });
         } catch (e) { console.error('Error fetching user ' + userId, e); }
       }
+      console.log('GroupPerformance - total performances found:', performances.length);
+      console.log('GroupPerformance - performances:', performances);
       setTeamData(performances);
-    } catch (err) { setError('Failed to load: ' + err.message); }
+    } catch (err) { 
+      console.error('GroupPerformance - fetch error:', err);
+      setError('Failed to load: ' + err.message); 
+    }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchTeamData(); }, [userSport]);
+  useEffect(() => { fetchTeamData(); }, [effectiveSport]);
 
+  // Reset date filter when test type changes
   useEffect(() => {
+    setSelectedDate('All');
     if (selectedTestType !== 'Custom') setSelectedCustomDate('All');
   }, [selectedTestType]);
 
   const handleSaveEdit = async (athleteId, docId, updateData) => {
-    await updateDoc(doc(db, 'users', athleteId, 'testPerformances', docId), updateData);
-    await fetchTeamData();
+    try {
+      console.log('Saving edit:', { athleteId, docId, updateData });
+      await updateDoc(doc(db, 'users', athleteId, 'testPerformances', docId), updateData);
+      console.log('Edit saved successfully');
+      
+      // Update local state immediately for faster UI response
+      setTeamData(prev => prev.map(entry => 
+        entry.id === docId && entry.athleteId === athleteId 
+          ? { ...entry, ...updateData }
+          : entry
+      ));
+      
+      // Close the modal
+      setSelectedEntry(null);
+      
+      // Optionally refetch in background (comment out if too slow)
+      // fetchTeamData();
+    } catch (error) {
+      console.error('Error saving edit:', error);
+      alert('Failed to save: ' + error.message);
+    }
   };
 
   const handleConfirmDelete = async (athleteId, docId) => {
@@ -453,7 +734,8 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
     await fetchTeamData();
   };
 
-  const availableDates = useMemo(() => getUniqueDates(teamData), [teamData]);
+  // Get available dates filtered by selected test type
+  const availableDates = useMemo(() => getUniqueDatesByTestType(teamData, selectedTestType), [teamData, selectedTestType]);
   const customWorkoutDates = useMemo(() => getCustomWorkoutDates(teamData), [teamData]);
 
   const filteredData = useMemo(() => {
@@ -525,13 +807,20 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '32px' }}>
-      {selectedEntry && <SplitBreakdownModal entry={selectedEntry} onClose={() => setSelectedEntry(null)} />}
+      {selectedEntry && (
+        <SplitBreakdownModal 
+          entry={selectedEntry} 
+          onClose={() => setSelectedEntry(null)} 
+          onSave={handleSaveEdit}
+          isCoach={isCoach}
+        />
+      )}
       {editEntry && <EditModal entry={editEntry} onClose={() => setEditEntry(null)} onSave={handleSaveEdit} />}
       {deleteEntry && <DeleteModal entry={deleteEntry} onClose={() => setDeleteEntry(null)} onConfirm={handleConfirmDelete} />}
 
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>Team Performance</h1>
-        <p style={{ color: '#6b7280', fontSize: '15px' }}>View and compare test results {userSport && <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>({userSport})</span>}</p>
+        <p style={{ color: '#6b7280', fontSize: '15px' }}>View and compare test results {effectiveSport && <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>({effectiveSport})</span>}</p>
       </div>
 
       {Object.keys(teamRecords).length > 0 && (
@@ -560,6 +849,40 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
             </select>
           </div>
           
+          {/* Date filter - now shows dates only for the selected test type */}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+              Test Date {selectedTestType !== 'All' && <span style={{ color: '#10b981', fontWeight: 400 }}>(for {selectedTestType})</span>}
+            </label>
+            <select 
+              value={selectedDate} 
+              onChange={e => setSelectedDate(e.target.value)} 
+              style={{ 
+                padding: '10px 14px', 
+                borderRadius: '8px', 
+                border: selectedDate !== 'All' ? '2px solid #10b981' : '2px solid #e5e7eb', 
+                backgroundColor: selectedDate !== 'All' ? '#d1fae5' : '#fff', 
+                fontSize: '14px', 
+                fontWeight: 500, 
+                color: '#111827', 
+                cursor: 'pointer', 
+                minWidth: '180px' 
+              }}
+            >
+              <option value="All">All Dates</option>
+              {availableDates.map(date => (
+                <option key={date} value={date}>
+                  {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}
+                </option>
+              ))}
+            </select>
+            {selectedTestType !== 'All' && selectedDate === 'All' && (
+              <p style={{ fontSize: '11px', color: '#f59e0b', marginTop: '4px', fontWeight: 500 }}>
+                ⚠️ Select a date to compare {selectedTestType} tests from the same day
+              </p>
+            )}
+          </div>
+          
           {selectedTestType === 'Custom' && (
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#7c3aed', marginBottom: '6px' }}>Custom Workout Date</label>
@@ -570,13 +893,6 @@ export default function GroupPerformance({ user, userRole, userSport = 'rowing' 
             </div>
           )}
           
-          <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date</label>
-            <select value={selectedDate} onChange={e => setSelectedDate(e.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: selectedDate !== 'All' ? '2px solid #10b981' : '2px solid #e5e7eb', backgroundColor: selectedDate !== 'All' ? '#d1fae5' : '#fff', fontSize: '14px', fontWeight: 500, color: '#111827', cursor: 'pointer', minWidth: '160px' }}>
-              <option value="All">All Dates</option>
-              {availableDates.map(date => <option key={date} value={date}>{new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</option>)}
-            </select>
-          </div>
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Status</label>
             <select value={completionStatus} onChange={e => setCompletionStatus(e.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: '2px solid #e5e7eb', backgroundColor: '#fff', fontSize: '14px', fontWeight: 500, color: '#111827', cursor: 'pointer', minWidth: '140px' }}>
