@@ -27,40 +27,126 @@ function BrandMark({ size = 28, textSize = 22 }) {
   );
 }
 
+/**
+ * Build dropdown menu items based on user role and sport.
+ * Keeps all menu logic in one place for easy maintenance.
+ */
+function buildMenuItems(user) {
+  const isCoach = user?.role === "coach";
+  const isAthlete = user?.role === "athlete";
+  const isRowing = user?.sport?.toLowerCase() === "rowing";
+  const items = [];
+
+  // ──────────────────────────────────────────────
+  // TOP SECTION — Performance (shared priority items)
+  // ──────────────────────────────────────────────
+  items.push({ type: "header", label: "Performance" });
+  items.push({ path: "/3-gun-testing", label: "3-Gun Testing", tab: "3-gun-testing" });
+
+  if (isRowing) {
+    items.push({ path: "/overview", label: "Attendance Overview", tab: "overview" });
+  }
+
+  // Athletes get Enter Practice; coaches don't
+  if (isAthlete) {
+    items.push({ path: "/practice-performances", label: "Enter Practice", tab: "practice-performances" });
+  }
+
+  items.push({ path: "/group-performance", label: "Group Performance", tab: "group-performance" });
+  items.push({ path: "/individual-performance", label: "Individual Performance", tab: "individual-performance" });
+
+  if (isRowing) {
+    items.push({ path: "/split-calculator", label: "Split Calculator", tab: "split-calculator" });
+  }
+
+  // Coaches get Lineup Builder and Results up top
+  if (isCoach) {
+    if (isRowing) {
+      items.push({ path: "/lineup-builder", label: "Lineup Builder", tab: "lineup-builder" });
+    }
+    items.push({ path: "/results", label: "Results", tab: "results" });
+  }
+
+  // ──────────────────────────────────────────────
+  // ATHLETE SECTIONS
+  // ──────────────────────────────────────────────
+  if (isAthlete) {
+    items.push({ type: "header", label: "My Training" });
+    items.push({ path: "/log-workout", label: "Log Workout", tab: "log-workout" });
+    items.push({ path: "/goals", label: "My Goals", tab: "goals" });
+    items.push({ path: "/athlete-feedback", label: "My Feedback", tab: "athlete-feedback" });
+
+    items.push({ type: "header", label: "Analytics" });
+    items.push({ path: "/improvement-rates", label: "Improvement Rates", tab: "improvement-rates" });
+    items.push({ path: "/team-rankings", label: "Team Rankings", tab: "team-rankings" });
+    items.push({ path: "/team-personal-bests", label: "Team Personal Bests", tab: "team-personal-bests" });
+    items.push({ path: "/similar-teammates", label: "Similar Teammates", tab: "similar-teammates" });
+
+    items.push({ type: "header", label: "Tools" });
+    items.push({ path: "/athlete-tools", label: "Tools", tab: "athlete-tools" });
+    items.push({ path: "/predict-results", label: "Predict Results", tab: "predict-results" });
+    items.push({ path: "/compare-results", label: "Compare Results", tab: "compare-results" });
+    if (isRowing) {
+      items.push({ path: "/weight-info", label: "Weight Info", tab: "weight-info" });
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // COACH SECTIONS
+  // ──────────────────────────────────────────────
+  if (isCoach) {
+    items.push({ type: "header", label: "Team Management" });
+    items.push({ path: "/view-athlete-goals", label: "View Athlete Goals", tab: "view-athlete-goals" });
+    items.push({ path: "/suggest-goals", label: "Suggest Goals", tab: "suggest-goals" });
+    items.push({ path: "/coach-feedback", label: "Give Feedback", tab: "coach-feedback" });
+    items.push({ path: "/health-availability", label: "Health & Availability", tab: "health-availability" });
+    items.push({ path: "/view-athlete-practices", label: "View Athlete Practices", tab: "view-athlete-practices" });
+    if (isRowing) {
+      items.push({ path: "/coach-weight-info", label: "Athlete Weights", tab: "coach-weight-info" });
+    }
+
+    items.push({ type: "header", label: "Analytics & Reports" });
+    items.push({ path: "/coach-team-rankings", label: "Team Rankings", tab: "coach-team-rankings" });
+    items.push({ path: "/team-personal-bests", label: "Team Personal Bests", tab: "team-personal-bests" });
+    items.push({ path: "/improvement-rates", label: "Improvement Rates", tab: "improvement-rates" });
+    items.push({ path: "/data-reports", label: "Data Reports", tab: "data-reports" });
+    items.push({ path: "/coach-view-predictions", label: "Analyze Predictions", tab: "coach-view-predictions" });
+
+    items.push({ type: "header", label: "Athlete Views" });
+    items.push({ path: "/goals", label: "Goals Page", tab: "goals" });
+    items.push({ path: "/practice-performances", label: "Practice Entry", tab: "practice-performances" });
+    items.push({ path: "/teammate-comparison", label: "Teammate Comparison", tab: "teammate-comparison" });
+    items.push({ path: "/similar-teammates", label: "Similar Teammates", tab: "similar-teammates" });
+    items.push({ path: "/athlete-feedback", label: "Athlete Feedback View", tab: "athlete-feedback" });
+    items.push({ path: "/predict-results", label: "Predict Results", tab: "predict-results" });
+    items.push({ path: "/compare-results", label: "Compare Results", tab: "compare-results" });
+    items.push({ path: "/athlete-tools", label: "Athlete Tools", tab: "athlete-tools" });
+    items.push({ path: "/log-workout", label: "Log Workout", tab: "log-workout" });
+  }
+
+  // ──────────────────────────────────────────────
+  // BOTTOM — always-visible extras
+  // ──────────────────────────────────────────────
+  items.push({ type: "header", label: "Other" });
+  items.push({ path: "/activity", label: "Activity", tab: "activity" });
+  items.push({ path: "/resources", label: "Resources", tab: "resources" });
+
+  return items;
+}
+
+/** Collect all `tab` values so we can highlight the "More" button. */
+function getAllDropdownTabs(user) {
+  return buildMenuItems(user)
+    .filter((i) => i.tab)
+    .map((i) => i.tab);
+}
+
 function DropdownMenu({ user, activeTab }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Check if any dropdown item is active
-  const isAnyActive = 
-    activeTab === "activity" ||
-    activeTab === "athlete-tools" ||
-    activeTab === "results" ||
-    activeTab === "goals" ||
-    activeTab === "practice-performances" ||
-    activeTab === "view-athlete-goals" ||
-    activeTab === "athlete-feedback" ||
-    activeTab === "coach-feedback" ||
-    activeTab === "suggest-goals" ||
-    activeTab === "health-availability" ||
-    activeTab === "group-performance" ||
-    activeTab === "individual-performance" ||
-    activeTab === "lineup-builder" ||
-    activeTab === "split-calculator" || 
-    activeTab === "data-reports" ||
-    activeTab === "coach-view-predictions" ||
-    activeTab === "teammate-comparison" ||
-    activeTab === "improvement-rates" ||
-    activeTab === "team-rankings" ||
-    activeTab === "team-personal-bests" || 
-    activeTab === "coach-team-rankings" ||
-    activeTab === "similar-teammates" ||
-    activeTab === "view-athlete-practices" ||
-    activeTab === "weight-info" ||
-    activeTab === "coach-weight-info" ||
-    activeTab === "log-workout" ||
-    activeTab === "overview" ||
-    activeTab === "resources";
+  const allTabs = getAllDropdownTabs(user);
+  const isAnyActive = allTabs.includes(activeTab);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -69,14 +155,10 @@ function DropdownMenu({ user, activeTab }) {
         setIsOpen(false);
       }
     }
-
     if (isOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
   const buttonStyle = {
@@ -130,87 +212,11 @@ function DropdownMenu({ user, activeTab }) {
     letterSpacing: "0.5px",
   };
 
-  // Build menu items based on user role
-  const menuItems = [];
-  
-  // ===== SHARED ITEMS (Both roles) =====
-  menuItems.push({ path: "/activity", label: "Activity", activeTab: "activity" });
-  menuItems.push({ path: "/results", label: "Results", activeTab: "results" });
-  menuItems.push({ path: "/resources", label: "Resources", activeTab: "resources" });
-  menuItems.push({ path: "/team-personal-bests", label: "Team Personal Bests", activeTab: "team-personal-bests" }); 
-  menuItems.push({ path: "/group-performance", label: "Group Performance", activeTab: "group-performance" });
-  menuItems.push({ path: "/individual-performance", label: "Individual Performance", activeTab: "individual-performance" });
-  
-  // Rowing tools - Only for rowing users (both roles)
-  if (user?.sport?.toLowerCase() === "rowing") {
-    menuItems.push({ path: "/split-calculator", label: "Split Calculator", activeTab: "split-calculator" });
-    menuItems.push({ path: "/overview", label: "Attendance Overview", activeTab: "overview" });
-  }
-
-  // ===== ATHLETE FEATURES (Athletes get these, Coaches get read-only access) =====
-  if (user?.role === "athlete") {
-    // Athlete-specific actions
-    menuItems.push({ type: "header", label: "My Training" });
-    menuItems.push({ path: "/log-workout", label: "Log Workout", activeTab: "log-workout" });
-    menuItems.push({ path: "/practice-performances", label: "Enter Practice", activeTab: "practice-performances" });
-    menuItems.push({ path: "/goals", label: "My Goals", activeTab: "goals" });
-    menuItems.push({ path: "/athlete-feedback", label: "My Feedback", activeTab: "athlete-feedback" });
-    
-    menuItems.push({ type: "header", label: "Analytics" });
-    menuItems.push({ path: "/improvement-rates", label: "Improvement Rates", activeTab: "improvement-rates" });
-    menuItems.push({ path: "/team-rankings", label: "Team Rankings", activeTab: "team-rankings" });
-    //menuItems.push({ path: "/teammate-comparison", label: "Teammate Comparison", activeTab: "teammate-comparison" });
-    menuItems.push({ path: "/similar-teammates", label: "Similar Teammates", activeTab: "similar-teammates" });
-    
-    menuItems.push({ type: "header", label: "Tools" });
-    menuItems.push({ path: "/athlete-tools", label: "Tools", activeTab: "athlete-tools" });
-    menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
-    menuItems.push({ path: "/compare-results", label: "Compare Results", activeTab: "compare-results" });
-  } 
-  
-  // ===== COACH FEATURES =====
-  if (user?.role === "coach") {
-    // Coach management tools
-    menuItems.push({ type: "header", label: "Team Management" });
-    menuItems.push({ path: "/view-athlete-goals", label: "View Athlete Goals", activeTab: "view-athlete-goals" });
-    menuItems.push({ path: "/suggest-goals", label: "Suggest Goals", activeTab: "suggest-goals" });
-    menuItems.push({ path: "/coach-feedback", label: "Give Feedback", activeTab: "coach-feedback" });
-    menuItems.push({ path: "/health-availability", label: "Health & Availability", activeTab: "health-availability" });
-    menuItems.push({ path: "/view-athlete-practices", label: "View Athlete Practices", activeTab: "view-athlete-practices" });
-    menuItems.push({ path: "/coach-weight-info", label: "Athlete Weights", activeTab: "coach-weight-info" });
-    
-    menuItems.push({ type: "header", label: "Analytics & Reports" });
-    menuItems.push({ path: "/coach-team-rankings", label: "Team Rankings", activeTab: "coach-team-rankings" });
-    menuItems.push({ path: "/data-reports", label: "Data Reports", activeTab: "data-reports" });
-    menuItems.push({ path: "/coach-view-predictions", label: "Analyze Predictions", activeTab: "coach-view-predictions" });
-    
-    // ===== COACH ACCESS TO ATHLETE FEATURES (Read-only/View mode) =====
-    menuItems.push({ type: "header", label: "Athlete Views" });
-    menuItems.push({ path: "/goals", label: "Goals Page", activeTab: "goals" });
-    menuItems.push({ path: "/practice-performances", label: "Practice Entry", activeTab: "practice-performances" });
-    menuItems.push({ path: "/improvement-rates", label: "Improvement Rates", activeTab: "improvement-rates" });
-    menuItems.push({ path: "/team-rankings", label: "Athlete Rankings View", activeTab: "team-rankings" });
-    menuItems.push({ path: "/teammate-comparison", label: "Teammate Comparison", activeTab: "teammate-comparison" });
-    menuItems.push({ path: "/similar-teammates", label: "Similar Teammates", activeTab: "similar-teammates" });
-    menuItems.push({ path: "/athlete-feedback", label: "Athlete Feedback View", activeTab: "athlete-feedback" });
-    menuItems.push({ path: "/predict-results", label: "Predict Results", activeTab: "predict-results" });
-    menuItems.push({ path: "/compare-results", label: "Compare Results", activeTab: "compare-results" });
-    menuItems.push({ path: "/athlete-tools", label: "Athlete Tools", activeTab: "athlete-tools" });
-    menuItems.push({ path: "/log-workout", label: "Log Workout", activeTab: "log-workout" });
-    
-    // Lineup Builder - Coach only, Rowing only
-    if (user?.sport?.toLowerCase() === "rowing") {
-      menuItems.push({ type: "header", label: "Rowing Tools" });
-      menuItems.push({ path: "/lineup-builder", label: "Lineup Builder", activeTab: "lineup-builder" });
-    }
-  }
+  const menuItems = buildMenuItems(user);
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", display: "flex", alignItems: "center" }}>
-      <button
-        style={buttonStyle}
-        onClick={() => setIsOpen(!isOpen)}
-      >
+      <button style={buttonStyle} onClick={() => setIsOpen(!isOpen)}>
         More
         <svg
           width="16"
@@ -231,9 +237,9 @@ function DropdownMenu({ user, activeTab }) {
           />
         </svg>
       </button>
+
       <div style={dropdownMenuStyle}>
         {menuItems.map((item, index) => {
-          // Render section headers
           if (item.type === "header") {
             return (
               <div key={`header-${index}`} style={sectionHeaderStyle}>
@@ -241,11 +247,11 @@ function DropdownMenu({ user, activeTab }) {
               </div>
             );
           }
-          
-          const isItemActive = activeTab === item.activeTab;
+
+          const isItemActive = activeTab === item.tab;
           return (
             <Link
-              key={item.path}
+              key={`${item.path}-${index}`}
               to={item.path}
               style={{
                 ...dropdownItemStyle,
@@ -254,14 +260,10 @@ function DropdownMenu({ user, activeTab }) {
                 backgroundColor: isItemActive ? "#f3f4f6" : "transparent",
               }}
               onMouseEnter={(e) => {
-                if (!isItemActive) {
-                  e.target.style.backgroundColor = "#f9fafb";
-                }
+                if (!isItemActive) e.target.style.backgroundColor = "#f9fafb";
               }}
               onMouseLeave={(e) => {
-                if (!isItemActive) {
-                  e.target.style.backgroundColor = "transparent";
-                }
+                if (!isItemActive) e.target.style.backgroundColor = "transparent";
               }}
               onClick={() => setIsOpen(false)}
             >
@@ -274,13 +276,13 @@ function DropdownMenu({ user, activeTab }) {
   );
 }
 
-export default function TopBar({ 
-  showNav = false, 
-  activeTab = "dashboard", 
-  onLogout, 
+export default function TopBar({
+  showNav = false,
+  activeTab = "dashboard",
+  onLogout,
   user,
   userRole,
-  userSport
+  userSport,
 }) {
   const linkStyle = (isActive) => ({
     textDecoration: "none",
@@ -307,7 +309,7 @@ export default function TopBar({
       }}
     >
       <BrandMark />
-      
+
       {showNav ? (
         <nav style={{ display: "flex", gap: 24 }}>
           <Link to="/dashboard" style={linkStyle(activeTab === "dashboard")}>
@@ -322,13 +324,10 @@ export default function TopBar({
           <Link to="/teams" style={linkStyle(activeTab === "teams")}>
             Teams
           </Link>
-
-          {/* CALENDAR TAB - Available to BOTH */}
           <Link to="/calendar" style={linkStyle(activeTab === "calendar")}>
             Calendar
           </Link>
 
-          {/* DROPDOWN MENU - Consolidated more items */}
           <DropdownMenu user={user} activeTab={activeTab} />
 
           <Link to="/settings" style={linkStyle(activeTab === "settings")}>

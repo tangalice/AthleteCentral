@@ -75,6 +75,7 @@ import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
 import CoachTeamRankings from './Billa_UI_Pages/CoachTeamRankings';
 import Resources from "./components/Resources";
 import Overview from './Billa_UI_Pages/Rowing_Stories/Overview';
+import ThreeGunTestingPage from "./Billa_UI_Pages/ThreeGunTestingPage";
 
 /* ---------------- Protected wrapper ---------------- */
 
@@ -102,7 +103,7 @@ function ProtectedRoute({ children, user, requireVerified = true }) {
         setChecking(false);
         setOk(true);
       }
-    }, 10000); // 10 second timeout
+    }, 10000);
 
     const run = async () => {
       if (!user) {
@@ -134,7 +135,7 @@ function ProtectedRoute({ children, user, requireVerified = true }) {
         }
       } catch (e) {
         console.warn("ProtectedRoute session bootstrap error:", e);
-        setOk(true); // Proceed anyway to avoid blocking the app
+        setOk(true);
       } finally {
         if (!cancelled) {
           clearTimeout(timeoutId);
@@ -183,11 +184,8 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     };
 
     beat();
-
-    // 
     activityTimerRef.current = setInterval(beat, 60_000);
 
-    // 
     const onUserActivity = () => {
       const now = Date.now();
       if (now - lastBeatRef.current > 300_000) {
@@ -200,7 +198,6 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     window.addEventListener("keydown", onUserActivity);
     window.addEventListener("click", onUserActivity);
 
-    // 
     const onVisibility = () => {
       if (!document.hidden) beat();
     };
@@ -219,7 +216,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
   const activeTab =
     root === "settings" ? "settings" :
     root === "profile"  ? "profile"  :
-    root === "messages" ? "messages" : 
+    root === "messages" ? "messages" :
     root === "teams"    ? "teams"    :
     root === "calendar" ? "calendar" :
     root === "activity" ? "activity" :
@@ -229,7 +226,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "goals"    ? "goals"    :
     root === "view-athlete-goals" ? "view-athlete-goals" :
     root === "coach-feedback" ? "coach-feedback" :
-    root === "split-calculator" ? "split-calculator" : 
+    root === "split-calculator" ? "split-calculator" :
     root === "data-reports" ? "data-reports" :
     root === "coach-view-predictions" ? "coach-view-predictions" :
     root === "athlete-feedback" ? "athlete-feedback" :
@@ -246,7 +243,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "similar-teammates" ? "similar-teammates" :
     root === "weight-info" ? "weight-info" :
     root === "team-rankings" ? "team-rankings" :
-    root === "team-personal-bests" ? "team-personal-bests" : 
+    root === "team-personal-bests" ? "team-personal-bests" :
     root === "improvement-rates" ? "improvement-rates" :
     root === "coach-weight-info" ? "coach-weight-info" :
     root === "log-workout" ? "log-workout" :
@@ -254,6 +251,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
     root === "team-polls" ? "dashboard" :
     root === "team-poll" ? "dashboard" :
     root === "overview" ? "overview" :
+    root === "3-gun-testing" ? "3-gun-testing" :
     "dashboard";
 
   return (
@@ -287,7 +285,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
-  const signingOutRef = useRef(false); 
+  const signingOutRef = useRef(false);
   const sessionUnsubRef = useRef(null);
 
   useEffect(() => {
@@ -381,9 +379,8 @@ export default function App() {
     if (signingOutRef.current) return;
     signingOutRef.current = true;
     try {
-      // Save track mode before logout
       const savedMode = localStorage.getItem("trackMode");
-      
+
       const sessionId =
         SessionsService.getCurrentSessionId?.() ||
         localStorage.getItem("currentSessionId");
@@ -400,8 +397,7 @@ export default function App() {
       setUser(null);
       setUserRole(null);
       setUserSport(null);
-      
-      // Restore track mode after logout
+
       if (savedMode) {
         localStorage.setItem("trackMode", savedMode);
       }
@@ -420,35 +416,31 @@ export default function App() {
     );
   }
 
-
-  /* ------ Data loaders to avoid flicker on first paint ------- */
+  /* ------ Data loaders ------- */
   async function dashboardLoader() {
     try {
       const u = auth.currentUser;
       if (!u || !u.emailVerified) return null;
       const snap = await getDoc(doc(db, "users", u.uid));
       const d = snap.exists() ? snap.data() : {};
-      
-      // Calculate profile completion based on required fields
+
       const userRole = d.role ?? null;
       let profileComplete = false;
-      
+
       if (userRole === "coach") {
-        // Coach required fields: displayName, bio, school, sport, team, sportDetails
         const requiredFields = ['displayName', 'bio', 'school', 'sport', 'team', 'sportDetails'];
         profileComplete = requiredFields.every(field => {
           const value = field === 'displayName' ? (d.displayName ?? u.displayName ?? "") : d[field];
           return value && value.toString().trim() !== "";
         });
       } else if (userRole === "athlete") {
-        // Athlete required fields: displayName, bio, school, grade, sport, position, team, experience, sportDetails, goals
         const requiredFields = ['displayName', 'bio', 'school', 'grade', 'sport', 'position', 'team', 'experience', 'sportDetails', 'goals'];
         profileComplete = requiredFields.every(field => {
           const value = field === 'displayName' ? (d.displayName ?? u.displayName ?? "") : d[field];
           return value && value.toString().trim() !== "";
         });
       }
-      
+
       return {
         displayName: d.displayName ?? u.displayName ?? "",
         role: userRole,
@@ -459,6 +451,7 @@ export default function App() {
       return null;
     }
   }
+
   async function profileLoader() {
     try {
       const u = auth.currentUser;
@@ -480,519 +473,468 @@ export default function App() {
     } catch (error) {
       console.error("Error in profileLoader:", error);
       return {
-        name: "",
-        bio: "",
-        school: "",
-        grade: "",
-        sport: "",
-        position: "",
-        team: "",
-        experience: "",
-        sportDetails: "",
-        goals: "",
+        name: "", bio: "", school: "", grade: "", sport: "",
+        position: "", team: "", experience: "", sportDetails: "", goals: "",
       };
     }
   }
 
-
-  // Create merged user object for components that need role information
   const mergedUser = user ? { ...user, role: userRole } : null;
 
   /* ---------------- Router ---------------- */
-const router = createBrowserRouter([
-  // Public
-  { path: "/signup", element: user ? <Navigate to="/dashboard" replace /> : <SignUp /> },
-  {
-    path: "/login",
-    element: user && user.emailVerified ? <Navigate to="/dashboard" replace /> : <Login />,
-  },
-  { path: "/verify-email", element: <VerifyEmail /> },
+  const router = createBrowserRouter([
+    // Public
+    { path: "/signup", element: user ? <Navigate to="/dashboard" replace /> : <SignUp /> },
+    {
+      path: "/login",
+      element: user && user.emailVerified ? <Navigate to="/dashboard" replace /> : <Login />,
+    },
+    { path: "/verify-email", element: <VerifyEmail /> },
 
-  // App layout + protected routes
-  {
-    path: "/",
-    element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} userSport={userSport} />,
-    children: [
-      {
-        index: true,
-        element: user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />,
-      },
-      {
-        path: "coach-feedback",
+    // App layout + protected routes
+    {
+      path: "/",
+      element: <AppLayout user={user} userRole={userRole} onLogout={handleLogout} userSport={userSport} />,
+      children: [
+        {
+          index: true,
+          element: user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />,
+        },
+        {
+          path: "coach-feedback",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? (
+                <CoachFeedbackPage coach={user} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "feedback-summary",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? (
+                <FeedbackSummaryPage coach={user} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "create-feedback",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? (
+                <CreateFeedbackPoll />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "coach-team-rankings",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? (
+                <CoachTeamRankings user={mergedUser} userSport={userSport} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "feedback/submit/:pollId",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? (
+                <AthleteFeedback />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "feedback/edit/:pollId",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? (
+                <CreateFeedbackPoll />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "create-team-poll",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <CreateTeamPoll /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "team-polls",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <TeamPollList /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "team-poll/:pollId",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? <TeamPollVote /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "coach-view-predictions",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? (<CoachViewPredictions />) : (<Navigate to="/dashboard" replace />)}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "dashboard",
+          loader: dashboardLoader,
+          element: (
+            <ProtectedRoute user={user}>
+              <Dashboard userRole={userRole} user={user} unreadMessageCount={unreadMessageCount} />
+            </ProtectedRoute>
+          ),
+        },
+        // UPDATED: Both athletes and coaches can access split calculator (rowing only)
+        {
+          path: "split-calculator",
+          element: (
+            <ProtectedRoute user={user}>
+              {userSport?.toLowerCase() === "rowing" ? (
+                <SplitCalculator user={mergedUser} userRole={userRole} userSport={userSport} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "predict-results",
+          element: (
+            <ProtectedRoute user={user}>
+              <PredictResultsPage />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "compare-results",
+          element: (
+            <ProtectedRoute user={user}>
+              <CompareResultsPage />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "teammate-comparison",
+          element: (
+            <ProtectedRoute user={user}>
+              <TeammateComparison user={mergedUser} userSport={userSport} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "team-rankings",
+          element: (
+            <ProtectedRoute user={user}>
+              <TeamRankings user={mergedUser} userSport={userSport} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "similar-teammates",
+          element: (
+            <ProtectedRoute user={user}>
+              <SimilarTeammatesPage />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "athlete-tools",
+          element: (
+            <ProtectedRoute user={user}>
+              <AthleteToolsPage />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "athlete-dashboard",
+          loader: dashboardLoader,
+          element: (
+            <ProtectedRoute user={user}>
+              <Dashboard userRole={userRole} user={user} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "coach-dashboard",
+          loader: dashboardLoader,
+          element: (
+            <ProtectedRoute user={user}>
+              <Dashboard userRole={userRole} user={user} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "profile",
+          loader: profileLoader,
+          element: (
+            <ProtectedRoute user={user}>
+              <Profile user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "messages",
+          element: (
+            <ProtectedRoute user={user}>
+              <Messages onUnreadCountChange={setUnreadMessageCount} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "teams",
+          element: (
+            <ProtectedRoute user={user}>
+              <Teams />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "group-performance",
+          element: (
+            <ProtectedRoute user={user}>
+              <GroupPerformance user={mergedUser} userRole={userRole} userSport={userSport} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "individual-performance",
+          element: (
+            <ProtectedRoute user={user}>
+              <IndividualPerformance user={mergedUser} userRole={userRole} userSport={userSport} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "calendar",
+          element: (
+            <ProtectedRoute user={user}>
+              <Calendar userRole={userRole} user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "attendance-history",
+          element: (
+            <ProtectedRoute user={user}>
+              <AttendanceHistory userRole={userRole} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "activity",
+          element: (
+            <ProtectedRoute user={user}>
+              <Activity userRole={userRole} user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "log-workout",
+          element: (
+            <ProtectedRoute user={user}>
+              <LogWorkout userRole={userRole} user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "improvement-rates",
+          element: (
+            <ProtectedRoute user={user}>
+              <ImprovementRates user={mergedUser} userSport={userSport} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "results",
+          element: (
+            <ProtectedRoute user={user}>
+              <Results user={mergedUser} userRole={userRole} userSport={userSport} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "goals",
+          element: (
+            <ProtectedRoute user={user}>
+              <Goals user={user} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "view-athlete-goals",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <CoachGoals user={mergedUser} /> : <Navigate to="/goals" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "athlete-feedback",
+          element: (
+            <ProtectedRoute user={user}>
+              <AthleteFeedbackPage user={user} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "practice-performances",
+          element: (
+            <ProtectedRoute user={user}>
+              <PracticePerformances user={user} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "view-athlete-practices",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <ViewAthletePractices user={mergedUser} /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "suggest-goals",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "team-personal-bests",
+          element: (
+            <ProtectedRoute user={user}>
+              <TeamPersonalBests user={mergedUser} userSport={userSport} />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "data-reports",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? (
+                <CoachDataReports coach={user} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "health-availability",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? <HealthAndAvailability /> : <Navigate to="/dashboard" replace />}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "lineup-builder",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" && userSport?.toLowerCase() === "rowing" ? (
+                <LineupBuilder user={mergedUser} userRole={userRole} userSport={userSport} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "weight-info",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "athlete" ? (
+                <WeightInfo user={mergedUser} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "coach-weight-info",
+          element: (
+            <ProtectedRoute user={user}>
+              {userRole === "coach" ? (
+                <CoachWeightInfo user={mergedUser} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "resources",
+          element: (
+            <ProtectedRoute user={user}>
+              <Resources userRole={userRole} user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+       // 3-Gun Testing
+       {
+        path: "3-gun-testing",
         element: (
           <ProtectedRoute user={user}>
-            {userRole === "coach" ? (
-              <CoachFeedbackPage coach={user} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
+            <ThreeGunTestingPage user={mergedUser} userRole={userRole} />
           </ProtectedRoute>
         ),
       },
-      {
-        path: "feedback-summary",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? (
-              <FeedbackSummaryPage coach={user} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "create-feedback",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? (
-              <CreateFeedbackPoll />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "coach-team-rankings",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? (
-              <CoachTeamRankings user={mergedUser} userSport={userSport} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "feedback/submit/:pollId",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <AthleteFeedback />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "feedback/edit/:pollId",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? (
-              <CreateFeedbackPoll />  
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      // Coach: Create new team poll
-      {
-        path: "create-team-poll",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <CreateTeamPoll /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-      
-      // Coach: View all team polls with results
-      {
-        path: "team-polls",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <TeamPollList /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-      
-      // Athlete: Vote on a team poll
-      {
-        path: "team-poll/:pollId",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "athlete" ? <TeamPollVote /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "coach-view-predictions",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? (<CoachViewPredictions />) : (<Navigate to="/dashboard" replace />)}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "dashboard",
-        loader: dashboardLoader,
-        element: (
-          <ProtectedRoute user={user}>
-            <Dashboard userRole={userRole} user={user} unreadMessageCount={unreadMessageCount} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "split-calculator",
-        element: (
-          <ProtectedRoute user={user}>
-            {userSport?.toLowerCase() === "rowing" ? (
-              <SplitCalculator user={mergedUser} userRole={userRole} userSport={userSport} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      // UPDATED: Removed athlete-only restriction - coaches can now access
-      {
-        path: "predict-results",
-        element: (
-          <ProtectedRoute user={user}>
-            <PredictResultsPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "compare-results",
-        element: (
-          <ProtectedRoute user={user}>
-            <CompareResultsPage />
-          </ProtectedRoute>
-        ),
-      },
-      // UPDATED: Removed athlete-only restriction - coaches can now access
-      {
-        path: "teammate-comparison",
-        element: (
-          <ProtectedRoute user={user}>
-            <TeammateComparison user={mergedUser} userSport={userSport} />
-          </ProtectedRoute>
-        ),
-      },
-      // UPDATED: Removed athlete-only restriction - coaches can now access
-      {
-        path: "team-rankings",
-        element: (
-          <ProtectedRoute user={user}>
-            <TeamRankings user={mergedUser} userSport={userSport} />
-          </ProtectedRoute>
-        ),
-      },
-      // UPDATED: Removed athlete-only restriction - coaches can now access
-      {
-        path: "similar-teammates",
-        element: (
-          <ProtectedRoute user={user}>
-            <SimilarTeammatesPage />
-          </ProtectedRoute>
-        ),
-      },
-      // UPDATED: Removed athlete-only restriction - coaches can now access
-      {
-        path: "athlete-tools",
-        element: (
-          <ProtectedRoute user={user}>
-            <AthleteToolsPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "athlete-dashboard",
-        loader: dashboardLoader,
-        element: (
-          <ProtectedRoute user={user}>
-            <Dashboard userRole={userRole} user={user} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "coach-dashboard",
-        loader: dashboardLoader,
-        element: (
-          <ProtectedRoute user={user}>
-            <Dashboard userRole={userRole} user={user} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "profile",
-        loader: profileLoader,
-        element: (
-          <ProtectedRoute user={user}>
-            <Profile user={mergedUser} />
-          </ProtectedRoute>
-        ),
-      },
-
-      {
-        path: "messages",
-        element: (
-          <ProtectedRoute user={user}>
-            <Messages onUnreadCountChange={setUnreadMessageCount} />
-          </ProtectedRoute>
-        ),
-      },
-
-      {
-        path: "teams",
-        element: (
-          <ProtectedRoute user={user}>
-            <Teams />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "group-performance",
-        element: (
-          <ProtectedRoute user={user}>
-            <GroupPerformance user={mergedUser} userRole={userRole} userSport={userSport} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "individual-performance",
-        element: (
-          <ProtectedRoute user={user}>
-            <IndividualPerformance user={mergedUser} userRole={userRole} userSport={userSport} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "calendar",
-        element: (
-          <ProtectedRoute user={user}>
-            <Calendar userRole={userRole} user={mergedUser} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "attendance-history",
-        element: (
-          <ProtectedRoute user={user}>
-            <AttendanceHistory userRole={userRole} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "activity",
-        element: (
-          <ProtectedRoute user={user}>
-            <Activity userRole={userRole} user={mergedUser} />
-          </ProtectedRoute>
-        ),
-      },
-      // UPDATED: Removed athlete-only restriction - coaches can now access
-      {
-        path: "log-workout",
-        element: (
-          <ProtectedRoute user={user}>
-            <LogWorkout userRole={userRole} user={mergedUser} />
-          </ProtectedRoute>
-        ),
-      },
-      // UPDATED: Removed athlete-only restriction - coaches can now access
-      {
-        path: "improvement-rates",
-        element: (
-          <ProtectedRoute user={user}>
-            <ImprovementRates user={mergedUser} userSport={userSport} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "results",
-        element: (
-          <ProtectedRoute user={user}>
-            <Results user={mergedUser} userRole={userRole} userSport={userSport} />
-          </ProtectedRoute>
-        ),
-      },
-
-      {
-        path: "goals",
-        element: (
-          <ProtectedRoute user={user}>
-            <Goals user={user} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "view-athlete-goals",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <CoachGoals user={mergedUser} /> : <Navigate to="/goals" replace />}
-          </ProtectedRoute>
-        ),
-      },
-
-      // UPDATED: Removed athlete-only restriction - coaches can now view athlete feedback
-      {
-        path: "athlete-feedback",
-        element: (
-          <ProtectedRoute user={user}>
-            <AthleteFeedbackPage user={user} />
-          </ProtectedRoute>
-        ),
-      },
-
-      {
-        path: "practice-performances",
-        element: (
-          <ProtectedRoute user={user}>
-            <PracticePerformances user={user} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "view-athlete-practices",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <ViewAthletePractices user={mergedUser} /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "suggest-goals",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole=== "coach" ? <SuggestGoals user={user} /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-      // UPDATED: Removed athlete-only restriction - coaches can now access
-      {
-        path: "team-personal-bests",
-        element: (
-          <ProtectedRoute user={user}>
-            <TeamPersonalBests user={mergedUser} userSport={userSport} />
-          </ProtectedRoute>
-        ),
-      },
-
-      {
-        path: "coach-feedback",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <CoachFeedbackPage coach={user} /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-
-      {
-        path: "data-reports",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? (
-              <CoachDataReports coach={user} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-
-      {
-        path: "health-availability",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? <HealthAndAvailability /> : <Navigate to="/dashboard" replace />}
-          </ProtectedRoute>
-        ),
-      },
-
-      // NEW ROUTES - Group Performance, Individual Performance, Lineup Builder
-      {
-        path: "group-performance",
-        element: (
-          <ProtectedRoute user={user}>
-            <GroupPerformance user={mergedUser} userRole={userRole} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "individual-performance",
-        element: (
-          <ProtectedRoute user={user}>
-            <IndividualPerformance user={mergedUser} userRole={userRole} />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "lineup-builder",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" && userSport?.toLowerCase() === "rowing" ? (
-              <LineupBuilder user={mergedUser} userRole={userRole} userSport={userSport} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "weight-info",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "athlete" ? (
-              <WeightInfo user={mergedUser} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "coach-weight-info",
-        element: (
-          <ProtectedRoute user={user}>
-            {userRole === "coach" ? (
-              <CoachWeightInfo user={mergedUser} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "resources",
-        element: (
-          <ProtectedRoute user={user}>
-            <Resources userRole={userRole} user={mergedUser} />
-          </ProtectedRoute>
-        ),
-      },
-      // Attendance Overview - All rowing users (coach can add/delete, athletes view-only)
-      {
-        path: "overview",
-        element: (
-          <ProtectedRoute user={user}>
-            {userSport?.toLowerCase() === "rowing" ? (
-              <Overview user={mergedUser} />
-            ) : (
-              <Navigate to="/dashboard" replace />
-            )}
-          </ProtectedRoute>
-        ),
-      },
-
-      // Keep other Settings sub-pages under /settings/*
-      {
-        path: "settings/*",
-        element: (
-          <ProtectedRoute user={user}>
-            <Settings user={mergedUser} />
-          </ProtectedRoute>
-        ),
-      },
-      { path: "*", element: <Navigate to="/" replace /> },
-    ],
-  },
-]);
-
+        // UPDATED: Both athletes and coaches can access overview (rowing only)
+        {
+          path: "overview",
+          element: (
+            <ProtectedRoute user={user}>
+              {userSport?.toLowerCase() === "rowing" ? (
+                <Overview user={mergedUser} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "settings/*",
+          element: (
+            <ProtectedRoute user={user}>
+              <Settings user={mergedUser} />
+            </ProtectedRoute>
+          ),
+        },
+        { path: "*", element: <Navigate to="/" replace /> },
+      ],
+    },
+  ]);
 
   return <RouterProvider router={router} />;
 }
