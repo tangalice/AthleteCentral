@@ -147,7 +147,7 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
         markChatAsRead(chatIdFromUrl);
       }
     }
-  }, [chatIdFromUrl, chats.length, selectedChat?.id]); // Use chats.length to only react when chats are loaded
+  }, [chatIdFromUrl, chats.length, selectedChat?.id]);
 
   // Load messages and participants for selected chat
   useEffect(() => {
@@ -170,8 +170,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     previousMessagesCountRef.current = 0;
     currentChatIdRef.current = chatId;
     
-    // Use simple query without orderBy to avoid index requirements
-    // Client-side sorting is more reliable
     const messagesQuery = query(
       collection(db, 'messages'), 
       where('chatId', '==', chatId)
@@ -182,10 +180,7 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
       (snapshot) => {
         const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         
-        // Sort by timestamp ascending (oldest first)
-        // Messages with invalid timestamps should go to the end
         data.sort((a, b) => {
-          // Handle Firestore Timestamp objects
           let aTime, bTime;
           let aValid = true, bValid = true;
           
@@ -215,11 +210,9 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
             bTime = new Date(0);
           }
           
-          // Check if dates are valid (not epoch 0 or invalid)
           if (isNaN(aTime.getTime()) || aTime.getTime() === 0) aValid = false;
           if (isNaN(bTime.getTime()) || bTime.getTime() === 0) bValid = false;
           
-          // Invalid timestamps go to the end
           if (!aValid && !bValid) return 0;
           if (!aValid) return 1;
           if (!bValid) return -1;
@@ -230,9 +223,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
         const previousCount = previousMessagesCountRef.current;
         setMessages(data);
         
-        // Scroll to bottom if:
-        // 1. New messages were added (previousCount > 0 and data.length > previousCount)
-        // 2. This is the first load of messages for this chat (previousCount === 0 and data.length > 0)
         if ((previousCount > 0 && data.length > previousCount) || (previousCount === 0 && data.length > 0)) {
           setTimeout(() => {
             if (messagesEndRef.current) {
@@ -283,19 +273,17 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
     
     return () => {
       unsubscribeMessages();
-      // Reset the ref when unmounting so we can reload if needed
       if (currentChatIdRef.current === chatId) {
         currentChatIdRef.current = null;
       }
     };
-  }, [selectedChat?.id]); // Use selectedChat.id instead of selectedChat to prevent unnecessary re-renders
+  }, [selectedChat?.id]);
 
 
   const createNewChat = async () => {
     if (!newChatName.trim()) return;
     setLoading(true);
     try {
-      // Include current user and selected users
       const participants = [user.uid, ...selectedUsers.map(u => u.id)];
       await addDoc(collection(db, 'chats'), {
         name: newChatName.trim(),
@@ -321,12 +309,10 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   };
 
   const sendMessage = async () => {
-    // Check all conditions before proceeding
     if (!newMessage?.trim() || !selectedChat?.id || loading || sendingMessageRef.current) {
       return;
     }
     
-    // Capture the message text and chat ID before clearing
     const messageText = newMessage.trim();
     const chatId = selectedChat.id;
     const participants = selectedChat.participants || [];
@@ -336,13 +322,11 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
       return;
     }
     
-    // Clear the input immediately to provide instant feedback
     setNewMessage('');
     sendingMessageRef.current = true;
     setLoading(true);
     
     try {
-      // Add message first with serverTimestamp
       await addDoc(collection(db, 'messages'), {
         chatId: chatId,
         senderId: user.uid,
@@ -351,7 +335,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
         timestamp: serverTimestamp()
       });
       
-      // Then update chat document
       const chatRef = doc(db, 'chats', chatId);
       const others = participants.filter(id => id !== user.uid);
       const unreadUpdates = others.reduce((acc, id) => {
@@ -366,11 +349,9 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
         ...unreadUpdates
       });
       
-      // Send email notifications to recipients (fire and forget)
       const senderName = user.displayName || user.email || 'Someone';
       others.forEach(async (recipientId) => {
         try {
-          // Get current unread count for this recipient (after increment)
           const chatDoc = await getDoc(chatRef);
           if (chatDoc.exists()) {
             const chatData = chatDoc.data();
@@ -382,19 +363,14 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
             });
           }
         } catch (emailError) {
-          // Don't block message sending if email fails
           console.error('Error sending email notification:', emailError);
         }
       });
-      
-      // Don't scroll here - let the onSnapshot handler do it
     } catch (error) {
       console.error('Error sending message:', error);
-      // Restore the message if sending failed
       setNewMessage(messageText);
       alert('Failed to send message. Please try again.');
     } finally {
-      // Always reset loading state
       sendingMessageRef.current = false;
       setLoading(false);
     }
@@ -424,7 +400,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
       const chatRef = doc(db, 'chats', selectedChat.id);
       const updatedParticipants = selectedChat.participants.filter(id => id !== user.uid);
       
-      // Remove user from unreadCounts and readBy
       const updates = {
         participants: updatedParticipants,
         [`unreadCounts.${user.uid}`]: deleteField(),
@@ -449,7 +424,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
       const chatRef = doc(db, 'chats', selectedChat.id);
       const newParticipants = [...selectedChat.participants, ...selectedUsers.map(u => u.id)];
       
-      // Initialize unread counts for new members
       const unreadUpdates = selectedUsers.reduce((acc, newUser) => {
         acc[`unreadCounts.${newUser.id}`] = 0;
         acc[`readBy.${newUser.id}`] = serverTimestamp();
@@ -461,10 +435,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
         ...unreadUpdates
       });
       
-      // Don't update selectedChat here - let the chats listener handle it
-      // This prevents infinite loops
-      
-      // Also update the chatUsers state to immediately show the new participants
       const newChatUsers = [...chatUsers, ...selectedUsers];
       setChatUsers(newChatUsers);
       
@@ -491,22 +461,17 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
       } else if (typeof timestamp === 'number' && timestamp > 0) {
         date = new Date(timestamp);
       } else {
-        // Use current time as fallback
         date = new Date();
       }
       
-      // Check if date is valid (not epoch 0 or invalid)
       if (isNaN(date.getTime()) || date.getTime() === 0) {
-        // Use current time as fallback
         date = new Date();
       }
       
-      // Format as hh:mm
       const hours = date.getHours().toString().padStart(2, '0');
       const minutes = date.getMinutes().toString().padStart(2, '0');
       return `${hours}:${minutes}`;
     } catch (error) {
-      // Use current time as fallback
       const now = new Date();
       const hours = now.getHours().toString().padStart(2, '0');
       const minutes = now.getMinutes().toString().padStart(2, '0');
@@ -526,13 +491,10 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
       } else if (typeof timestamp === 'number' && timestamp > 0) {
         d = new Date(timestamp);
       } else {
-        // Use current date as fallback
         d = new Date();
       }
       
-      // Check if date is valid (not epoch 0 or invalid)
       if (isNaN(d.getTime()) || d.getTime() === 0) {
-        // Use current date as fallback
         d = new Date();
       }
       
@@ -595,7 +557,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
               <div
                 key={chat.id}
                 onClick={() => {
-                  // Reset the ref when clicking on a different chat
                   if (selectedChat?.id !== chat.id) {
                     currentChatIdRef.current = null;
                   }
@@ -701,6 +662,11 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
                             {formatDate(message.timestamp)}
                           </div>
                         )}
+                        {!isOwn && (
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 2, paddingLeft: 4 }}>
+                            {message.senderName || 'Unknown'}
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
                           <div
                             style={{
@@ -770,7 +736,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
           <div className="card" style={{...modalCard, maxWidth: 500, maxHeight: '90vh', overflowY: 'auto'}}>
             <h3 style={{ marginTop: 0, marginBottom: 12, textAlign: 'center' }}>New Chat</h3>
             
-            {/* Chat Name Input */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Chat Name</label>
               <input
@@ -783,11 +748,9 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
               />
             </div>
 
-            {/* User Selection */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Add People</label>
               
-              {/* Search Bar */}
               <input
                 type="text"
                 value={userSearchTerm}
@@ -848,7 +811,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
               </div>
             </div>
 
-            {/* Selected Users Summary */}
             {selectedUsers.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Selected Users</label>
@@ -918,7 +880,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
           <div className="card" style={{...modalCard, maxWidth: 500}}>
             <h3 style={{ marginTop: 0, marginBottom: 16, textAlign: 'center' }}>Chat Details</h3>
             
-            {/* Chat Info */}
             <div style={{ marginBottom: 20 }}>
               <div style={{ marginBottom: 12 }}>
                 <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Chat Name</label>
@@ -942,7 +903,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
               </div>
             </div>
 
-            {/* Participants */}
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Participants</label>
               <div style={{ 
@@ -1040,11 +1000,9 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
           <div className="card" style={{...modalCard, maxWidth: 500, maxHeight: '90vh', overflowY: 'auto'}}>
             <h3 style={{ marginTop: 0, marginBottom: 12, textAlign: 'center' }}>Add Members to Chat</h3>
             
-            {/* User Selection */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Select Users to Add</label>
               
-              {/* Search Bar */}
               <input
                 type="text"
                 value={userSearchTerm}
@@ -1062,7 +1020,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
                 padding: 8
               }}>
                 {(() => {
-                  // Filter out users who are already in the chat
                   const availableUsers = allUsers.filter(u => !selectedChat.participants.includes(u.id));
                   const filteredAvailableUsers = availableUsers.filter(user => {
                     const displayName = user.displayName || '';
@@ -1116,7 +1073,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
               </div>
             </div>
 
-            {/* Selected Users Summary */}
             {selectedUsers.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Selected Users</label>
@@ -1182,7 +1138,6 @@ const Messages = ({ onUnreadCountChange = () => {} }) => {
   );
 };
 
-// Simple modal styles (inline to keep component self-contained)
 const modalBackdrop = {
   position: 'fixed',
   inset: 0,

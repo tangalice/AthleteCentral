@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   createBrowserRouter,
   RouterProvider,
@@ -20,62 +20,70 @@ import {
 } from "firebase/firestore";
 import SessionsService from "./services/SessionsService";
 
-// Auth
+// Auth (eager — needed on first paint)
 import SignUp from "./components/auth/SignUp";
 import Login from "./components/auth/Login";
 import VerifyEmail from "./components/auth/VerifyEmail";
 
-// Main
-import Dashboard from "./components/Dashboard";
-import Profile from "./components/Profile";
-import Messages from "./components/Messages";
-import Settings from "./components/Settings";
-
-import Teams from "./components/Teams";
+// TopBar (eager — always visible)
 import TopBar from "./components/TopBar";
-import Goals from "./components/Goals";
-import SuggestGoals from "./components/SuggestGoals";
-import Calendar from "./components/Calendar";
-import PracticePerformances from './Billa_UI_Pages/PracticePerformances';
-import ViewAthletePractices from "./Billa_UI_Pages/Rowing_Stories/ViewAthletePractices";
-import AthleteFeedbackPage from "./components/AthleteFeedbackPage";
-import CoachFeedbackPage from "./components/CoachFeedbackPage";
-import PredictResultsPage from "./pages/PredictResultsPage";
-import CompareResultsPage from "./pages/CompareResultsPage";
-import CreateFeedbackPoll from "./pages/CreateFeedbackPoll";
-import FeedbackSummaryPage from "./pages/FeedbackSummaryPage";
-import AthleteFeedback from "./pages/AthleteFeedback";
-import CoachViewPredictions from "./pages/CoachViewPredictions";
-import SimilarTeammatesPage from "./components/SimilarTeammatesPage";
 
-import CreateTeamPoll from "./components/CreateTeamPoll";
-import TeamPollList from "./components/TeamPollList";
-import TeamPollVote from "./components/TeamPollVote";
+// ── Lazy-loaded pages (only downloaded when navigated to) ──
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const Profile = lazy(() => import("./components/Profile"));
+const Messages = lazy(() => import("./components/Messages"));
+const Settings = lazy(() => import("./components/Settings"));
+const Teams = lazy(() => import("./components/Teams"));
+const Goals = lazy(() => import("./components/Goals"));
+const SuggestGoals = lazy(() => import("./components/SuggestGoals"));
+const Calendar = lazy(() => import("./components/Calendar"));
+const PracticePerformances = lazy(() => import("./Billa_UI_Pages/PracticePerformances"));
+const ViewAthletePractices = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/ViewAthletePractices"));
+const AthleteFeedbackPage = lazy(() => import("./components/AthleteFeedbackPage"));
+const CoachFeedbackPage = lazy(() => import("./components/CoachFeedbackPage"));
+const PredictResultsPage = lazy(() => import("./pages/PredictResultsPage"));
+const CompareResultsPage = lazy(() => import("./pages/CompareResultsPage"));
+const CreateFeedbackPoll = lazy(() => import("./pages/CreateFeedbackPoll"));
+const FeedbackSummaryPage = lazy(() => import("./pages/FeedbackSummaryPage"));
+const AthleteFeedback = lazy(() => import("./pages/AthleteFeedback"));
+const CoachViewPredictions = lazy(() => import("./pages/CoachViewPredictions"));
+const SimilarTeammatesPage = lazy(() => import("./components/SimilarTeammatesPage"));
+const CreateTeamPoll = lazy(() => import("./components/CreateTeamPoll"));
+const TeamPollList = lazy(() => import("./components/TeamPollList"));
+const TeamPollVote = lazy(() => import("./components/TeamPollVote"));
+const Results = lazy(() => import("./Billa_UI_Pages/Results"));
+const EnterResults = lazy(() => import("./Billa_UI_Pages/EnterResults"));
+const ViewResults = lazy(() => import("./Billa_UI_Pages/ViewResults"));
+const SplitCalculator = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/SplitCalculator"));
+const CoachGoals = lazy(() => import("./Billa_UI_Pages/CoachGoals"));
+const WeightInfo = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/WeightInfo"));
+const CoachWeightInfo = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/CoachWeightInfo"));
+const AthleteToolsPage = lazy(() => import("./pages/AthleteToolsPage"));
+const Activity = lazy(() => import("./components/Activity"));
+const CoachDataReports = lazy(() => import("./components/CoachDataReports"));
+const HealthAndAvailability = lazy(() => import("./components/HealthAndAvailability"));
+const AttendanceHistory = lazy(() => import("./components/AttendanceHistory"));
+const LogWorkout = lazy(() => import("./components/LogWorkout"));
+const TeammateComparison = lazy(() => import("./Billa_UI_Pages/TeammateComparison"));
+const GroupPerformance = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/GroupPerformance"));
+const ImprovementRates = lazy(() => import("./Billa_UI_Pages/ImprovementRates"));
+const TeamRankings = lazy(() => import("./Billa_UI_Pages/TeamRankings"));
+const TeamPersonalBests = lazy(() => import("./Billa_UI_Pages/TeamPersonalBests"));
+const IndividualPerformance = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/IndividualPerformance"));
+const LineupBuilder = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/LineupBuilder"));
+const CoachTeamRankings = lazy(() => import("./Billa_UI_Pages/CoachTeamRankings"));
+const Resources = lazy(() => import("./components/Resources"));
+const Overview = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/Overview"));
+const ThreeGunTestingPage = lazy(() => import("./Billa_UI_Pages/ThreeGunTestingPage"));
 
-import Results from './Billa_UI_Pages/Results';
-import EnterResults from './Billa_UI_Pages/EnterResults';
-import ViewResults from './Billa_UI_Pages/ViewResults';
-import SplitCalculator from './Billa_UI_Pages/Rowing_Stories/SplitCalculator';
-import CoachGoals from './Billa_UI_Pages/CoachGoals';
-import WeightInfo from "./Billa_UI_Pages/Rowing_Stories/WeightInfo";
-import CoachWeightInfo from "./Billa_UI_Pages/Rowing_Stories/CoachWeightInfo";
-import AthleteToolsPage from "./pages/AthleteToolsPage";
-import Activity from "./components/Activity";
-import CoachDataReports from "./components/CoachDataReports";
-import HealthAndAvailability from "./components/HealthAndAvailability";
-import AttendanceHistory from "./components/AttendanceHistory";
-import LogWorkout from "./components/LogWorkout";
-import TeammateComparison from './Billa_UI_Pages/TeammateComparison';
-import GroupPerformance from './Billa_UI_Pages/Rowing_Stories/GroupPerformance';
-import ImprovementRates from './Billa_UI_Pages/ImprovementRates';
-import TeamRankings from './Billa_UI_Pages/TeamRankings';
-import TeamPersonalBests from './Billa_UI_Pages/TeamPersonalBests';
-import IndividualPerformance from './Billa_UI_Pages/Rowing_Stories/IndividualPerformance';
-import LineupBuilder from './Billa_UI_Pages/Rowing_Stories/LineupBuilder';
-import CoachTeamRankings from './Billa_UI_Pages/CoachTeamRankings';
-import Resources from "./components/Resources";
-import Overview from './Billa_UI_Pages/Rowing_Stories/Overview';
-import ThreeGunTestingPage from "./Billa_UI_Pages/ThreeGunTestingPage";
+// ── Loading spinner ──
+function PageLoader() {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+      <p>Loading...</p>
+    </div>
+  );
+}
 
 /* ---------------- Protected wrapper ---------------- */
 
@@ -151,21 +159,29 @@ function ProtectedRoute({ children, user, requireVerified = true }) {
     };
   }, [user, requireVerified]);
 
-  if (checking) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-        <p>Verifying session...</p>
-      </div>
-    );
-  }
+  if (checking) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (requireVerified && !user.emailVerified) return <Navigate to="/verify-email" replace />;
   if (!ok) return <Navigate to="/login" replace />;
 
-  return children;
+  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
 /* --------- Layout (TopBar + Outlet) + activity heartbeat ---------- */
+
+// Simplified activeTab: if the route is in this set, use it as the tab name; otherwise "dashboard"
+const KNOWN_TABS = new Set([
+  "settings", "profile", "messages", "teams", "calendar", "activity",
+  "athlete-tools", "results", "resources", "goals", "view-athlete-goals",
+  "coach-feedback", "split-calculator", "data-reports", "coach-view-predictions",
+  "athlete-feedback", "suggest-goals", "health-availability", "group-performance",
+  "individual-performance", "lineup-builder", "view-athlete-practices",
+  "predict-results", "compare-results", "teammate-comparison", "coach-team-rankings",
+  "similar-teammates", "weight-info", "team-rankings", "team-personal-bests",
+  "improvement-rates", "coach-weight-info", "log-workout", "overview",
+  "3-gun-testing", "practice-performances", "attendance-history",
+]);
+
 function AppLayout({ user, userRole, onLogout, userSport }) {
   const { pathname } = useLocation();
   const activityTimerRef = useRef(null);
@@ -213,46 +229,7 @@ function AppLayout({ user, userRole, onLogout, userSport }) {
   }, [user]);
 
   const root = (pathname.split("/")[1] || "").toLowerCase();
-  const activeTab =
-    root === "settings" ? "settings" :
-    root === "profile"  ? "profile"  :
-    root === "messages" ? "messages" :
-    root === "teams"    ? "teams"    :
-    root === "calendar" ? "calendar" :
-    root === "activity" ? "activity" :
-    root === "athlete-tools" ? "athlete-tools" :
-    root === "results"  ? "results"  :
-    root === "resources" ? "resources" :
-    root === "goals"    ? "goals"    :
-    root === "view-athlete-goals" ? "view-athlete-goals" :
-    root === "coach-feedback" ? "coach-feedback" :
-    root === "split-calculator" ? "split-calculator" :
-    root === "data-reports" ? "data-reports" :
-    root === "coach-view-predictions" ? "coach-view-predictions" :
-    root === "athlete-feedback" ? "athlete-feedback" :
-    root === "suggest-goals" ? "suggest-goals" :
-    root === "health-availability" ? "health-availability" :
-    root === "group-performance" ? "group-performance" :
-    root === "individual-performance" ? "individual-performance" :
-    root === "lineup-builder" ? "lineup-builder" :
-    root === "view-athlete-practices" ? "view-athlete-practices" :
-    root === "predict-results" ? "predict-results" :
-    root === "compare-results" ? "compare-results" :
-    root === "teammate-comparison" ? "teammate-comparison" :
-    root === "coach-team-rankings" ? "coach-team-rankings" :
-    root === "similar-teammates" ? "similar-teammates" :
-    root === "weight-info" ? "weight-info" :
-    root === "team-rankings" ? "team-rankings" :
-    root === "team-personal-bests" ? "team-personal-bests" :
-    root === "improvement-rates" ? "improvement-rates" :
-    root === "coach-weight-info" ? "coach-weight-info" :
-    root === "log-workout" ? "log-workout" :
-    root === "create-team-poll" ? "dashboard" :
-    root === "team-polls" ? "dashboard" :
-    root === "team-poll" ? "dashboard" :
-    root === "overview" ? "overview" :
-    root === "3-gun-testing" ? "3-gun-testing" :
-    "dashboard";
+  const activeTab = KNOWN_TABS.has(root) ? root : "dashboard";
 
   return (
     <div
@@ -901,15 +878,15 @@ export default function App() {
             </ProtectedRoute>
           ),
         },
-       // 3-Gun Testing
-       {
-        path: "3-gun-testing",
-        element: (
-          <ProtectedRoute user={user}>
-            <ThreeGunTestingPage user={mergedUser} userRole={userRole} />
-          </ProtectedRoute>
-        ),
-      },
+        // 3-Gun Testing
+        {
+          path: "3-gun-testing",
+          element: (
+            <ProtectedRoute user={user}>
+              <ThreeGunTestingPage user={mergedUser} userRole={userRole} />
+            </ProtectedRoute>
+          ),
+        },
         // UPDATED: Both athletes and coaches can access overview (rowing only)
         {
           path: "overview",

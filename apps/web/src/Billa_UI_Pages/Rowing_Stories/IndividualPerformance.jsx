@@ -12,7 +12,6 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebase";
 
-// Sport-specific test piece types - removed 30min and 2x5k, added Custom
 const TEST_PIECE_TYPES = {
   rowing: ["2k", "6k", "5k", "20'@20", "Custom"],
   swimming: ["50 Free", "100 Free", "200 Free", "500 Free", "1000 Free", "1650 Free", "50 Fly", "100 Fly", "200 Fly", "50 Back", "100 Back", "200 Back", "50 Breast", "100 Breast", "200 Breast", "200 IM", "400 IM"],
@@ -52,6 +51,7 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
 
   const sportTestTypes = TEST_PIECE_TYPES[userSport?.toLowerCase()] || TEST_PIECE_TYPES.default;
 
+  // ── OPTIMIZED: Parallel member fetching ──
   useEffect(() => {
     if (!user) return;
 
@@ -70,26 +70,28 @@ export default function IndividualPerformance({ user, userRole, userSport }) {
           setTeamId(team.id);
           
           const memberIds = teamData.members || [];
-          const athletesList = [];
           
-          for (const memberId of memberIds) {
-            try {
-              const userDocRef = doc(db, "users", memberId);
-              const userDoc = await getDoc(userDocRef);
-              
-              if (userDoc.exists()) {
-                const userData = userDoc.data();
-                athletesList.push({
-                  id: memberId,
-                  name: userData.displayName || userData.email || "Unknown",
-                  email: userData.email,
-                  role: userData.role
-                });
-              }
-            } catch (err) {
-              console.error("Error loading member:", memberId, err);
-            }
-          }
+          // OPTIMIZED: Fetch ALL member docs in parallel instead of one by one
+          const memberDocs = await Promise.all(
+            memberIds.map(memberId => 
+              getDoc(doc(db, "users", memberId)).catch(err => {
+                console.error("Error loading member:", memberId, err);
+                return null;
+              })
+            )
+          );
+          
+          const athletesList = memberDocs
+            .filter(userDoc => userDoc && userDoc.exists())
+            .map(userDoc => {
+              const userData = userDoc.data();
+              return {
+                id: userDoc.id,
+                name: userData.displayName || userData.email || "Unknown",
+                email: userData.email,
+                role: userData.role
+              };
+            });
           
           setAthletes(athletesList);
           
