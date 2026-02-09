@@ -72,7 +72,7 @@ function buildMenuItems(user) {
   // ──────────────────────────────────────────────
   if (isAthlete) {
     items.push({ type: "header", label: "My Training" });
-    items.push({ path: "/log-workout", label: "Log Workout", tab: "log-workout" });
+    //items.push({ path: "/log-workout", label: "Log Workout", tab: "log-workout" });
     items.push({ path: "/goals", label: "My Goals", tab: "goals" });
     items.push({ path: "/athlete-feedback", label: "My Feedback", tab: "athlete-feedback" });
 
