@@ -74,7 +74,7 @@ const LineupBuilder = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/LineupB
 const CoachTeamRankings = lazy(() => import("./Billa_UI_Pages/CoachTeamRankings"));
 const Resources = lazy(() => import("./components/Resources"));
 const Overview = lazy(() => import("./Billa_UI_Pages/Rowing_Stories/Overview"));
-const ThreeGunTestingPage = lazy(() => import("./Billa_UI_Pages/ThreeGunTestingPage"));
+const ThreeGunTestingPage = lazy(() => import("./Billa_UI_Pages/Threeguntestingpage"));
 
 // ── Loading spinner ──
 function PageLoader() {
