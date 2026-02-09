@@ -210,6 +210,7 @@ export default function Overview({ user }) {
       weekday: "short",
       month: "short",
       day: "numeric",
+      timeZone: "UTC",
     });
   };
 
